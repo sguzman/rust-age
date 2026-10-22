@@ -29,6 +29,16 @@ python3 tools/render_roadmap.py --check
 
 Replace the example FRM path with an existing sprite from your own Fallout 1 installation. The checker verifies only paths; the index validator opens both archives; sprite preview saves an unlit RGB PPM from original asset data, not a full frame or playable window. None of these commands proves game parity.
 
+### Static MAP floor preview (read-only)
+
+The map preview loads the original `MAP` floor IDs, resolves `art/tiles/tiles.lst`, and draws the matching original FRM files into a 640×380 indexed framebuffer before exporting a PPM. It is a diagnostic and **not** the game's full map renderer: no lighting, scripts, interactive movement, roofs, actors, or quest progression.
+
+```sh
+cargo run -- --export-map-floor-preview /path/to/Fallout maps/example.map floor.ppm
+```
+
+Replace `maps/example.map` with a real map path from the original game installation. No extracted game assets belong in the repository.
+
 ### Optional native SDL2 sprite window
 
 On EndeavourOS, install the standard `sdl2` development package if it is not already installed. The read-only SDL2 viewer is an **optional feature**; basic diagnostics do not require SDL2:

@@ -8,5 +8,6 @@ pub mod frm;
 pub mod hex;
 pub mod lzss;
 pub mod map;
+pub mod map_preview;
 pub mod message;
 pub mod palette;
