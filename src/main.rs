@@ -3,6 +3,7 @@ use rust_age::dat::DatArchive;
 use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
 use rust_age::map::MapHeader;
+use rust_age::map_preview::FloorPreview;
 use rust_age::palette::Palette;
 use std::env;
 use std::fs::File;
@@ -15,6 +16,7 @@ fn usage() {
     println!("       rust-age --inspect-dat /path/to/master.dat");
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
+    println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
 }
@@ -131,6 +133,32 @@ fn main() {
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
             }
+        }
+        [_, flag, directory, path, destination] if flag == "--export-map-floor-preview" => {
+            let mut assets = GameAssets::open(Path::new(directory))
+                .unwrap_or_else(|error| fail(format!("Cannot open installation: {error}")));
+            let palette_bytes = assets
+                .read(Bank::Master, "color.pal")
+                .unwrap_or_else(|error| fail(format!("Cannot read palette: {error}")))
+                .unwrap_or_else(|| fail("Original color.pal missing"));
+            let palette = Palette::decode(&palette_bytes)
+                .unwrap_or_else(|error| fail(format!("Cannot decode palette: {error}")));
+            let map_bytes = assets
+                .read(Bank::Master, path)
+                .unwrap_or_else(|error| fail(format!("Cannot load original map: {error}")))
+                .unwrap_or_else(|| fail(format!("Map not found: {path}")));
+            let preview = FloorPreview::render(&mut assets, &map_bytes, 640, 380)
+                .unwrap_or_else(|error| fail(format!("Cannot draw floor preview: {error}")));
+            let output = File::create(destination)
+                .unwrap_or_else(|error| fail(format!("Cannot create preview file: {error}")));
+            preview
+                .surface
+                .write_ppm(&palette, output)
+                .unwrap_or_else(|error| fail(format!("Cannot save preview: {error}")));
+            println!("Saved static floor image: {destination}");
+            println!("Candidate tiles: {}", preview.tile_count);
+            println!("Unique tile art: {}", preview.unique_art);
+            println!("No lighting, roofs, objects, combat or gameplay.");
         }
         [_, flag, directory, bank, path, direction, frame_number, destination]
             if flag == "--export-frm-preview" =>
