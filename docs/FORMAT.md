@@ -46,3 +46,7 @@ The asset resolver now reads `fallout.cfg` if present, merges its `[system]` ent
 `src/framebuffer.rs` follows the core CE `src/plib/gnw/grbuf.cc` distinction between plain pixel copies and `trans_buf_to_buf` with transparent palette index zero. It offers safe signed-coordinate clipping, opaque fill, indexed FRM blit, and a P6 (binary RGB) PPM exporter using the player's original `color.pal`. Unit tests cover clipping, transparent/opaque zero, malformed source dimensions and exact preview output bytes.
 
 `--export-frm-preview <install> <master|critter> <relative FRM path> <direction 0..5> <frame index> <destination.ppm>` is a diagnostic. It loads the original palette and sprite from the user-provided Fallout installation and exports one unlit 2D frame. It never embeds original game content in source code or releases. The output is not CE gamma-adjusted, does not implement depth/roof rendering, and is not a native window.
+
+## Palette gamma and integer fade interpolation
+
+`src/palette.rs` now includes a six-bit gamma LUT following CE `colorGamma`: `pow(channel, gamma)` with 0..63 clamp and integer truncation. A separate `fade_step` function follows CE's signed integer interpolation between source/target 768-byte palettes. These are independently testable color primitives; frame-timed color cycling, real-time fade scheduling, sound callbacks and final SDL palette presentation are still unimplemented.
