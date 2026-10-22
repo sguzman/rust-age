@@ -24,3 +24,9 @@ The Rust `GameAssets` reader follows that common read-only path, with a `Bank` s
 `src/frm.rs` ports the CE art data loader at a primitive level. A 62-byte header contains the version, frames-per-second, action frame, frame count, x/y offsets for six rotations, per-rotation data offsets, and size. Each subframe has a 12-byte header: width, height, data length, x/y motion offsets, then 8-bit palette-indexed pixels. Several directions may share the same frame-data offset; Rust retains that sharing at parse time by caching offset-decoded frame sequences.
 
 This is strictly **asset decoding**, not native rendering or original palette parity. Synthetic fixtures cover basic reading, shared rotations, and truncated files. Real FRM differential verification is pending.
+
+## Original Fallout palette and lookup table
+
+`src/palette.rs` is adapted from [CE `src/plib/color/color.cc`](https://github.com/alexbatalov/fallout1-ce/blob/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b/src/plib/color/color.cc). The `color.pal` file begins with 256 RGB colors, one byte per component, valid original range 0..63. CE zeros invalid colors and separately records which indices are mapped. The next 32,768 bytes encode the original 5:5:5 RGB-to-palette-index lookup table.
+
+The Rust parser retains both source tables. Its 8-bit conversion is only a preview (linear 6-bit rescaling); it is **not** a port of CE gamma tables, color cycling, animated fades, or pixel-accurate compositing.

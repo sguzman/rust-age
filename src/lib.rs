@@ -3,3 +3,4 @@ pub mod assets;
 pub mod dat;
 pub mod frm;
 pub mod lzss;
+pub mod palette;
