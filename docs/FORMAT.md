@@ -40,3 +40,9 @@ The Rust parser retains both source tables. Its 8-bit conversion is only a previ
 ### Configured Fallout 1 asset filenames and patch paths
 
 The asset resolver now reads `fallout.cfg` if present, merges its `[system]` entries over CE defaults and honors separate `master_dat`, `critter_dat`, `master_patches` and `critter_patches`. This retains CE's patch-before-archive behavior. Synthetic integration tests cover case-insensitive config filenames and separate patch directories, without game data. Filesystem access is read-only and confined to the supplied installation for normal relative paths. Full CE config semantics and nonstandard absolute/direct-file lookup remain pending.
+
+## 8-bit indexed framebuffer and offline visual diagnostics
+
+`src/framebuffer.rs` follows the core CE `src/plib/gnw/grbuf.cc` distinction between plain pixel copies and `trans_buf_to_buf` with transparent palette index zero. It offers safe signed-coordinate clipping, opaque fill, indexed FRM blit, and a P6 (binary RGB) PPM exporter using the player's original `color.pal`. Unit tests cover clipping, transparent/opaque zero, malformed source dimensions and exact preview output bytes.
+
+`--export-frm-preview <install> <master|critter> <relative FRM path> <direction 0..5> <frame index> <destination.ppm>` is a diagnostic. It loads the original palette and sprite from the user-provided Fallout installation and exports one unlit 2D frame. It never embeds original game content in source code or releases. The output is not CE gamma-adjusted, does not implement depth/roof rendering, and is not a native window.

@@ -6,7 +6,7 @@
 
 **Project color:** `#E05B4C` · `oklch(64% 0.17 29)` — [perceptual choice](docs/COLOR.md).
 
-> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder, palette tables, and original configuration/localized MSG readers. No renderer, complete game loop or script interpreter exists.
+> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder, palette tables, and original configuration/localized MSG readers. Only an offline indexed framebuffer and PPM sprite preview exist; no playable renderer, game loop or script interpreter exists.
 
 ## Source and operating model
 
@@ -22,10 +22,11 @@ cargo run -- --check-installation /path/to/Fallout
 cargo run -- --verify-installation /path/to/Fallout
 cargo run -- --inspect-dat /path/to/Fallout/master.dat
 cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
+cargo run -- --export-frm-preview /path/to/Fallout master art/items/example.frm 0 0 preview.ppm
 python3 tools/render_roadmap.py --check
 ```
 
-The example FRM path must be replaced with a real game asset path. The basic checker verifies only path presence; the index validator opens both archives; the sprite command decodes one user-owned original sprite. None of these commands launches gameplay or proves parity.
+Replace the example FRM path with an existing sprite from your own Fallout 1 installation. The checker verifies only paths; the index validator opens both archives; sprite preview saves an unlit RGB PPM from original asset data, not a full frame or playable window. None of these commands proves game parity.
 
 ## Progress and issues
 
