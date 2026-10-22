@@ -6,7 +6,8 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  core:
+    name: Rust core and roadmap
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +15,20 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
-      - name: Install SDL2 development libraries
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-targets --all-features
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all-targets
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
+
+  native-window:
+    name: Optional SDL2 window compile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install SDL2 development libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev
+      - name: Compile and lint native viewer
+        run: cargo clippy --all-targets --all-features -- -D warnings
