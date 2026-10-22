@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 10. **Not ported:** 98.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 13. **Not ported:** 95.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -56,7 +56,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/loadsave.cc` | — | ⚪ Not ported |
 | `src/game/main.cc` | — | ⚪ Not ported |
 | `src/game/mainmenu.cc` | — | ⚪ Not ported |
-| `src/game/map.cc` | — | ⚪ Not ported |
+| `src/game/map.cc` | `src/map.rs` | 🟡 Partial |
 | `src/game/message.cc` | `src/message.rs` | 🟡 Partial |
 | `src/game/moviefx.cc` | — | ⚪ Not ported |
 | `src/game/object.cc` | — | ⚪ Not ported |
@@ -79,7 +79,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/skilldex.cc` | — | ⚪ Not ported |
 | `src/game/stat.cc` | — | ⚪ Not ported |
 | `src/game/textobj.cc` | — | ⚪ Not ported |
-| `src/game/tile.cc` | — | ⚪ Not ported |
+| `src/game/tile.cc` | `src/hex.rs` | 🟡 Partial |
 | `src/game/trait.cc` | — | ⚪ Not ported |
 | `src/game/version.cc` | — | ⚪ Not ported |
 | `src/game/wordwrap.cc` | — | ⚪ Not ported |
@@ -141,7 +141,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/plib/gnw/debug.cc` | — | ⚪ Not ported |
 | `src/plib/gnw/dxinput.cc` | — | ⚪ Not ported |
 | `src/plib/gnw/gnw.cc` | — | ⚪ Not ported |
-| `src/plib/gnw/grbuf.cc` | — | ⚪ Not ported |
+| `src/plib/gnw/grbuf.cc` | `src/framebuffer.rs` | 🟡 Partial |
 | `src/plib/gnw/input.cc` | — | ⚪ Not ported |
 | `src/plib/gnw/intrface.cc` | — | ⚪ Not ported |
 | `src/plib/gnw/kb.cc` | — | ⚪ Not ported |

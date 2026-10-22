@@ -92,8 +92,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 20,
-              "evidence": "src/frm.rs handles FRM directional frame decoding; PRO, map and script readers remain"
+              "progress": 28,
+              "evidence": "CI-tested FRM decoder plus initial MAP v19 header/square parser in src/map.rs; latest MAP changes awaiting CI and real game data"
             }
           ]
         }
@@ -114,27 +114,29 @@
               "id": "T201",
               "emoji": "🌈",
               "name": "Port palettes, fades and color cycling",
-              "progress": 40,
-              "evidence": "CI-tested six-bit VGA palette and RGB555 indexed lookup table in src/palette.rs; gamma, cycling, fades and exact compositing absent"
+              "progress": 55,
+              "evidence": "src/palette.rs RGB555/VGA decoding, gamma LUT, integer fade interpolation; 5508ece CI passed; color cycling and display timing pending"
             },
             {
               "id": "T202",
               "emoji": "🧟",
               "name": "Load FRM sprites, directions and animation timing",
-              "progress": 40,
-              "evidence": "src/frm.rs parses six directions and frames; presentation/rendering/animation scheduling not implemented"
+              "progress": 47,
+              "evidence": "FRM decode and keyboard-accessible optional native viewer source in src/bin/view.rs; native viewer CI and real sprite validation pending"
             },
             {
               "id": "T203",
               "emoji": "💡",
               "name": "Port tile/roof layering, compositing and lighting",
-              "progress": 0
+              "progress": 23,
+              "evidence": "src/framebuffer.rs clip-tested opaque/transparent index blits and offline sprite PPM; passing core unit tests in CI 5508ece; map/roof/lighting not ported"
             },
             {
               "id": "T204",
               "emoji": "🪟",
               "name": "Build native Linux window, framebuffer scaling and input loop",
-              "progress": 0
+              "progress": 25,
+              "evidence": "Optional SDL2 native Linux viewer written; binary compile attempted but blocked by unrelated hex lint at earlier ref; latest native build pending"
             }
           ]
         },
@@ -147,7 +149,8 @@
               "id": "T301",
               "emoji": "🧭",
               "name": "Implement original hex projection and map scrolling",
-              "progress": 0
+              "progress": 46,
+              "evidence": "src/hex.rs ports CE projection, hit mask inverse and parity step with deterministic roundtrip tests; latest integration CI pending"
             },
             {
               "id": "T302",
@@ -159,7 +162,8 @@
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 0
+              "progress": 12,
+              "evidence": "src/map.rs MAP version-19 header and static 100x100 per-elevation square layers; tests written but latest CI pending"
             },
             {
               "id": "T304",

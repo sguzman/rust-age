@@ -207,8 +207,10 @@
     },
     {
       "source": "src/game/map.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/map.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/message.cc",
@@ -324,8 +326,10 @@
     },
     {
       "source": "src/game/tile.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/hex.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/trait.cc",
@@ -505,8 +509,10 @@
     },
     {
       "source": "src/plib/gnw/grbuf.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/framebuffer.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/plib/gnw/input.cc",
