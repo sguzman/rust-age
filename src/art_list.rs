@@ -76,7 +76,7 @@ mod tests {
     fn empty_list_and_non_utf8_names_are_handled() {
         assert!(ArtList::parse(b"").is_empty());
         assert!(ArtList::parse(&[0xFF, b'\n']).file_name(0).is_err());
-        assert!(ArtList::parse(b"../file.frm\n").file_name(0).is_ok());
+        assert!(ArtList::parse(b"../file.frm\n").file_name(0).is_err());
         assert!(ArtList::parse(b"subdir/file.frm\n").file_name(0).is_err());
     }
 }
