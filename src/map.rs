@@ -49,6 +49,31 @@ pub struct MapSquares {
     pub scripts_offset: usize,
 }
 
+impl MapSquares {
+    /// Original static floor art index (12-bit FID) at one square/elevation.
+    /// The upper nibble of the floor word contains CE's overlay flags.
+    pub fn floor_id(&self, elevation: usize, square: usize) -> Option<u16> {
+        let word = *self.elevations.get(elevation)?.as_ref()?.get(square)?;
+        Some((word & 0x0FFF) as u16)
+    }
+
+    /// Original static roof art index (12-bit FID) at one square/elevation.
+    pub fn roof_id(&self, elevation: usize, square: usize) -> Option<u16> {
+        let word = *self.elevations.get(elevation)?.as_ref()?.get(square)?;
+        Some(((word >> 16) & 0x0FFF) as u16)
+    }
+
+    pub fn floor_hidden(&self, elevation: usize, square: usize) -> Option<bool> {
+        let word = *self.elevations.get(elevation)?.as_ref()?.get(square)?;
+        Some((word & 0x1000) != 0)
+    }
+
+    pub fn roof_hidden(&self, elevation: usize, square: usize) -> Option<bool> {
+        let word = *self.elevations.get(elevation)?.as_ref()?.get(square)?;
+        Some((word & 0x1000_0000) != 0)
+    }
+}
+
 impl MapHeader {
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
         if bytes.len() < HEADER_SIZE {
@@ -200,6 +225,19 @@ mod tests {
         bytes.extend(std::iter::repeat_n(0_u8, (SQUARE_COUNT - 1) * 4));
         let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
         assert_eq!(squares.elevations[0].as_ref().unwrap()[0], 0x0005_0001);
+    }
+
+    #[test]
+    fn exposes_floor_and_roof_fids_separately() {
+        let mut bytes = header(4 | 8, 0, 0);
+        bytes.extend_from_slice(&0x0005_0001_u32.to_be_bytes());
+        bytes.extend(std::iter::repeat_n(0_u8, (SQUARE_COUNT - 1) * 4));
+        let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        assert_eq!(squares.floor_id(0, 0), Some(1));
+        assert_eq!(squares.roof_id(0, 0), Some(5));
+        assert_eq!(squares.floor_hidden(0, 0), Some(false));
+        assert_eq!(squares.floor_id(1, 0), None);
+        assert_eq!(squares.roof_id(0, SQUARE_COUNT), None);
     }
 
     #[test]
