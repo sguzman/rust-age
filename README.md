@@ -6,7 +6,7 @@
 
 **Project color:** `#E05B4C` · `oklch(64% 0.17 29)` — [perceptual choice](docs/COLOR.md).
 
-> **Not playable yet.** This foundation currently provides a basic installation-path checker and an early LZSS decoder. No renderer, DAT archive index, complete game loop or script interpreter exists.
+> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder. No renderer, complete game loop or script interpreter exists.
 
 ## Source and operating model
 
@@ -19,10 +19,13 @@ Users supply their own legally obtained Fallout 1 installation. Rust Age loads o
 ```sh
 cargo test --all-targets
 cargo run -- --check-installation /path/to/Fallout
+cargo run -- --verify-installation /path/to/Fallout
+cargo run -- --inspect-dat /path/to/Fallout/master.dat
+cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
 python3 tools/render_roadmap.py --check
 ```
 
-The checker only checks that `master.dat`, `critter.dat`, and `data/` exist. It does **not** prove valid archives or a playable engine.
+The example FRM path must be replaced with a real game asset path. The basic checker verifies only path presence; the index validator opens both archives; the sprite command decodes one user-owned original sprite. None of these commands launches gameplay or proves parity.
 
 ## Progress and issues
 
