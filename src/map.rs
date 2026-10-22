@@ -155,7 +155,7 @@ mod tests {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&19_i32.to_be_bytes());
         bytes.extend_from_slice(b"TEST.MAP\0\0\0\0\0\0\0\0");
-        let fields = [
+        let fields: [i32; 10] = [
             20099,
             0,
             2,
