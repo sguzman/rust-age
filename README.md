@@ -29,7 +29,7 @@ The example FRM path must be replaced with a real game asset path. The basic che
 
 ## Progress and issues
 
-[📍 Roadmap](docs/ROADMAP.md) · [🔢 Progress ledger](docs/progress.json) · [📋 GitHub tracking queue](docs/ISSUES.md).
+[📍 Roadmap](docs/ROADMAP.md) · [🔢 Progress ledger](docs/progress.json) · [🧩 C++→Rust port matrix](docs/PORT_MATRIX.md) · [📋 GitHub tracking queue](docs/ISSUES.md).
 
 Milestone/phase progress is aggregated from atomic tasks. Completed tasks disappear from progress reports, but their evidence remains in the ledger. No percentage is a claim that the game is playable.
 

@@ -1,0 +1,568 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "alexbatalov/fallout1-ce",
+    "commit": "0609bcfd0ec40ff0571d0f57fab2821eb461dc8b",
+    "file": "CMakeLists.txt"
+  },
+  "note": "Individual .cc build-source inventory. Partial means selected behavior adapted, NOT a complete module port. Third-party system dependencies are outside this core list.",
+  "files": [
+    {
+      "source": "src/audio_engine.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/fps_limiter.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/actions.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/amutex.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/anim.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/art.cc",
+      "rust": [
+        "src/frm.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/game/automap.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/bmpdlog.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/cache.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/combat.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/combatai.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/config.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/credits.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/critter.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/cycle.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/display.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/editor.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/elevator.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/endgame.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/fontmgr.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/game.cc",
+      "rust": [
+        "src/assets.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/game/gconfig.cc",
+      "rust": [
+        "src/assets.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/game/gdebug.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/gdialog.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/gmemory.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/gmouse.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/gmovie.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/graphlib.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/gsound.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/heap.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/intface.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/inventry.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/item.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/light.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/lip_sync.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/loadsave.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/main.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/mainmenu.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/map.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/message.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/moviefx.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/object.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/options.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/palette.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/party.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/perk.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/pipboy.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/protinst.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/proto.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/queue.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/reaction.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/roll.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/scripts.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/select.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/selfrun.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/sfxcache.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/sfxlist.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/skill.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/skilldex.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/stat.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/textobj.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/tile.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/trait.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/version.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/wordwrap.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/worldmap.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/game/worldmap_walkmask.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/audio.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/audiof.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/datafile.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/dialog.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/export.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/intlib.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/intrpret.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/memdbg.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/mousemgr.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/movie.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/nevs.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/pcx.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/region.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/share1.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/sound.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/support/intextra.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/widget.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/int/window.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/movie_lib.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/platform_compat.cc",
+      "rust": [
+        "src/assets.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/plib/assoc/assoc.cc",
+      "rust": [
+        "src/dat.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/plib/color/color.cc",
+      "rust": [
+        "src/palette.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/plib/db/db.cc",
+      "rust": [
+        "src/dat.rs",
+        "src/assets.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/plib/db/lzss.cc",
+      "rust": [
+        "src/lzss.rs"
+      ],
+      "status": "partial"
+    },
+    {
+      "source": "src/plib/gnw/button.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/debug.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/dxinput.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/gnw.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/grbuf.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/input.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/intrface.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/kb.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/memory.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/mouse.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/rect.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/svga.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/text.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/touch.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/vcr.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/plib/gnw/winmain.cc",
+      "rust": [],
+      "status": "unported"
+    },
+    {
+      "source": "src/pointer_registry.cc",
+      "rust": [],
+      "status": "unported"
+    }
+  ]
+}

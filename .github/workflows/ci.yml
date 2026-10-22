@@ -17,3 +17,4 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
       - run: python3 tools/render_roadmap.py --check
+      - run: python3 tools/render_port_matrix.py --check
