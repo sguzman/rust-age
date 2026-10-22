@@ -4,6 +4,7 @@ pub mod config;
 pub mod dat;
 pub mod framebuffer;
 pub mod frm;
+pub mod hex;
 pub mod lzss;
 pub mod message;
 pub mod palette;
