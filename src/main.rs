@@ -2,6 +2,7 @@ use rust_age::assets::{Bank, GameAssets};
 use rust_age::dat::DatArchive;
 use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
+use rust_age::map::MapHeader;
 use rust_age::palette::Palette;
 use std::env;
 use std::fs::File;
@@ -13,6 +14,7 @@ fn usage() {
     println!("       rust-age --verify-installation /path/to/Fallout");
     println!("       rust-age --inspect-dat /path/to/master.dat");
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
+    println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
 }
@@ -102,6 +104,27 @@ fn main() {
                     println!("No graphics renderer yet.");
                 }
                 Err(error) => fail(format!("Cannot decode sprite: {error}")),
+            }
+        }
+        [_, flag, directory, path] if flag == "--inspect-map" => {
+            let result = GameAssets::open(Path::new(directory))
+                .and_then(|mut assets| assets.read(Bank::Master, path))
+                .and_then(|bytes| bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound)))
+                .and_then(|bytes| {
+                    let header = MapHeader::decode(&bytes)?;
+                    let squares = header.decode_squares(&bytes)?;
+                    Ok((header, squares))
+                });
+            match result {
+                Ok((header, squares)) => {
+                    println!("Fallout 1 map: {}", String::from_utf8_lossy(header.name_bytes()));
+                    println!("Entering tile: {}", header.entering_tile);
+                    println!("Entering elevation: {}", header.entering_elevation);
+                    println!("Available square layers: {}", squares.elevations.iter().filter(|layer| layer.is_some()).count());
+                    println!("Original scripts begin at byte {}", squares.scripts_offset);
+                    println!("Scripts/objects not yet decoded; game not playable.");
+                }
+                Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
             }
         }
         [_, flag, directory, bank, path, direction, frame_number, destination]

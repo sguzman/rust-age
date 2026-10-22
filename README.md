@@ -22,6 +22,7 @@ cargo run -- --check-installation /path/to/Fallout
 cargo run -- --verify-installation /path/to/Fallout
 cargo run -- --inspect-dat /path/to/Fallout/master.dat
 cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
+cargo run -- --inspect-map /path/to/Fallout maps/example.map
 cargo run -- --export-frm-preview /path/to/Fallout master art/items/example.frm 0 0 preview.ppm
 python3 tools/render_roadmap.py --check
 ```
