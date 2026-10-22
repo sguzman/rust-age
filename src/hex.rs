@@ -166,11 +166,7 @@ impl HexViewport {
             _ => {}
         }
         let index_x = self.grid_width - 1 - grid_x;
-        if index_x < 0
-            || index_x >= self.grid_width
-            || grid_y < 0
-            || grid_y >= self.grid_height
-        {
+        if index_x < 0 || index_x >= self.grid_width || grid_y < 0 || grid_y >= self.grid_height {
             return None;
         }
         Some(self.grid_width * grid_y + index_x)
