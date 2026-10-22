@@ -4,6 +4,7 @@
 //! src/plib/db/db.cc and src/platform_compat.cc at pinned revision.
 //! The caller supplies a legitimately obtained Fallout 1 installation.
 
+use crate::config::Config;
 use crate::dat::DatArchive;
 use std::fs::{self, File};
 use std::io;
@@ -20,6 +21,8 @@ pub struct GameAssets {
     root: PathBuf,
     master: DatArchive<File>,
     critter: DatArchive<File>,
+    master_patches: String,
+    critter_patches: String,
 }
 
 /// Resolve a relative path case-insensitively, as CE does on Linux.
@@ -71,10 +74,22 @@ fn resolve_casefold(root: &Path, relative: &str) -> io::Result<Option<PathBuf>> 
 }
 
 impl GameAssets {
-    /// Open original master.dat and critter.dat, keeping CE's two selections
-    /// separate. Both banks default to the same "data" loose-file patch dir.
+    /// Open Fallout 1's two databases. Apply CE defaults, then allow
+    /// original fallout.cfg [system] asset-path overrides.
     pub fn open(root: impl Into<PathBuf>) -> io::Result<Self> {
         let root = root.into();
+        let mut settings = Config::fallout1_defaults();
+        if let Some(path) = resolve_casefold(&root, "fallout.cfg")? {
+            let bytes = fs::read(path)?;
+            settings.apply(&Config::parse(&String::from_utf8_lossy(&bytes)));
+        }
+
+        let master_name = settings
+            .get("system", "master_dat")
+            .unwrap_or("master.dat");
+        let critter_name = settings
+            .get("system", "critter_dat")
+            .unwrap_or("critter.dat");
         let missing = |name| {
             io::Error::new(
                 io::ErrorKind::NotFound,
@@ -82,15 +97,23 @@ impl GameAssets {
             )
         };
         let master_path =
-            resolve_casefold(&root, "master.dat")?.ok_or_else(|| missing("master.dat"))?;
+            resolve_casefold(&root, master_name)?.ok_or_else(|| missing(master_name))?;
         let critter_path =
-            resolve_casefold(&root, "critter.dat")?.ok_or_else(|| missing("critter.dat"))?;
+            resolve_casefold(&root, critter_name)?.ok_or_else(|| missing(critter_name))?;
         let master = DatArchive::open(File::open(master_path)?)?;
         let critter = DatArchive::open(File::open(critter_path)?)?;
         Ok(Self {
             root,
             master,
             critter,
+            master_patches: settings
+                .get("system", "master_patches")
+                .unwrap_or("data")
+                .to_owned(),
+            critter_patches: settings
+                .get("system", "critter_patches")
+                .unwrap_or("data")
+                .to_owned(),
         })
     }
 
@@ -101,24 +124,28 @@ impl GameAssets {
         }
     }
 
-    /// Loose files in data/ override the selected DAT, exactly as CE's
-    /// default patch-before-archive lookup order does for normal game paths.
+    /// Prefer the selected bank's configured loose-file patch directory.
     pub fn read(&mut self, bank: Bank, path: &str) -> io::Result<Option<Vec<u8>>> {
-        let root = resolve_casefold(&self.root, "data")?;
-        if let Some(root) = root {
-            if root.is_dir() {
-                if let Some(loose) = resolve_casefold(&root, path)? {
-                    if loose.is_file() {
-                        // Do not follow symlinks outside the game patch tree.
-                        let canonical_root = root.canonicalize()?;
-                        let canonical_file = loose.canonicalize()?;
-                        if !canonical_file.starts_with(canonical_root) {
-                            return Err(io::Error::new(
-                                io::ErrorKind::PermissionDenied,
-                                "game asset escapes patch directory",
-                            ));
+        let patch_dir = match bank {
+            Bank::Master => &self.master_patches,
+            Bank::Critter => &self.critter_patches,
+        };
+        if !patch_dir.is_empty() {
+            if let Some(root) = resolve_casefold(&self.root, patch_dir)? {
+                if root.is_dir() {
+                    if let Some(loose) = resolve_casefold(&root, path)? {
+                        if loose.is_file() {
+                            // Do not follow symlinks outside the game patch tree.
+                            let canonical_root = root.canonicalize()?;
+                            let canonical_file = loose.canonicalize()?;
+                            if !canonical_file.starts_with(canonical_root) {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::PermissionDenied,
+                                    "game asset escapes patch directory",
+                                ));
+                            }
+                            return fs::read(loose).map(Some);
                         }
-                        return fs::read(loose).map(Some);
                     }
                 }
             }
@@ -133,7 +160,7 @@ impl GameAssets {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_casefold;
+    use super::{resolve_casefold, Bank, GameAssets};
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -163,4 +190,45 @@ mod tests {
         assert!(resolve_casefold(Path::new("."), "../outside").is_err());
         assert!(resolve_casefold(Path::new("."), "/etc/passwd").is_err());
     }
+    #[test]
+    fn applies_separate_master_and_critter_patch_paths_from_fallout_cfg() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("rust-age-config-{}-{stamp}", std::process::id()));
+        fs::create_dir_all(root.join("Master_Patches").join("Art")).unwrap();
+        fs::create_dir_all(root.join("Critter_Patches").join("Art")).unwrap();
+        // Empty, syntactically valid synthetic DAT indexes.
+        let empty_dat = [0_u8; 16];
+        fs::write(root.join("MASTER.DAT"), empty_dat).unwrap();
+        fs::write(root.join("CRITTER.DAT"), empty_dat).unwrap();
+        fs::write(
+            root.join("FALLOUT.CFG"),
+            b"[system]\\nmaster_dat=master.dat\\ncritter_dat=critter.dat\\nmaster_patches=MASTER_PATCHES\\ncritter_patches=critter_patches\\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Master_Patches").join("Art").join("thing.frm"),
+            b"master",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Critter_Patches").join("Art").join("thing.frm"),
+            b"critter",
+        )
+        .unwrap();
+        let mut assets = GameAssets::open(&root).unwrap();
+        assert_eq!(
+            assets.read(Bank::Master, r"art\\THING.frm").unwrap(),
+            Some(b"master".to_vec())
+        );
+        assert_eq!(
+            assets.read(Bank::Critter, "ART/thing.frm").unwrap(),
+            Some(b"critter".to_vec())
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
 }

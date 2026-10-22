@@ -36,3 +36,7 @@ The Rust parser retains both source tables. Its 8-bit conversion is only a previ
 `src/config.rs` ports a read-only subset of CE `config.cc`: section headers, trimmed key=value fields, semicolon comments, case-insensitive lookup, and original Fallout 1 installation defaults from `gconfig.cc`. Saving, CLI overrides and complete CE preference coverage are not yet implemented.
 
 `src/message.rs` ports a read-only subset of CE `message.cc`: `{number}{audio}{text}` fields, LF removal within a braced field, 1023-byte field limit, sorted IDs and duplicate replacement. The localized text remains in its original encoded bytes, **not** blindly converted to UTF-8. Integrating the language-dependent `text/<language>/` lookup into the running engine is future work.
+
+### Configured Fallout 1 asset filenames and patch paths
+
+The asset resolver now reads `fallout.cfg` if present, merges its `[system]` entries over CE defaults and honors separate `master_dat`, `critter_dat`, `master_patches` and `critter_patches`. This retains CE's patch-before-archive behavior. Synthetic integration tests cover case-insensitive config filenames and separate patch directories, without game data. Filesystem access is read-only and confined to the supplied installation for normal relative paths. Full CE config semantics and nonstandard absolute/direct-file lookup remain pending.
