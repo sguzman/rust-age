@@ -206,7 +206,7 @@ mod tests {
         fs::write(root.join("CRITTER.DAT"), empty_dat).unwrap();
         fs::write(
             root.join("FALLOUT.CFG"),
-            b"[system]\\nmaster_dat=master.dat\\ncritter_dat=critter.dat\\nmaster_patches=MASTER_PATCHES\\ncritter_patches=critter_patches\\n",
+            b"[system]\nmaster_dat=master.dat\ncritter_dat=critter.dat\nmaster_patches=MASTER_PATCHES\ncritter_patches=critter_patches\n",
         )
         .unwrap();
         fs::write(
