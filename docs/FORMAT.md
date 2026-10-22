@@ -12,3 +12,9 @@ Three CE storage modes are decoded:
 - `(flags & 0xF0) == 0x40`: two-byte big-endian chunk headers; high bit denotes raw chunk, otherwise compressed with LZSS.
 
 The Rust parser rejects malformed sizes, invalid offsets and decompressed-size mismatches. It exposes a read-only API and never writes a DAT file. Synthetic fixtures cover each storage mode; **real Fallout game-data differential tests against CE are still required**. Do not commit real copyrighted game archives or extracted contents to this repository.
+
+## Default installed-game file selection
+
+Fallout 1 CE initializes two separate databases (`master.dat` and `critter.dat`) and usually selects `master.dat`; critter art explicitly switches to `critter.dat`. Both databases default their loose-file patch directory to `data/` via `gconfig.cc`. CE's Linux compatibility layer searches directory entries case-insensitively and converts backslashes to native separators.
+
+The Rust `GameAssets` reader follows that common read-only path, with a `Bank` selection, DAT access, and patch-before-archive resolution. This is not yet full CE configuration/path behavior: custom `fallout.cfg` paths, special `@` direct-file syntax, writes, and all legacy path edge cases remain incomplete.
