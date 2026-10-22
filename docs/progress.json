@@ -43,7 +43,8 @@
               "id": "T004",
               "emoji": "🔎",
               "name": "Establish C++ baseline comparison and reference fixtures",
-              "progress": 0
+              "progress": 25,
+              "evidence": "Pinned 108-unit CE CMake source matrix + generated CI-checked PORT_MATRIX.md; true behavioral differential fixture harness still absent"
             }
           ]
         },
@@ -77,14 +78,15 @@
               "id": "T104",
               "emoji": "🗂️",
               "name": "Implement loose-file patches, path resolution and case policy",
-              "progress": 60,
-              "evidence": "src/assets.rs master/critter banks, default data patch precedence, mixed-case path lookup, synthetic tests; custom configuration unimplemented"
+              "progress": 75,
+              "evidence": "CI-tested master/critter bank selection, casefold loose files, patch precedence and original fallout.cfg path overrides in src/assets.rs; remaining nonstandard lookup semantics"
             },
             {
               "id": "T105",
               "emoji": "📄",
               "name": "Implement game configuration, messages and encodings",
-              "progress": 0
+              "progress": 65,
+              "evidence": "CI-tested CE-style config parser and MSG braced-field catalog with raw encoded text, plus language-localized master-asset reader; remaining full encoding/format coverage"
             },
             {
               "id": "T106",
@@ -112,7 +114,8 @@
               "id": "T201",
               "emoji": "🌈",
               "name": "Port palettes, fades and color cycling",
-              "progress": 0
+              "progress": 40,
+              "evidence": "CI-tested six-bit VGA palette and RGB555 indexed lookup table in src/palette.rs; gamma, cycling, fades and exact compositing absent"
             },
             {
               "id": "T202",
