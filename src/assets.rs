@@ -144,10 +144,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "rust-age-casefold-{}-{stamp}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("rust-age-casefold-{}-{stamp}", std::process::id()));
         fs::create_dir_all(root.join("DaTa").join("Art")).unwrap();
         fs::write(root.join("DaTa").join("Art").join("TEST.FRM"), b"frame").unwrap();
         let resolved = resolve_casefold(&root, r"data\ART\test.frm")

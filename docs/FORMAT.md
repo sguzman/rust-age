@@ -18,3 +18,9 @@ The Rust parser rejects malformed sizes, invalid offsets and decompressed-size m
 Fallout 1 CE initializes two separate databases (`master.dat` and `critter.dat`) and usually selects `master.dat`; critter art explicitly switches to `critter.dat`. Both databases default their loose-file patch directory to `data/` via `gconfig.cc`. CE's Linux compatibility layer searches directory entries case-insensitively and converts backslashes to native separators.
 
 The Rust `GameAssets` reader follows that common read-only path, with a `Bank` selection, DAT access, and patch-before-archive resolution. This is not yet full CE configuration/path behavior: custom `fallout.cfg` paths, special `@` direct-file syntax, writes, and all legacy path edge cases remain incomplete.
+
+## FRM sprite format
+
+`src/frm.rs` ports the CE art data loader at a primitive level. A 62-byte header contains the version, frames-per-second, action frame, frame count, x/y offsets for six rotations, per-rotation data offsets, and size. Each subframe has a 12-byte header: width, height, data length, x/y motion offsets, then 8-bit palette-indexed pixels. Several directions may share the same frame-data offset; Rust retains that sharing at parse time by caching offset-decoded frame sequences.
+
+This is strictly **asset decoding**, not native rendering or original palette parity. Synthetic fixtures cover basic reading, shared rotations, and truncated files. Real FRM differential verification is pending.
