@@ -20,10 +20,17 @@ fn main() {
                 std::process::exit(2);
             }
             let required = ["master.dat", "critter.dat", "data"];
-            let missing: Vec<_> = required.into_iter().filter(|name| {
-                let path = root.join(name);
-                if *name == "data" { !path.is_dir() } else { !path.is_file() }
-            }).collect();
+            let missing: Vec<_> = required
+                .into_iter()
+                .filter(|name| {
+                    let path = root.join(name);
+                    if *name == "data" {
+                        !path.is_dir()
+                    } else {
+                        !path.is_file()
+                    }
+                })
+                .collect();
             if missing.is_empty() {
                 println!("Fallout 1 asset paths present in {}", root.display());
                 println!("Archive contents not validated; engine not yet playable.");

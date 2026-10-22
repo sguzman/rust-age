@@ -72,15 +72,29 @@ pub fn decode(input: &[u8], max_output: usize) -> Result<Vec<u8>, DecodeError> {
 mod tests {
     use super::{decode, DecodeError};
     #[test]
-    fn empty() { assert_eq!(decode(&[], 32).unwrap(), b""); }
-    #[test]
-    fn literals() { assert_eq!(decode(&[7, b'A', b'B', b'C'], 32).unwrap(), b"ABC"); }
-    #[test]
-    fn backreference() {
-        assert_eq!(decode(&[7, b'A', b'B', b'C', 0xEE, 0xF0], 32).unwrap(), b"ABCABC");
+    fn empty() {
+        assert_eq!(decode(&[], 32).unwrap(), b"");
     }
     #[test]
-    fn truncated() { assert_eq!(decode(&[0, 0xEE], 32), Err(DecodeError::TruncatedToken)); }
+    fn literals() {
+        assert_eq!(decode(&[7, b'A', b'B', b'C'], 32).unwrap(), b"ABC");
+    }
     #[test]
-    fn bounded() { assert_eq!(decode(&[7, b'A', b'B', b'C'], 2), Err(DecodeError::OutputLimitExceeded)); }
+    fn backreference() {
+        assert_eq!(
+            decode(&[7, b'A', b'B', b'C', 0xEE, 0xF0], 32).unwrap(),
+            b"ABCABC"
+        );
+    }
+    #[test]
+    fn truncated() {
+        assert_eq!(decode(&[0, 0xEE], 32), Err(DecodeError::TruncatedToken));
+    }
+    #[test]
+    fn bounded() {
+        assert_eq!(
+            decode(&[7, b'A', b'B', b'C'], 2),
+            Err(DecodeError::OutputLimitExceeded)
+        );
+    }
 }
