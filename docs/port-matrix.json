@@ -66,8 +66,10 @@
     },
     {
       "source": "src/game/config.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/config.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/credits.cc",
@@ -210,8 +212,10 @@
     },
     {
       "source": "src/game/message.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/message.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/moviefx.cc",

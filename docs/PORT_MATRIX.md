@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 8. **Not ported:** 100.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 10. **Not ported:** 98.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -29,7 +29,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/cache.cc` | — | ⚪ Not ported |
 | `src/game/combat.cc` | — | ⚪ Not ported |
 | `src/game/combatai.cc` | — | ⚪ Not ported |
-| `src/game/config.cc` | — | ⚪ Not ported |
+| `src/game/config.cc` | `src/config.rs` | 🟡 Partial |
 | `src/game/credits.cc` | — | ⚪ Not ported |
 | `src/game/critter.cc` | — | ⚪ Not ported |
 | `src/game/cycle.cc` | — | ⚪ Not ported |
@@ -57,7 +57,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/main.cc` | — | ⚪ Not ported |
 | `src/game/mainmenu.cc` | — | ⚪ Not ported |
 | `src/game/map.cc` | — | ⚪ Not ported |
-| `src/game/message.cc` | — | ⚪ Not ported |
+| `src/game/message.cc` | `src/message.rs` | 🟡 Partial |
 | `src/game/moviefx.cc` | — | ⚪ Not ported |
 | `src/game/object.cc` | — | ⚪ Not ported |
 | `src/game/options.cc` | — | ⚪ Not ported |

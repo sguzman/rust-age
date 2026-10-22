@@ -30,3 +30,9 @@ This is strictly **asset decoding**, not native rendering or original palette pa
 `src/palette.rs` is adapted from [CE `src/plib/color/color.cc`](https://github.com/alexbatalov/fallout1-ce/blob/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b/src/plib/color/color.cc). The `color.pal` file begins with 256 RGB colors, one byte per component, valid original range 0..63. CE zeros invalid colors and separately records which indices are mapped. The next 32,768 bytes encode the original 5:5:5 RGB-to-palette-index lookup table.
 
 The Rust parser retains both source tables. Its 8-bit conversion is only a preview (linear 6-bit rescaling); it is **not** a port of CE gamma tables, color cycling, animated fades, or pixel-accurate compositing.
+
+## Fallout 1 configuration and MSG localization
+
+`src/config.rs` ports a read-only subset of CE `config.cc`: section headers, trimmed key=value fields, semicolon comments, case-insensitive lookup, and original Fallout 1 installation defaults from `gconfig.cc`. Saving, CLI overrides and complete CE preference coverage are not yet implemented.
+
+`src/message.rs` ports a read-only subset of CE `message.cc`: `{number}{audio}{text}` fields, LF removal within a braced field, 1023-byte field limit, sorted IDs and duplicate replacement. The localized text remains in its original encoded bytes, **not** blindly converted to UTF-8. Integrating the language-dependent `text/<language>/` lookup into the running engine is future work.
