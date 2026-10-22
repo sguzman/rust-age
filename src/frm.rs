@@ -81,7 +81,7 @@ impl Frm {
             return Err(invalid("invalid FRM declared data size"));
         }
         let data_size = data_size as usize;
-        let mut unique_rotations = BTreeMap::new();
+        let mut unique_rotations: BTreeMap<i32, Vec<Frame>> = BTreeMap::new();
         let mut frames: [Vec<Frame>; DIRECTIONS] = std::array::from_fn(|_| Vec::new());
 
         for (index, offset) in direction_offsets.iter().copied().enumerate() {
