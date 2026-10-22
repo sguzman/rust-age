@@ -84,9 +84,7 @@ impl GameAssets {
             settings.apply(&Config::parse(&String::from_utf8_lossy(&bytes)));
         }
 
-        let master_name = settings
-            .get("system", "master_dat")
-            .unwrap_or("master.dat");
+        let master_name = settings.get("system", "master_dat").unwrap_or("master.dat");
         let critter_name = settings
             .get("system", "critter_dat")
             .unwrap_or("critter.dat");
@@ -230,5 +228,4 @@ mod tests {
         );
         fs::remove_dir_all(root).unwrap();
     }
-
 }

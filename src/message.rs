@@ -102,7 +102,10 @@ mod tests {
     fn parses_comment_interleaved_fields_and_duplicate_replacements() {
         let data = b"# comment\n{100}{}{First}\n{5}{voice}{Line\none}\n{100}{}{Replacement}";
         let catalog = Catalog::decode(data).unwrap();
-        assert_eq!(catalog.iter().map(|m| m.number).collect::<Vec<_>>(), vec![5, 100]);
+        assert_eq!(
+            catalog.iter().map(|m| m.number).collect::<Vec<_>>(),
+            vec![5, 100]
+        );
         assert_eq!(catalog.get(100).unwrap().text, b"Replacement");
         assert_eq!(catalog.get(5).unwrap().text, b"Lineone");
     }
