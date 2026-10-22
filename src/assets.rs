@@ -4,6 +4,7 @@
 //! src/plib/db/db.cc and src/platform_compat.cc at pinned revision.
 //! The caller supplies a legitimately obtained Fallout 1 installation.
 
+use crate::art_list::ArtList;
 use crate::config::Config;
 use crate::dat::DatArchive;
 use crate::message::Catalog;
@@ -124,6 +125,15 @@ impl GameAssets {
             Some(bytes) => Catalog::decode(&bytes).map(Some),
             None => Ok(None),
         }
+    }
+
+    /// Resolve CE's original tile art IDs to the filenames in tiles.lst.
+    /// The list itself is loaded from user-owned master DAT/patch content.
+    pub fn tile_art_list(&mut self) -> io::Result<ArtList> {
+        let bytes = self
+            .read(Bank::Master, "art/tiles/tiles.lst")?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "art/tiles/tiles.lst missing"))?;
+        Ok(ArtList::parse(&bytes))
     }
 
     pub fn entry_count(&self, bank: Bank) -> usize {
@@ -251,6 +261,18 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(catalog.get(10).unwrap().text, b"Water chip");
+        fs::create_dir_all(root.join("Master_Patches").join("Art").join("Tiles")).unwrap();
+        fs::write(
+            root.join("Master_Patches")
+                .join("Art")
+                .join("Tiles")
+                .join("Tiles.LST"),
+            b"grid001.frm\nother.frm\n",
+        )
+        .unwrap();
+        let tiles = assets.tile_art_list().unwrap();
+        assert_eq!(tiles.file_name(0).unwrap(), Some("grid001.frm"));
+        assert_eq!(tiles.file_name(1).unwrap(), Some("other.frm"));
         fs::remove_dir_all(root).unwrap();
     }
 }
