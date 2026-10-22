@@ -2,6 +2,7 @@
 pub mod assets;
 pub mod config;
 pub mod dat;
+pub mod framebuffer;
 pub mod frm;
 pub mod lzss;
 pub mod message;
