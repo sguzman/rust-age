@@ -118,11 +118,7 @@ impl GameAssets {
 
     /// Read the original localized MSG catalog under text/<language>/,
     /// using the master database's configured patch/archive resolution.
-    pub fn message_catalog(
-        &mut self,
-        language: &str,
-        path: &str,
-    ) -> io::Result<Option<Catalog>> {
+    pub fn message_catalog(&mut self, language: &str, path: &str) -> io::Result<Option<Catalog>> {
         let file = format!("text/{language}/{path}");
         match self.read(Bank::Master, &file)? {
             Some(bytes) => Catalog::decode(&bytes).map(Some),
@@ -241,10 +237,7 @@ mod tests {
             assets.read(Bank::Critter, "ART/thing.frm").unwrap(),
             Some(b"critter".to_vec())
         );
-        fs::create_dir_all(
-            root.join("Master_Patches").join("TEXT").join("English"),
-        )
-        .unwrap();
+        fs::create_dir_all(root.join("Master_Patches").join("TEXT").join("English")).unwrap();
         fs::write(
             root.join("Master_Patches")
                 .join("TEXT")
