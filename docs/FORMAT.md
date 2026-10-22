@@ -50,3 +50,9 @@ The asset resolver now reads `fallout.cfg` if present, merges its `[system]` ent
 ## Palette gamma and integer fade interpolation
 
 `src/palette.rs` now includes a six-bit gamma LUT following CE `colorGamma`: `pow(channel, gamma)` with 0..63 clamp and integer truncation. A separate `fade_step` function follows CE's signed integer interpolation between source/target 768-byte palettes. These are independently testable color primitives; frame-timed color cycling, real-time fade scheduling, sound callbacks and final SDL palette presentation are still unimplemented.
+
+## Fallout 1 MAP header and square layers
+
+`src/map.rs` implements a read-only subset of CE `src/game/map.cc` (version-19 map header and `square_load`). The original 236-byte big-endian header contains the 16-byte name, entering tile/elevation/rotation, per-map local/global variable counts, flags, script index and visit metadata. After global and local 32-bit variable tables, the file contains 10,000 big-endian 32-bit floor/roof tile words per present elevation (up to three). Flags 2/4/8 mark absent elevations; CE also clears bit 28 when importing the roof flag nibble. The parser exposes the byte offset of scripts but **does not parse or execute scripts, actors or object state**.
+
+Synthetic tests exercise map version validation, optional elevation sections, variable-section offsets, truncation rejection and roof-flag normalization. Real Fallout 1 map files are not redistributed or yet tested against CE.
