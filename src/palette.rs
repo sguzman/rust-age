@@ -152,7 +152,10 @@ mod tests {
         start[1] = [63, 0, 15];
         target[1] = [0, 63, 45];
         assert_eq!(super::fade_step(&start, &target, 0, 3).unwrap(), start);
-        assert_eq!(super::fade_step(&start, &target, 1, 3).unwrap()[1], [42, 21, 25]);
+        assert_eq!(
+            super::fade_step(&start, &target, 1, 3).unwrap()[1],
+            [42, 21, 25]
+        );
         assert_eq!(super::fade_step(&start, &target, 3, 3).unwrap(), target);
         assert!(super::fade_step(&start, &target, 1, 0).is_err());
     }

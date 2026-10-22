@@ -47,8 +47,8 @@ impl IndexedSurface {
 
     /// Opaque rectangle fill; clipped to the destination, including negative origins.
     pub fn fill_rect(&mut self, x: i32, y: i32, width: usize, height: usize, color: u8) {
-        let left = (x as i64).max(0) as usize;
-        let top = (y as i64).max(0) as usize;
+        let left = (x as i64).max(0).min(self.width as i64) as usize;
+        let top = (y as i64).max(0).min(self.height as i64) as usize;
         let right = (x as i64 + width as i64).min(self.width as i64).max(0) as usize;
         let bottom = (y as i64 + height as i64).min(self.height as i64).max(0) as usize;
         for row in top..bottom {
