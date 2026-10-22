@@ -49,12 +49,8 @@ impl IndexedSurface {
     pub fn fill_rect(&mut self, x: i32, y: i32, width: usize, height: usize, color: u8) {
         let left = (x as i64).max(0) as usize;
         let top = (y as i64).max(0) as usize;
-        let right = (x as i64 + width as i64)
-            .min(self.width as i64)
-            .max(0) as usize;
-        let bottom = (y as i64 + height as i64)
-            .min(self.height as i64)
-            .max(0) as usize;
+        let right = (x as i64 + width as i64).min(self.width as i64).max(0) as usize;
+        let bottom = (y as i64 + height as i64).min(self.height as i64).max(0) as usize;
         for row in top..bottom {
             self.pixels[row * self.width + left..row * self.width + right].fill(color);
         }
@@ -94,8 +90,8 @@ impl IndexedSurface {
             let sx = (dx0 - x as i64) as usize;
             let count = (dx1 - dx0) as usize;
             let src = &frame.pixels[sy * source_width + sx..sy * source_width + sx + count];
-            let dst = &mut self.pixels[dy as usize * self.width + dx
-                ..dy as usize * self.width + dx + count];
+            let dst = &mut self.pixels
+                [dy as usize * self.width + dx..dy as usize * self.width + dx + count];
             if transparent {
                 for (source, target) in src.iter().zip(dst.iter_mut()) {
                     if *source != 0 {
@@ -148,16 +144,22 @@ mod tests {
     fn transparent_zero_preserves_background_but_opaque_zero_overwrites() {
         let mut screen = IndexedSurface::new(4, 3).unwrap();
         screen.fill_rect(0, 0, 4, 3, 8);
-        screen.blit_frame(&frame(3, 2, &[0, 1, 0, 2, 0, 3]), 1, 1, true).unwrap();
+        screen
+            .blit_frame(&frame(3, 2, &[0, 1, 0, 2, 0, 3]), 1, 1, true)
+            .unwrap();
         assert_eq!(screen.indices(), &[8, 8, 8, 8, 8, 8, 1, 8, 8, 2, 8, 3]);
-        screen.blit_frame(&frame(2, 1, &[0, 4]), 0, 0, false).unwrap();
+        screen
+            .blit_frame(&frame(2, 1, &[0, 4]), 0, 0, false)
+            .unwrap();
         assert_eq!(&screen.indices()[0..4], &[0, 4, 8, 8]);
     }
 
     #[test]
     fn negative_origin_clips_without_wrapping() {
         let mut screen = IndexedSurface::new(3, 2).unwrap();
-        screen.blit_frame(&frame(3, 2, &[1, 2, 3, 4, 5, 6]), -1, -1, false).unwrap();
+        screen
+            .blit_frame(&frame(3, 2, &[1, 2, 3, 4, 5, 6]), -1, -1, false)
+            .unwrap();
         assert_eq!(screen.indices(), &[5, 6, 0, 0, 0, 0]);
         screen.fill_rect(-2, -1, 3, 2, 7);
         assert_eq!(screen.indices(), &[7, 6, 0, 0, 0, 0]);
@@ -178,7 +180,9 @@ mod tests {
         colors[3..6].copy_from_slice(&[63, 0, 0]);
         let palette = Palette::decode(&colors).unwrap();
         let mut screen = IndexedSurface::new(2, 1).unwrap();
-        screen.blit_frame(&frame(2, 1, &[1, 0]), 0, 0, false).unwrap();
+        screen
+            .blit_frame(&frame(2, 1, &[1, 0]), 0, 0, false)
+            .unwrap();
         let mut bytes = Vec::new();
         screen.write_ppm(&palette, &mut bytes).unwrap();
         assert_eq!(bytes, b"P6\n2 1\n255\n\xFF\x00\x00\x00\x00\x00");

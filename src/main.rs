@@ -1,7 +1,7 @@
 use rust_age::assets::{Bank, GameAssets};
 use rust_age::dat::DatArchive;
-use rust_age::frm::Frm;
 use rust_age::framebuffer::IndexedSurface;
+use rust_age::frm::Frm;
 use rust_age::palette::Palette;
 use std::env;
 use std::fs::File;
@@ -108,8 +108,12 @@ fn main() {
             if flag == "--export-frm-preview" =>
         {
             let bank = bank_for(bank);
-            let direction = direction.parse::<usize>().unwrap_or_else(|_| fail("Invalid direction (expected 0..5)"));
-            let frame_number = frame_number.parse::<usize>().unwrap_or_else(|_| fail("Invalid frame number"));
+            let direction = direction
+                .parse::<usize>()
+                .unwrap_or_else(|_| fail("Invalid direction (expected 0..5)"));
+            let frame_number = frame_number
+                .parse::<usize>()
+                .unwrap_or_else(|_| fail("Invalid frame number"));
             let mut assets = GameAssets::open(Path::new(directory))
                 .unwrap_or_else(|error| fail(format!("Cannot open installation: {error}")));
             let palette_bytes = assets
@@ -130,7 +134,9 @@ fn main() {
                 .and_then(|rotation| rotation.get(frame_number))
                 .unwrap_or_else(|| fail("Direction or frame out of range"));
             let mut surface = IndexedSurface::new(frame.width as usize, frame.height as usize)
-                .unwrap_or_else(|error| fail(format!("Cannot allocate diagnostic framebuffer: {error}")));
+                .unwrap_or_else(|error| {
+                    fail(format!("Cannot allocate diagnostic framebuffer: {error}"))
+                });
             surface
                 .blit_frame(frame, 0, 0, false)
                 .unwrap_or_else(|error| fail(format!("Cannot render indexed frame: {error}")));
