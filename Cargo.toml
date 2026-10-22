@@ -1,0 +1,16 @@
+[package]
+name = "rust-age"
+version = "0.1.0"
+edition = "2021"
+description = "Unfinished Rust port of Fallout 1 Community Edition"
+license-file = "LICENSE"
+repository = "https://github.com/sguzman/rust-age"
+publish = false
+
+[lib]
+name = "rust_age"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rust-age"
+path = "src/main.rs"

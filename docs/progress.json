@@ -1,0 +1,619 @@
+{
+  "schema": 1,
+  "method": "Arithmetic mean of atomic task percentages (rounded half up); 100 requires evidence; completed tasks omitted from progress views; M7 gated behind M6.",
+  "reference": {
+    "repository": "alexbatalov/fallout1-ce",
+    "commit": "0609bcfd0ec40ff0571d0f57fab2821eb461dc8b",
+    "license": "Sustainable Use License 1.0"
+  },
+  "milestones": [
+    {
+      "id": "M0",
+      "emoji": "🧱",
+      "name": "Foundation and Fallout 1 asset compatibility",
+      "gate": "Reference pinned; native Rust diagnostic works; Fallout 1 archive and content readers verified.",
+      "phases": [
+        {
+          "id": "P0",
+          "emoji": "🧭",
+          "name": "Provenance, scaffolding and quality controls",
+          "tasks": [
+            {
+              "id": "T001",
+              "emoji": "📌",
+              "name": "Pin Fallout 1 CE and document upstream license",
+              "progress": 100,
+              "evidence": "docs/PROVENANCE.md, LICENSE"
+            },
+            {
+              "id": "T002",
+              "emoji": "🎨",
+              "name": "Select OKLCH project accent and README swatch",
+              "progress": 100,
+              "evidence": "docs/COLOR.md, assets/rust-age-color.svg"
+            },
+            {
+              "id": "T003",
+              "emoji": "🦀",
+              "name": "Build Rust crate, native CLI and GitHub CI",
+              "progress": 75,
+              "evidence": "Cargo.toml, src/main.rs, .github/workflows/ci.yml; CI unverified"
+            },
+            {
+              "id": "T004",
+              "emoji": "🔎",
+              "name": "Establish C++ baseline comparison and reference fixtures",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P1",
+          "emoji": "📦",
+          "name": "Game-data archive, codec and filesystem",
+          "tasks": [
+            {
+              "id": "T101",
+              "emoji": "🧰",
+              "name": "Check a user-supplied Fallout 1 installation",
+              "progress": 75,
+              "evidence": "src/main.rs; compile unverified"
+            },
+            {
+              "id": "T102",
+              "emoji": "🗜️",
+              "name": "Translate CE LZSS decoder with synthetic unit cases",
+              "progress": 75,
+              "evidence": "src/lzss.rs; differential verification pending"
+            },
+            {
+              "id": "T103",
+              "emoji": "🗃️",
+              "name": "Implement CE DAT archive directory and entry extraction",
+              "progress": 0
+            },
+            {
+              "id": "T104",
+              "emoji": "🗂️",
+              "name": "Implement loose-file patches, path resolution and case policy",
+              "progress": 0
+            },
+            {
+              "id": "T105",
+              "emoji": "📄",
+              "name": "Implement game configuration, messages and encodings",
+              "progress": 0
+            },
+            {
+              "id": "T106",
+              "emoji": "🧬",
+              "name": "Decode FRM, PRO, map and script asset structures",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M1",
+      "emoji": "🖼️",
+      "name": "Pixel-faithful renderer and navigable maps",
+      "gate": "An original Fallout 1 location renders faithfully, with movement and transitions.",
+      "phases": [
+        {
+          "id": "P2",
+          "emoji": "🎨",
+          "name": "Art and rendering",
+          "tasks": [
+            {
+              "id": "T201",
+              "emoji": "🌈",
+              "name": "Port palettes, fades and color cycling",
+              "progress": 0
+            },
+            {
+              "id": "T202",
+              "emoji": "🧟",
+              "name": "Load FRM sprites, directions and animation timing",
+              "progress": 0
+            },
+            {
+              "id": "T203",
+              "emoji": "💡",
+              "name": "Port tile/roof layering, compositing and lighting",
+              "progress": 0
+            },
+            {
+              "id": "T204",
+              "emoji": "🪟",
+              "name": "Build native Linux window, framebuffer scaling and input loop",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P3",
+          "emoji": "🗺️",
+          "name": "Maps and world views",
+          "tasks": [
+            {
+              "id": "T301",
+              "emoji": "🧭",
+              "name": "Implement original hex projection and map scrolling",
+              "progress": 0
+            },
+            {
+              "id": "T302",
+              "emoji": "🚶",
+              "name": "Port pathfinding, collision and actor movement",
+              "progress": 0
+            },
+            {
+              "id": "T303",
+              "emoji": "🚪",
+              "name": "Port map/elevation load and spatial exits",
+              "progress": 0
+            },
+            {
+              "id": "T304",
+              "emoji": "🌍",
+              "name": "Render world map, town selection and location discovery",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "emoji": "📟",
+      "name": "Menus, UI, audio and cinematics",
+      "gate": "Main menu, core game UI, music, effects and cinematics match CE.",
+      "phases": [
+        {
+          "id": "P4",
+          "emoji": "🖱️",
+          "name": "Menu, HUD and screens",
+          "tasks": [
+            {
+              "id": "T401",
+              "emoji": "🎮",
+              "name": "Translate CE mouse, input queue and shortcuts",
+              "progress": 0
+            },
+            {
+              "id": "T402",
+              "emoji": "🎒",
+              "name": "Port HUD, inventory, item inspection and action cursor",
+              "progress": 0
+            },
+            {
+              "id": "T403",
+              "emoji": "🧑",
+              "name": "Port character creation, stats, Pip-Boy and options",
+              "progress": 0
+            },
+            {
+              "id": "T404",
+              "emoji": "💬",
+              "name": "Port dialogue interface, fonts and localization presentation",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P5",
+          "emoji": "🔊",
+          "name": "Sound and cinematics",
+          "tasks": [
+            {
+              "id": "T501",
+              "emoji": "🎵",
+              "name": "Port original ACM stream decoding and music",
+              "progress": 0
+            },
+            {
+              "id": "T502",
+              "emoji": "🔉",
+              "name": "Port effects, mixing, voice priority and timing",
+              "progress": 0
+            },
+            {
+              "id": "T503",
+              "emoji": "🎬",
+              "name": "Port video playback and audiovisual synchronization",
+              "progress": 0
+            },
+            {
+              "id": "T504",
+              "emoji": "🎞️",
+              "name": "Verify menu, intro, ending and cinematic sequences",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "emoji": "🧠",
+      "name": "Fallout script VM and quest behaviors",
+      "gate": "Original game scripts execute with CE-equivalent side effects and dialogue outcomes.",
+      "phases": [
+        {
+          "id": "P6",
+          "emoji": "🔣",
+          "name": "Script interpreter and native opcodes",
+          "tasks": [
+            {
+              "id": "T601",
+              "emoji": "📚",
+              "name": "Inventory bytecode opcodes, stack layout and data",
+              "progress": 0
+            },
+            {
+              "id": "T602",
+              "emoji": "⚙️",
+              "name": "Port interpreter, procedures and interpreter state",
+              "progress": 0
+            },
+            {
+              "id": "T603",
+              "emoji": "🔌",
+              "name": "Port engine opcodes, callbacks and event dispatch",
+              "progress": 0
+            },
+            {
+              "id": "T604",
+              "emoji": "🧪",
+              "name": "Golden-script differential tests versus CE",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P7",
+          "emoji": "📜",
+          "name": "Quests, dialogue and triggers",
+          "tasks": [
+            {
+              "id": "T701",
+              "emoji": "🗣️",
+              "name": "Port dialogue branches and NPC reactions",
+              "progress": 0
+            },
+            {
+              "id": "T702",
+              "emoji": "🚩",
+              "name": "Port map scripts, spatial triggers and timers",
+              "progress": 0
+            },
+            {
+              "id": "T703",
+              "emoji": "🧮",
+              "name": "Port global/local state and quest flags",
+              "progress": 0
+            },
+            {
+              "id": "T704",
+              "emoji": "🤝",
+              "name": "Port companion scripts and party interactions",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "emoji": "⚔️",
+      "name": "Gameplay and combat parity",
+      "gate": "Characters, inventory, rules, turn-based combat and AI produce original outcomes.",
+      "phases": [
+        {
+          "id": "P8",
+          "emoji": "🧬",
+          "name": "Character and item rules",
+          "tasks": [
+            {
+              "id": "T801",
+              "emoji": "💪",
+              "name": "Port SPECIAL, stats, skills, perks and traits",
+              "progress": 0
+            },
+            {
+              "id": "T802",
+              "emoji": "🎲",
+              "name": "Port RNG, skill checks and progression",
+              "progress": 0
+            },
+            {
+              "id": "T803",
+              "emoji": "🎒",
+              "name": "Port inventory/equipment, trade and item effects",
+              "progress": 0
+            },
+            {
+              "id": "T804",
+              "emoji": "☢️",
+              "name": "Port damage, healing, poison and radiation",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P9",
+          "emoji": "🔫",
+          "name": "Combat and AI",
+          "tasks": [
+            {
+              "id": "T901",
+              "emoji": "🎯",
+              "name": "Port AP economy, hit chance, weapons and damage",
+              "progress": 0
+            },
+            {
+              "id": "T902",
+              "emoji": "🧠",
+              "name": "Port NPC combat AI and targeting",
+              "progress": 0
+            },
+            {
+              "id": "T903",
+              "emoji": "💥",
+              "name": "Port criticals, deaths and animations",
+              "progress": 0
+            },
+            {
+              "id": "T904",
+              "emoji": "🔬",
+              "name": "Differential fixed-seed combat scenarios",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P10",
+          "emoji": "🌐",
+          "name": "Simulation and progression",
+          "tasks": [
+            {
+              "id": "T1001",
+              "emoji": "⏰",
+              "name": "Port time, rest and random encounters",
+              "progress": 0
+            },
+            {
+              "id": "T1002",
+              "emoji": "🚶",
+              "name": "Port world travel and location state",
+              "progress": 0
+            },
+            {
+              "id": "T1003",
+              "emoji": "🎭",
+              "name": "Port NPC schedule, hostility and reputation",
+              "progress": 0
+            },
+            {
+              "id": "T1004",
+              "emoji": "🏁",
+              "name": "Port endings, fail states and victory conditions",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M5",
+      "emoji": "💾",
+      "name": "Complete Fallout 1 and original save compatibility",
+      "gate": "Complete the Fallout 1 campaign on Linux using game files supplied by the player.",
+      "phases": [
+        {
+          "id": "P11",
+          "emoji": "💽",
+          "name": "Save/load and recovery",
+          "tasks": [
+            {
+              "id": "T1101",
+              "emoji": "📝",
+              "name": "Implement original save file serialization",
+              "progress": 0
+            },
+            {
+              "id": "T1102",
+              "emoji": "📖",
+              "name": "Load CE and original save games",
+              "progress": 0
+            },
+            {
+              "id": "T1103",
+              "emoji": "🔁",
+              "name": "Round-trip maps, inventory, quests and scripts",
+              "progress": 0
+            },
+            {
+              "id": "T1104",
+              "emoji": "🛟",
+              "name": "Reject corrupted saves safely",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P12",
+          "emoji": "🚀",
+          "name": "Full campaign integration",
+          "tasks": [
+            {
+              "id": "T1201",
+              "emoji": "🏠",
+              "name": "Start game and reach Vault 13",
+              "progress": 0
+            },
+            {
+              "id": "T1202",
+              "emoji": "🚰",
+              "name": "Verify water chip quest and consequences",
+              "progress": 0
+            },
+            {
+              "id": "T1203",
+              "emoji": "🏜️",
+              "name": "Verify critical towns, companions and late-game branches",
+              "progress": 0
+            },
+            {
+              "id": "T1204",
+              "emoji": "🏆",
+              "name": "Complete campaign, final cinematics and credits",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M6",
+      "emoji": "🧪",
+      "name": "Strict Fallout 1 CE parity and Linux MVP release",
+      "gate": "Full CE behavior comparison and verified Linux release; Fallout 2 remains deferred until this passes.",
+      "phases": [
+        {
+          "id": "P13",
+          "emoji": "🔬",
+          "name": "Differential QA and legal release audit",
+          "tasks": [
+            {
+              "id": "T1301",
+              "emoji": "🧷",
+              "name": "Compare asset decoding and file resolution against CE",
+              "progress": 0
+            },
+            {
+              "id": "T1302",
+              "emoji": "📐",
+              "name": "Compare rendering, timing, RNG and script behavior",
+              "progress": 0
+            },
+            {
+              "id": "T1303",
+              "emoji": "🕹️",
+              "name": "Automate gameplay/saving regression scenarios",
+              "progress": 0
+            },
+            {
+              "id": "T1304",
+              "emoji": "🔐",
+              "name": "Audit source provenance, attribution and asset exclusion",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P14",
+          "emoji": "🐧",
+          "name": "EndeavourOS native release and dogfooding",
+          "tasks": [
+            {
+              "id": "T1401",
+              "emoji": "📦",
+              "name": "Build and document reproducible Linux binaries",
+              "progress": 0
+            },
+            {
+              "id": "T1402",
+              "emoji": "🖥️",
+              "name": "Test Wayland/X11, window focus and scaling",
+              "progress": 0
+            },
+            {
+              "id": "T1403",
+              "emoji": "🛠️",
+              "name": "Complete diagnostics, configuration and user errors",
+              "progress": 0
+            },
+            {
+              "id": "T1404",
+              "emoji": "🚦",
+              "name": "Verify entire game and inaugurate native Rust release",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M7",
+      "emoji": "☢️",
+      "name": "Fallout 2 port — strictly after Fallout 1 release",
+      "gate": "Do not begin before M6 is accepted; keep existing fallout2-ce fork reference-only.",
+      "phases": [
+        {
+          "id": "P15",
+          "emoji": "🔍",
+          "name": "Fallout 2 CE delta audit",
+          "tasks": [
+            {
+              "id": "T1501",
+              "emoji": "📌",
+              "name": "Pin Fallout 2 CE version and licensing",
+              "progress": 0
+            },
+            {
+              "id": "T1502",
+              "emoji": "🧭",
+              "name": "Inventory engine, VM, scripts and data differences",
+              "progress": 0
+            },
+            {
+              "id": "T1503",
+              "emoji": "📦",
+              "name": "Implement Fallout 2 game-data compatibility",
+              "progress": 0
+            },
+            {
+              "id": "T1504",
+              "emoji": "🧩",
+              "name": "Reuse validated Rust core without premature convergence",
+              "progress": 0
+            }
+          ]
+        },
+        {
+          "id": "P16",
+          "emoji": "🚀",
+          "name": "Fallout 2 game and release",
+          "tasks": [
+            {
+              "id": "T1601",
+              "emoji": "⚔️",
+              "name": "Port Fallout 2 gameplay/AI and party differences",
+              "progress": 0
+            },
+            {
+              "id": "T1602",
+              "emoji": "🏙️",
+              "name": "Port Fallout 2 UI/maps/quests/encounters",
+              "progress": 0
+            },
+            {
+              "id": "T1603",
+              "emoji": "💾",
+              "name": "Verify original saves and entire Fallout 2 campaign",
+              "progress": 0
+            },
+            {
+              "id": "T1604",
+              "emoji": "🐧",
+              "name": "Complete Fallout 2 Linux parity release",
+              "progress": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
