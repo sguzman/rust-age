@@ -61,10 +61,7 @@ impl Catalog {
     pub fn decode(bytes: &[u8]) -> io::Result<Self> {
         let mut entries = BTreeMap::new();
         let mut cursor = 0;
-        loop {
-            let Some(number) = next_field(bytes, &mut cursor)? else {
-                break;
-            };
+        while let Some(number) = next_field(bytes, &mut cursor)? {
             let audio = next_field(bytes, &mut cursor)?
                 .ok_or_else(|| invalid("missing message audio field"))?;
             let text = next_field(bytes, &mut cursor)?
