@@ -5,30 +5,29 @@ Progress is the arithmetic mean of atomic task percentages. Completed tasks are 
 the ledger but omitted from this display. Partial scaffold ≠ playable game.
 Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 
-## 🧱 M0 — Foundation and Fallout 1 asset compatibility — `████░░░░░░ 43%`
+## 🧱 M0 — Foundation and Fallout 1 asset compatibility — `██████░░░░ 61%`
 **Acceptance gate:** Reference pinned; native Rust diagnostic works; Fallout 1 archive and content readers verified.
 
-### 🧭 P0 — Provenance, scaffolding and quality controls — `███████░░░ 69%`
+### 🧭 P0 — Provenance, scaffolding and quality controls — `████████░░ 75%`
 
-- 🦀 T003 — Build Rust crate, native CLI and GitHub CI — `████████░░ 75%`
 - 🔎 T004 — Establish C++ baseline comparison and reference fixtures — `░░░░░░░░░░ 0%`
 
-### 📦 P1 — Game-data archive, codec and filesystem — `███░░░░░░░ 25%`
+### 📦 P1 — Game-data archive, codec and filesystem — `█████░░░░░ 51%`
 
-- 🧰 T101 — Check a user-supplied Fallout 1 installation — `████████░░ 75%`
-- 🗜️ T102 — Translate CE LZSS decoder with synthetic unit cases — `████████░░ 75%`
-- 🗃️ T103 — Implement CE DAT archive directory and entry extraction — `░░░░░░░░░░ 0%`
-- 🗂️ T104 — Implement loose-file patches, path resolution and case policy — `░░░░░░░░░░ 0%`
+- 🧰 T101 — Check a user-supplied Fallout 1 installation — `████████░░ 80%`
+- 🗜️ T102 — Translate CE LZSS decoder with synthetic unit cases — `████████░░ 80%`
+- 🗃️ T103 — Implement CE DAT archive directory and entry extraction — `███████░░░ 68%`
+- 🗂️ T104 — Implement loose-file patches, path resolution and case policy — `██████░░░░ 60%`
 - 📄 T105 — Implement game configuration, messages and encodings — `░░░░░░░░░░ 0%`
-- 🧬 T106 — Decode FRM, PRO, map and script asset structures — `░░░░░░░░░░ 0%`
+- 🧬 T106 — Decode FRM, PRO, map and script asset structures — `██░░░░░░░░ 20%`
 
-## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `░░░░░░░░░░ 0%`
+## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█░░░░░░░░░ 5%`
 **Acceptance gate:** An original Fallout 1 location renders faithfully, with movement and transitions.
 
-### 🎨 P2 — Art and rendering — `░░░░░░░░░░ 0%`
+### 🎨 P2 — Art and rendering — `█░░░░░░░░░ 10%`
 
 - 🌈 T201 — Port palettes, fades and color cycling — `░░░░░░░░░░ 0%`
-- 🧟 T202 — Load FRM sprites, directions and animation timing — `░░░░░░░░░░ 0%`
+- 🧟 T202 — Load FRM sprites, directions and animation timing — `████░░░░░░ 40%`
 - 💡 T203 — Port tile/roof layering, compositing and lighting — `░░░░░░░░░░ 0%`
 - 🪟 T204 — Build native Linux window, framebuffer scaling and input loop — `░░░░░░░░░░ 0%`
 

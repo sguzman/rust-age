@@ -36,8 +36,8 @@
               "id": "T003",
               "emoji": "🦀",
               "name": "Build Rust crate, native CLI and GitHub CI",
-              "progress": 75,
-              "evidence": "Cargo.toml, src/main.rs, .github/workflows/ci.yml; CI unverified"
+              "progress": 100,
+              "evidence": "Cargo.toml, native Rust CLI and GitHub Actions success at db905c87d047ed3504178be1c2028b7f74077b06"
             },
             {
               "id": "T004",
@@ -56,27 +56,29 @@
               "id": "T101",
               "emoji": "🧰",
               "name": "Check a user-supplied Fallout 1 installation",
-              "progress": 75,
-              "evidence": "src/main.rs; compile unverified"
+              "progress": 80,
+              "evidence": "Basic installation checker plus --verify-installation and --inspect-dat; runtime against actual user assets pending"
             },
             {
               "id": "T102",
               "emoji": "🗜️",
               "name": "Translate CE LZSS decoder with synthetic unit cases",
-              "progress": 75,
-              "evidence": "src/lzss.rs; differential verification pending"
+              "progress": 80,
+              "evidence": "src/lzss.rs synthetic literal/backreference/truncation/bounds tests; CE data comparison pending"
             },
             {
               "id": "T103",
               "emoji": "🗃️",
               "name": "Implement CE DAT archive directory and entry extraction",
-              "progress": 0
+              "progress": 68,
+              "evidence": "src/dat.rs associative directory parsing and raw/whole-LZSS/chunked extraction; synthetic CI passed, real DAT comparison pending"
             },
             {
               "id": "T104",
               "emoji": "🗂️",
               "name": "Implement loose-file patches, path resolution and case policy",
-              "progress": 0
+              "progress": 60,
+              "evidence": "src/assets.rs master/critter banks, default data patch precedence, mixed-case path lookup, synthetic tests; custom configuration unimplemented"
             },
             {
               "id": "T105",
@@ -88,7 +90,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 0
+              "progress": 20,
+              "evidence": "src/frm.rs handles FRM directional frame decoding; PRO, map and script readers remain"
             }
           ]
         }
@@ -115,7 +118,8 @@
               "id": "T202",
               "emoji": "🧟",
               "name": "Load FRM sprites, directions and animation timing",
-              "progress": 0
+              "progress": 40,
+              "evidence": "src/frm.rs parses six directions and frames; presentation/rendering/animation scheduling not implemented"
             },
             {
               "id": "T203",
