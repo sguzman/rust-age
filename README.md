@@ -6,7 +6,7 @@
 
 **Project color:** `#E05B4C` · `oklch(64% 0.17 29)` — [perceptual choice](docs/COLOR.md).
 
-> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder. No renderer, complete game loop or script interpreter exists.
+> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder, palette tables, and original configuration/localized MSG readers. No renderer, complete game loop or script interpreter exists.
 
 ## Source and operating model
 

@@ -6,6 +6,7 @@
 
 use crate::config::Config;
 use crate::dat::DatArchive;
+use crate::message::Catalog;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -113,6 +114,20 @@ impl GameAssets {
                 .unwrap_or("data")
                 .to_owned(),
         })
+    }
+
+    /// Read the original localized MSG catalog under text/<language>/,
+    /// using the master database's configured patch/archive resolution.
+    pub fn message_catalog(
+        &mut self,
+        language: &str,
+        path: &str,
+    ) -> io::Result<Option<Catalog>> {
+        let file = format!("text/{language}/{path}");
+        match self.read(Bank::Master, &file)? {
+            Some(bytes) => Catalog::decode(&bytes).map(Some),
+            None => Ok(None),
+        }
     }
 
     pub fn entry_count(&self, bank: Bank) -> usize {
@@ -226,6 +241,23 @@ mod tests {
             assets.read(Bank::Critter, "ART/thing.frm").unwrap(),
             Some(b"critter".to_vec())
         );
+        fs::create_dir_all(
+            root.join("Master_Patches").join("TEXT").join("English"),
+        )
+        .unwrap();
+        fs::write(
+            root.join("Master_Patches")
+                .join("TEXT")
+                .join("English")
+                .join("QUEST.MSG"),
+            b"{10}{}{Water chip}",
+        )
+        .unwrap();
+        let catalog = assets
+            .message_catalog("english", "quest.msg")
+            .unwrap()
+            .unwrap();
+        assert_eq!(catalog.get(10).unwrap().text, b"Water chip");
         fs::remove_dir_all(root).unwrap();
     }
 }
