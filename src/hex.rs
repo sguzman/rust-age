@@ -10,6 +10,7 @@ pub struct HexViewport {
     grid_height: i32,
     center_x: i32,
     center_y: i32,
+    center_tile: i32,
     offset_x: i32,
     offset_y: i32,
 }
@@ -45,6 +46,7 @@ impl HexViewport {
             grid_height,
             center_x,
             center_y,
+            center_tile,
             offset_x,
             offset_y,
         })
@@ -78,8 +80,7 @@ impl HexViewport {
     }
 
     pub fn center_tile(&self) -> i32 {
-        let col = self.center_x;
-        self.center_y * self.grid_width + (self.grid_width - 1 - col)
+        self.center_tile
     }
 
     fn on_edge(&self, tile: i32) -> bool {
@@ -130,6 +131,7 @@ mod tests {
     fn odd_center_column_keeps_screen_center() {
         let view = HexViewport::new(200, 200, 640, 480, 20098).unwrap();
         assert_eq!(view.tile_coord(20098), Some((304, 232)));
+        assert_eq!(view.center_tile(), 20098);
     }
 
     #[test]
