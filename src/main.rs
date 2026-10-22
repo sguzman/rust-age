@@ -109,7 +109,9 @@ fn main() {
         [_, flag, directory, path] if flag == "--inspect-map" => {
             let result = GameAssets::open(Path::new(directory))
                 .and_then(|mut assets| assets.read(Bank::Master, path))
-                .and_then(|bytes| bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound)))
+                .and_then(|bytes| {
+                    bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+                })
                 .and_then(|bytes| {
                     let header = MapHeader::decode(&bytes)?;
                     let squares = header.decode_squares(&bytes)?;
@@ -120,7 +122,10 @@ fn main() {
                     println!("Fallout 1 map: {}", String::from_utf8_lossy(header.name_bytes()));
                     println!("Entering tile: {}", header.entering_tile);
                     println!("Entering elevation: {}", header.entering_elevation);
-                    println!("Available square layers: {}", squares.elevations.iter().filter(|layer| layer.is_some()).count());
+                    println!(
+                        "Available square layers: {}",
+                        squares.elevations.iter().filter(|layer| layer.is_some()).count()
+                    );
                     println!("Original scripts begin at byte {}", squares.scripts_offset);
                     println!("Scripts/objects not yet decoded; game not playable.");
                 }
