@@ -132,7 +132,9 @@ impl GameAssets {
     pub fn tile_art_list(&mut self) -> io::Result<ArtList> {
         let bytes = self
             .read(Bank::Master, "art/tiles/tiles.lst")?
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "art/tiles/tiles.lst missing"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "art/tiles/tiles.lst missing")
+            })?;
         Ok(ArtList::parse(&bytes))
     }
 

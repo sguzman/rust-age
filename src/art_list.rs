@@ -21,7 +21,10 @@ impl ArtList {
             return Self { entries };
         }
         for line in bytes.split_inclusive(|ch| *ch == b'\n') {
-            let limit = line.iter().position(|ch| b" ,;\r\t\n".contains(ch)).unwrap_or(line.len());
+            let limit = line
+                .iter()
+                .position(|ch| b" ,;\r\t\n".contains(ch))
+                .unwrap_or(line.len());
             entries.push(line[..limit.min(12)].to_vec());
         }
         Self { entries }
@@ -63,7 +66,8 @@ mod tests {
 
     #[test]
     fn ce_lines_preserve_art_id_and_parse_comments() {
-        let list = ArtList::parse(b"GRID001.FRM ; comment\r\n\nLONG_FILENAME.FRM,8\nother.frm\t#alias");
+        let list =
+            ArtList::parse(b"GRID001.FRM ; comment\r\n\nLONG_FILENAME.FRM,8\nother.frm\t#alias");
         assert_eq!(list.len(), 4);
         assert_eq!(list.file_name(0).unwrap(), Some("GRID001.FRM"));
         assert_eq!(list.file_name(1).unwrap(), Some(""));
