@@ -15,6 +15,57 @@ pub struct HexViewport {
     offset_y: i32,
 }
 
+/// The 32x16 hit-mask constructed by CE tile_init, in the same 3 passes.
+const fn make_hit_mask() -> [u8; 512] {
+    let mut mask = [0_u8; 512];
+    let mut pos = 0;
+    let mut threshold = 0_i32;
+    while threshold < 64 {
+        let mut value = 64_i32;
+        while value > 0 {
+            mask[pos] = if value > threshold { 1 } else { 0 };
+            pos += 1;
+            value -= 4;
+        }
+        while value < 64 {
+            mask[pos] = if value > threshold { 2 } else { 0 };
+            pos += 1;
+            value += 4;
+        }
+        threshold += 16;
+    }
+
+    let mut row = 0;
+    while row < 8 {
+        let mut col = 0;
+        while col < 32 {
+            mask[pos] = 0;
+            pos += 1;
+            col += 1;
+        }
+        row += 1;
+    }
+
+    threshold = 0;
+    while threshold < 64 {
+        let mut value = 0_i32;
+        while value < 64 {
+            mask[pos] = if value > threshold { 0 } else { 3 };
+            pos += 1;
+            value += 4;
+        }
+        while value > 0 {
+            mask[pos] = if value > threshold { 0 } else { 4 };
+            pos += 1;
+            value -= 4;
+        }
+        threshold += 16;
+    }
+    mask
+}
+
+const TILE_HIT_MASK: [u8; 512] = make_hit_mask();
+
 impl HexViewport {
     /// Set CE's tile-centered viewport using game/native framebuffer sizes.
     pub fn new(
@@ -79,6 +130,52 @@ impl HexViewport {
         Some((x, y))
     }
 
+    /// Translate a native framebuffer coordinate to its Fallout 1 hex ID.
+    ///
+    /// This ports CE tile_num's floor-division and hit-mask corrections.
+    /// Returning None means a coordinate outside the loaded hex grid.
+    pub fn screen_to_tile(&self, screen_x: i32, screen_y: i32) -> Option<i32> {
+        let relative_y = screen_y - self.offset_y;
+        let row_band = relative_y.div_euclid(12);
+        let relative_x = screen_x - self.offset_x - 16 * row_band;
+        let mask_y = relative_y - 12 * row_band;
+        let column_band = relative_x.div_euclid(64);
+        let mut mask_x = relative_x - 64 * column_band;
+        let mut column = 2 * column_band;
+        if mask_x >= 32 {
+            mask_x -= 32;
+            column += 1;
+        }
+        let mut grid_y = self.center_y + column_band + row_band;
+        let mut grid_x = self.center_x + column;
+        match TILE_HIT_MASK[(32 * mask_y + mask_x) as usize] {
+            2 => {
+                grid_x += 1;
+                if grid_x & 1 != 0 {
+                    grid_y -= 1;
+                }
+            }
+            1 => grid_y -= 1,
+            3 => {
+                grid_x -= 1;
+                if grid_x & 1 == 0 {
+                    grid_y += 1;
+                }
+            }
+            4 => grid_y += 1,
+            _ => {}
+        }
+        let index_x = self.grid_width - 1 - grid_x;
+        if index_x < 0
+            || index_x >= self.grid_width
+            || grid_y < 0
+            || grid_y >= self.grid_height
+        {
+            return None;
+        }
+        Some(self.grid_width * grid_y + index_x)
+    }
+
     pub fn center_tile(&self) -> i32 {
         self.center_tile
     }
@@ -125,6 +222,14 @@ mod tests {
         assert_eq!(view.tile_coord(20098), Some((336, 232)));
         assert_eq!(view.tile_coord(20100), Some((288, 244)));
         assert_eq!(view.tile_coord(20299), Some((320, 244)));
+        for tile in [20099, 20098, 20100, 20299, 16080, 30020] {
+            let (x, y) = view.tile_coord(tile).unwrap();
+            assert_eq!(
+                view.screen_to_tile(x + 16, y + 8),
+                Some(tile),
+                "failed tile {tile}"
+            );
+        }
     }
 
     #[test]
@@ -148,6 +253,7 @@ mod tests {
         assert!(HexViewport::new(200, 200, 16, 480, 0).is_none());
         let view = HexViewport::new(200, 200, 640, 480, 20099).unwrap();
         assert_eq!(view.tile_coord(-1), None);
+        assert_eq!(view.screen_to_tile(-100_000, -100_000), None);
         assert_eq!(view.tile_coord(40000), None);
         assert_eq!(view.move_in_direction(0, 4, 1), Some(0));
         assert_eq!(view.move_in_direction(20099, 6, 1), None);
