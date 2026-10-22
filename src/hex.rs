@@ -204,7 +204,7 @@ impl HexViewport {
             if self.on_edge(current) {
                 break;
             }
-            let parity = (current % width & 1) as usize;
+            let parity = ((current % width) & 1) as usize;
             current += offsets[parity][rotation];
         }
         Some(current)
