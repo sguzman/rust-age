@@ -28,6 +28,16 @@ python3 tools/render_roadmap.py --check
 
 Replace the example FRM path with an existing sprite from your own Fallout 1 installation. The checker verifies only paths; the index validator opens both archives; sprite preview saves an unlit RGB PPM from original asset data, not a full frame or playable window. None of these commands proves game parity.
 
+### Optional native SDL2 sprite window
+
+On EndeavourOS, install the standard `sdl2` development package if it is not already installed. The read-only SDL2 viewer is an **optional feature**; basic diagnostics do not require SDL2:
+
+```sh
+cargo run --features native-window --bin rust-age-view -- /path/to/Fallout master art/items/example.frm
+```
+
+Choose a real FRM path from your own game installation. Use Left/Right to switch frames, Up/Down to switch directions, and Escape to close. SDL2 uses the available Linux display backend (Wayland where supported, otherwise X11/XWayland). This is **not** a playable map or full game.
+
 ## Progress and issues
 
 [📍 Roadmap](docs/ROADMAP.md) · [🔢 Progress ledger](docs/progress.json) · [🧩 C++→Rust port matrix](docs/PORT_MATRIX.md) · [📋 GitHub tracking queue](docs/ISSUES.md).

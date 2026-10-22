@@ -14,7 +14,9 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all-targets
+      - name: Install SDL2 development libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all-targets --all-features
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
