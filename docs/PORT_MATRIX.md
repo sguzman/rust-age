@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 18. **Not ported:** 90.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 19. **Not ported:** 89.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -56,10 +56,10 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/loadsave.cc` | — | ⚪ Not ported |
 | `src/game/main.cc` | — | ⚪ Not ported |
 | `src/game/mainmenu.cc` | — | ⚪ Not ported |
-| `src/game/map.cc` | `src/map.rs`, `src/object_tables.rs` | 🟡 Partial |
+| `src/game/map.cc` | `src/map.rs`, `src/object_tables.rs`, `src/scene.rs` | 🟡 Partial |
 | `src/game/message.cc` | `src/message.rs` | 🟡 Partial |
 | `src/game/moviefx.cc` | — | ⚪ Not ported |
-| `src/game/object.cc` | `src/object_data.rs`, `src/object_tables.rs` | 🟡 Partial |
+| `src/game/object.cc` | `src/object_data.rs`, `src/object_tables.rs`, `src/collision.rs`, `src/object_bounds.rs`, `src/object_preview.rs` | 🟡 Partial |
 | `src/game/options.cc` | — | ⚪ Not ported |
 | `src/game/palette.cc` | — | ⚪ Not ported |
 | `src/game/party.cc` | — | ⚪ Not ported |
@@ -96,7 +96,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/int/dialog.cc` | — | ⚪ Not ported |
 | `src/int/export.cc` | — | ⚪ Not ported |
 | `src/int/intlib.cc` | — | ⚪ Not ported |
-| `src/int/intrpret.cc` | — | ⚪ Not ported |
+| `src/int/intrpret.cc` | `src/script_program.rs`, `src/int_opcode.rs`, `src/script_vm.rs` | 🟡 Partial |
 | `src/int/memdbg.cc` | — | ⚪ Not ported |
 | `src/int/mousemgr.cc` | — | ⚪ Not ported |
 | `src/int/movie.cc` | — | ⚪ Not ported |

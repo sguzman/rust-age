@@ -217,7 +217,8 @@
       "source": "src/game/map.cc",
       "rust": [
         "src/map.rs",
-        "src/object_tables.rs"
+        "src/object_tables.rs",
+        "src/scene.rs"
       ],
       "status": "partial"
     },
@@ -237,7 +238,10 @@
       "source": "src/game/object.cc",
       "rust": [
         "src/object_data.rs",
-        "src/object_tables.rs"
+        "src/object_tables.rs",
+        "src/collision.rs",
+        "src/object_bounds.rs",
+        "src/object_preview.rs"
       ],
       "status": "partial"
     },
@@ -405,8 +409,12 @@
     },
     {
       "source": "src/int/intrpret.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/script_program.rs",
+        "src/int_opcode.rs",
+        "src/script_vm.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/int/memdbg.cc",

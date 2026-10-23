@@ -43,8 +43,8 @@
               "id": "T004",
               "emoji": "🔎",
               "name": "Establish C++ baseline comparison and reference fixtures",
-              "progress": 35,
-              "evidence": "C++ CE spatial-projection oracle and Rust spatial_probe added under tests/spatial_oracle.cc and src/bin/spatial_probe.rs, CI comparison added; full behavioral differential fixture system still absent and oracle latest CI pending."
+              "progress": 45,
+              "evidence": "Pinned CE C++ spatial, path-search and independent numeric VM subset differential oracles checked in CI. Fixed synthetic cases only; no full compiled CE gameplay oracle or commercial data parity."
             }
           ]
         },
@@ -92,8 +92,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 58,
-              "evidence": "CI-tested read-only FRM, full critter PRO stats, PID-indexed PRO lookup, MAP v19 square/script tables, per-elevation objects and recursive inventory records. Synthetic installed-data MAP→PRO test and CI 39890198422 green; no commercial-data audit or gameplay."
+              "progress": 63,
+              "evidence": "CI-tested original MAP header/variables/squares/scripts/objects, PRO/FRM/FID readers and read-only .INT 42-byte program preamble, procedure table, identifiers and static strings; synthetic Linux inspection tests. Original game install and script semantics unverified."
             }
           ]
         }
@@ -128,8 +128,8 @@
               "id": "T203",
               "emoji": "💡",
               "name": "Port tile/roof layering, compositing and lighting",
-              "progress": 48,
-              "evidence": "Indexed transparent blitter, unlit floor and optional roof overlay with original per-square offsets and synthetic MAP/LST/FRM tests; roof backend passed CI 39878970336; true light map, egg masking and object layering absent."
+              "progress": 55,
+              "evidence": "Static MAP floor/roof PPM diagnostics plus original object bounds, unlit FRM top-level object sprite overlay and full CLI synthetic pixel export tested. Native true CE per-hex ordering, lighting, transparency, roof masking and gameplay view absent."
             },
             {
               "id": "T204",
@@ -156,15 +156,15 @@
               "id": "T302",
               "emoji": "🚶",
               "name": "Port pathfinding, collision and actor movement",
-              "progress": 18,
-              "evidence": "Read-only src/pathfinding.rs port of CE make_path_func: 2000-node bounded search, seen-on-insert, screen-space idist, noncombat turn penalty, collision callback, synthetic routes; core CI 39895105447 passed. No object collision, doors, runtime actor movement or C++ differential oracle yet."
+              "progress": 30,
+              "evidence": "CI-tested CE-style 2000-node path search with screen heuristic and turn cost, C++ numeric differential probe, MAP-derived direct/multihex collision and Linux read-only MAP route CLI integration test. No mutable actors, doors, animations or runtime movement."
             },
             {
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 57,
-              "evidence": "Read-only MAP v19 square/script/object integration, per-elevation object and nested inventory readers, PRO subtype resolution via original DAT/patch banks, static floor/roof diagnostics. Synthetic integration and core CI 39890198422 passed. No transitions, live object placement or executed map scripts."
+              "progress": 66,
+              "evidence": "CI-tested MAP v19 variables, squares, serialized script and per-elevation object/inventory tables, PRO subtype lookup, immutable StaticScene composition and shared inspection/route commands. No live transitions, runtime map changes or state."
             },
             {
               "id": "T304",
@@ -261,13 +261,15 @@
               "id": "T601",
               "emoji": "📚",
               "name": "Inventory bytecode opcodes, stack layout and data",
-              "progress": 0
+              "progress": 38,
+              "evidence": "CI-tested read-only CE .INT program/24-byte procedure/static string decoder, all 76 core opcode names, typed 16-bit opcode/32-bit immediate readers, native CLI inspection and synthetic fixtures. Native engine opcodes and full instruction semantics pending."
             },
             {
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 0
+              "progress": 18,
+              "evidence": "Isolated bounded ScriptVm implements typed immediate PUSH, stack POP/DUP/SWAP, numeric ADD/SUB/MUL/DIV/MOD, comparisons, boolean/bitwise, IF/WHILE/JUMP and simplified STOP/EXIT semantics. Synthetic C++/Rust numeric regression cases; no procedure/return stack, callbacks or game execution."
             },
             {
               "id": "T603",
@@ -279,7 +281,8 @@
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 0
+              "progress": 6,
+              "evidence": "Independent C++ adapted numeric CE subset oracle and Rust execution probe for 16 invented bytecode fixtures, byte-for-byte compared by CI. No compiled CE interpreter golden test or original game scripts yet."
             }
           ]
         },
