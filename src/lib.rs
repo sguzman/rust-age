@@ -24,6 +24,7 @@ pub mod palette;
 pub mod pathfinding;
 pub mod prototype;
 pub mod prototype_list;
+pub mod random_roll;
 pub mod runtime_scene;
 pub mod scene;
 pub mod script_binding;

@@ -50,6 +50,12 @@ jobs:
           /tmp/rust-age-ce-schedule tests/int_schedule_cases.txt > /tmp/rust-age-ce-schedule.txt
           cargo run --quiet --bin int_schedule_probe > /tmp/rust-age-rust-schedule.txt
           diff -u /tmp/rust-age-ce-schedule.txt /tmp/rust-age-rust-schedule.txt
+      - name: Compare CE C++ and Rust deterministic rolls
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/roll_oracle.cc -o /tmp/rust-age-ce-roll
+          /tmp/rust-age-ce-roll tests/roll_cases.txt > /tmp/rust-age-ce-roll.txt
+          cargo run --quiet --bin roll_probe > /tmp/rust-age-rust-roll.txt
+          diff -u /tmp/rust-age-ce-roll.txt /tmp/rust-age-rust-roll.txt
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
 

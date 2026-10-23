@@ -1,0 +1,11 @@
+seed_1 S 1 1 100 12
+seed_0 S 0 1 100 12
+seed_42 S 42 1 100 12
+reverse S 12345 10 1 8
+negative S 250 -7 7 10
+single S 987 5 5 4
+before_day C 1 45 10 0
+day_boundary C 1 45 10 863999
+first_day C 1 45 10 864000
+failure_day C 47 12 -2 1728000
+success_day C 12345 90 15 864000
