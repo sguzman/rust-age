@@ -123,7 +123,8 @@
     {
       "source": "src/game/game.cc",
       "rust": [
-        "src/assets.rs"
+        "src/assets.rs",
+        "src/game_globals.rs"
       ],
       "status": "partial"
     },
@@ -219,7 +220,8 @@
       "rust": [
         "src/map.rs",
         "src/object_tables.rs",
-        "src/scene.rs"
+        "src/scene.rs",
+        "src/script_locals.rs"
       ],
       "status": "partial"
     },
@@ -309,7 +311,9 @@
         "src/script_list.rs",
         "src/script_binding.rs",
         "src/script_procedures.rs",
-        "src/assets.rs"
+        "src/assets.rs",
+        "src/script_lifecycle.rs",
+        "src/script_locals.rs"
       ],
       "status": "partial"
     },
@@ -467,8 +471,12 @@
     },
     {
       "source": "src/int/support/intextra.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/script_native_vars.rs",
+        "src/game_globals.rs",
+        "src/script_locals.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/int/widget.cc",

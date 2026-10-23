@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 20. **Not ported:** 88.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 21. **Not ported:** 87.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -38,7 +38,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/elevator.cc` | — | ⚪ Not ported |
 | `src/game/endgame.cc` | — | ⚪ Not ported |
 | `src/game/fontmgr.cc` | — | ⚪ Not ported |
-| `src/game/game.cc` | `src/assets.rs` | 🟡 Partial |
+| `src/game/game.cc` | `src/assets.rs`, `src/game_globals.rs` | 🟡 Partial |
 | `src/game/gconfig.cc` | `src/assets.rs` | 🟡 Partial |
 | `src/game/gdebug.cc` | — | ⚪ Not ported |
 | `src/game/gdialog.cc` | — | ⚪ Not ported |
@@ -56,7 +56,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/loadsave.cc` | — | ⚪ Not ported |
 | `src/game/main.cc` | — | ⚪ Not ported |
 | `src/game/mainmenu.cc` | — | ⚪ Not ported |
-| `src/game/map.cc` | `src/map.rs`, `src/object_tables.rs`, `src/scene.rs` | 🟡 Partial |
+| `src/game/map.cc` | `src/map.rs`, `src/object_tables.rs`, `src/scene.rs`, `src/script_locals.rs` | 🟡 Partial |
 | `src/game/message.cc` | `src/message.rs` | 🟡 Partial |
 | `src/game/moviefx.cc` | — | ⚪ Not ported |
 | `src/game/object.cc` | `src/object_data.rs`, `src/object_tables.rs`, `src/collision.rs`, `src/object_bounds.rs`, `src/object_preview.rs`, `src/runtime_scene.rs` | 🟡 Partial |
@@ -70,7 +70,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/queue.cc` | `src/event_queue.rs` | 🟡 Partial |
 | `src/game/reaction.cc` | — | ⚪ Not ported |
 | `src/game/roll.cc` | — | ⚪ Not ported |
-| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs` | 🟡 Partial |
+| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs`, `src/script_lifecycle.rs`, `src/script_locals.rs` | 🟡 Partial |
 | `src/game/select.cc` | — | ⚪ Not ported |
 | `src/game/selfrun.cc` | — | ⚪ Not ported |
 | `src/game/sfxcache.cc` | — | ⚪ Not ported |
@@ -112,7 +112,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 
 | C++ compilation unit | Rust counterpart | Status |
 |---|---|---|
-| `src/int/support/intextra.cc` | — | ⚪ Not ported |
+| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs` | 🟡 Partial |
 
 ## src/plib/assoc (1)
 
