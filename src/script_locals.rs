@@ -460,7 +460,9 @@ mod tests {
         assert_eq!(unchanged.script_ranges_changed, 0);
 
         let mut preview = baseline.clone();
-        preview.write_global_typed(0, ScriptValue::Pointer(25)).unwrap();
+        preview
+            .write_global_typed(0, ScriptValue::Pointer(25))
+            .unwrap();
         preview.write_typed(1, 0, ScriptValue::Pointer(33)).unwrap();
         preview.write_typed(2, 0, ScriptValue::Int(-7)).unwrap();
         let summary = preview.change_summary_since(&baseline).unwrap();
@@ -468,11 +470,11 @@ mod tests {
         assert_eq!(summary.local_slots_changed, 4);
         assert_eq!(summary.newly_allocated_slots, 3);
         assert_eq!(summary.script_ranges_changed, 1);
-        assert_eq!(preview.read_global_typed(0).unwrap(), ScriptValue::Pointer(25));
         assert_eq!(
-            baseline.read_global_typed(0).unwrap(),
-            ScriptValue::Int(5)
+            preview.read_global_typed(0).unwrap(),
+            ScriptValue::Pointer(25)
         );
+        assert_eq!(baseline.read_global_typed(0).unwrap(), ScriptValue::Int(5));
         assert_eq!(baseline.range(2).unwrap().offset, None);
         assert_eq!(baseline.locals(), [10, 11]);
 
