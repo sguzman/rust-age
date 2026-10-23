@@ -116,7 +116,12 @@ fn probe(name: &str) -> Result<String, Box<dyn Error>> {
     let values: &[i32] = if name == "game_missing" { &[] } else { &[7, 8] };
     let mut game = GameGlobalState::from_initial_values(values)?;
     let steps = run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 16)?;
-    let top = vm.stack().last().copied().map(repr).unwrap_or_else(|| "E".to_owned());
+    let top = vm
+        .stack()
+        .last()
+        .copied()
+        .map(repr)
+        .unwrap_or_else(|| "E".to_owned());
     let game_text = if game.values().is_empty() {
         "none".to_owned()
     } else {
