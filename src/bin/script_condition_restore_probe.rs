@@ -54,11 +54,9 @@ fn simulate(
     }
     let installed_flags = vm.modeled_program_low_flags();
     let installed_pc = vm.pc();
-    let frame = vm.preview_condition_frame_with_host_bounded(
-        20,
-        3,
-        &mut |_, _| Err("unexpected synthetic CE native".into()),
-    )?;
+    let frame = vm.preview_condition_frame_with_host_bounded(20, 3, &mut |_, _| {
+        Err("unexpected synthetic CE native".into())
+    })?;
     if vm.pc() != installed_pc || vm.modeled_program_low_flags() != installed_flags {
         return Err("condition mutated installed program flags or instruction pointer".into());
     }
