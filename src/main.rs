@@ -8,6 +8,7 @@ use rust_age::object_preview::ObjectPreview;
 use rust_age::palette::Palette;
 use rust_age::prototype::Prototype;
 use rust_age::scene::StaticScene;
+use rust_age::script_lifecycle::MapLifecyclePhase;
 use rust_age::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use rust_age::script_program::ScriptProgram;
 use std::env;
@@ -23,6 +24,7 @@ fn usage() {
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-scripts /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-procedures /path/to/Fallout maps/v13.map");
+    println!("       rust-age --inspect-map-lifecycle /path/to/Fallout maps/v13.map enter MAP_SID MAP_FLAGS");
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
@@ -227,6 +229,52 @@ fn main() {
                     println!("Prototype data inspection only; no gameplay object instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 prototype: {error}")),
+            }
+        }
+        [_, flag, directory, path, phase_name, map_sid, map_flags]
+            if flag == "--inspect-map-lifecycle" =>
+        {
+            let phase = match phase_name.as_str() {
+                "start" => MapLifecyclePhase::Start,
+                "enter" => MapLifecyclePhase::Enter,
+                "update" => MapLifecyclePhase::Update,
+                "exit" => MapLifecyclePhase::Exit,
+                _ => fail("MAP lifecycle must be start, enter, update, or exit"),
+            };
+            let sid = map_sid
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("MAP script SID must be a decimal i32"));
+            let flags = map_flags
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("MAP flags must be a decimal i32"));
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let scene = StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                let runtime = scene.unstarted_script_runtime(&mut assets)?;
+                let actions = runtime.plan_map_lifecycle(phase, sid, flags)?;
+                Ok((runtime.entries.len(), runtime.runtime.len(), actions))
+            })();
+            match result {
+                Ok((records, installed, actions)) => {
+                    println!("CE MAP lifecycle plan ({phase_name}): {} actions", actions.len());
+                    println!("Original MAP script records: {records}; installed INT VMs: {installed}");
+                    for action in actions {
+                        println!(
+                            "  SID {:#010X} [{}:{}] instance {} action [{}] {} -> procedure [{}], ext_param={:?}",
+                            action.script_id as u32,
+                            action.category,
+                            action.ordinal,
+                            action.instance_id,
+                            action.action,
+                            SCRIPT_PROC_NAMES[action.action],
+                            action.procedure_index,
+                            action.external_parameter
+                        );
+                    }
+                    println!("Selection only; no Fallout script has executed.");
+                }
+                Err(error) => fail(format!("Cannot inspect MAP lifecycle: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map-procedures" => {
