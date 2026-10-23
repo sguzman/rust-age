@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare CE C++ and Rust doEvents condition flag and PC restoration
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_condition_restore_oracle.cc -o /tmp/rust-age-ce-condition-restore
+          /tmp/rust-age-ce-condition-restore tests/script_condition_restore_cases.txt > /tmp/rust-age-ce-condition-restore.txt
+          cargo run --quiet --bin script_condition_restore_probe > /tmp/rust-age-rust-condition-restore.txt
+          diff -u /tmp/rust-age-ce-condition-restore.txt /tmp/rust-age-rust-condition-restore.txt
       - name: Compare CE C++ and Rust conditional EXIT versus STOP flags
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_termination_oracle.cc -o /tmp/rust-age-ce-termination
