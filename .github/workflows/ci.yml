@@ -56,6 +56,12 @@ jobs:
           /tmp/rust-age-ce-schedule tests/int_schedule_cases.txt > /tmp/rust-age-ce-schedule.txt
           cargo run --quiet --bin int_schedule_probe > /tmp/rust-age-rust-schedule.txt
           diff -u /tmp/rust-age-ce-schedule.txt /tmp/rust-age-rust-schedule.txt
+      - name: Compare CE C++ and Rust local interrupt stack return
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/int_interrupt_oracle.cc -o /tmp/rust-age-ce-interrupt
+          /tmp/rust-age-ce-interrupt tests/int_interrupt_cases.txt > /tmp/rust-age-ce-interrupt.txt
+          cargo run --quiet --bin int_interrupt_probe > /tmp/rust-age-rust-interrupt.txt
+          diff -u /tmp/rust-age-ce-interrupt.txt /tmp/rust-age-rust-interrupt.txt
       - name: Compare CE C++ and Rust program-list event traversal
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/int_runtime_oracle.cc -o /tmp/rust-age-ce-runtime

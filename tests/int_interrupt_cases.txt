@@ -1,0 +1,8 @@
+normal 0 0 42 4
+negative 0 0 -7 4
+critical 16 0 77 4
+exported 8 0 91 4
+imported 4 0 22 4
+needs_args 0 1 42 4
+under_budget 0 0 33 2
+no_budget 0 0 33 0
