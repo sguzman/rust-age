@@ -20,9 +20,9 @@ fn make_vm(value: i32, flags: i32, argc: i32) -> Result<ScriptVm, Box<dyn Error>
 }
 
 fn probe(flags: i32, argc: i32, value: i32, budget: usize) -> String {
-    match make_vm(value, flags, argc).and_then(|vm| {
-        Ok(vm.preview_local_interrupt_bounded(0, budget)?)
-    }) {
+    match make_vm(value, flags, argc)
+        .and_then(|vm| vm.preview_local_interrupt_bounded(0, budget).map_err(Into::into))
+    {
         Ok(rust_age::script_vm::ScriptValue::Int(result)) => format!("I:{result}"),
         _ => "ERR".to_owned(),
     }
