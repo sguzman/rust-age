@@ -398,6 +398,24 @@ impl ScriptVm {
         procedure_index: usize,
         max_steps: usize,
     ) -> io::Result<Option<ScriptValue>> {
+        self.preview_local_action_with_host_bounded(
+            procedure_index,
+            max_steps,
+            &mut |_, _| Err(invalid("CE local action native host not provided")),
+        )
+    }
+
+    /// Explicit synthetic local CE action preview with caller-supplied
+    /// opcode handling. The program VM itself is cloned, but this callback
+    /// may have external side effects: callers must use pure read-only
+    /// native hosts when requesting a side-effect-free preview. Imported
+    /// procedures and unsupported core opcodes still fail closed.
+    pub fn preview_local_action_with_host_bounded(
+        &self,
+        procedure_index: usize,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Option<ScriptValue>> {
         let procedure = self
             .runtime_procedures
             .get(procedure_index)
@@ -448,7 +466,7 @@ impl ScriptVm {
                 }
                 return Ok(returned);
             }
-            probe.step()?; // never supplies native or engine callbacks
+            probe.step_with_variable_host(native)?;
             if probe.halted {
                 return Err(invalid("CE local action stopped without a return"));
             }
@@ -1094,6 +1112,28 @@ mod tests {
         assert!(imported.preview_local_action_core_bounded(0, 3).is_err());
         let args = local_action_vm(&[0x80, 0x1A, 0x80, 0x21], 0, 1);
         assert!(args.preview_local_action_core_bounded(0, 3).is_err());
+    }
+
+    #[test]
+    fn local_action_explicit_native_host_runs_only_on_cloned_vm() {
+        let code = [0x80, 0x1A, 0x80, 0xBD, 0x80, 0x25];
+        let vm = local_action_vm(&code, 0, 0);
+        let mut calls = 0;
+        let result = vm
+            .preview_local_action_with_host_bounded(0, 3, &mut |opcode, stack| {
+                assert_eq!(opcode, 0x80BD);
+                calls += 1;
+                stack.push(ScriptValue::Pointer(17));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(result, Some(ScriptValue::Pointer(17)));
+        assert_eq!(calls, 1);
+        assert!(vm.preview_local_action_core_bounded(0, 3).is_err());
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert!(!vm.halted());
     }
 
     #[test]
