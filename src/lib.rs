@@ -15,3 +15,4 @@ pub mod palette;
 pub mod prototype;
 pub mod prototype_list;
 pub mod script_data;
+pub mod object_data;

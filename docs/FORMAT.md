@@ -88,3 +88,7 @@ CE `proto_list_str` selects a **one-based** `PID & 0xFFFFFF` row of `proto/<cate
 ## Original MAP script-list records (no execution)
 
 The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSubNode`: five script categories, one 32-bit count per category, up to 16 serialized records per extent (including padding), and subtype-dependent spatial/timed fields. It retains flags, script indices and raw legacy pointer tokens without following pointers or running bytecode. The MAP reader exposes the byte offset where the object section starts. Synthetic tests cover empty maps, spatial/timed layouts, padded extents and malformed counts. Interpreter, state mutation and event execution remain unimplemented.
+
+## Original MAP object-record prefix (read-only)
+
+`src/object_data.rs` ports CE's `obj_read_obj` 18-word object prefix and `proto_read_protoUpdateData` inventory header plus type-specific update fields. Critter records include the 7-word combat metadata and HP/radiation/poison; item/scenery record lengths require a known `.PRO` subtype. This parser reads **one** object record and leaves inventory children and the full per-elevation object table to later work. It ignores serialized pointer tokens and normalizes the CE `0xCCCCCCCC` data-flags marker. No entity simulation or object rendering is implemented.
