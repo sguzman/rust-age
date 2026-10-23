@@ -148,3 +148,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE .INT procedure and string-table foundation (no VM execution)
 
 `src/script_program.rs` reads CE's 42-byte preamble, big-endian procedure count, six-i32 (24-byte) `Procedure` table, size-prefixed identifier and static string tables. Procedure names are resolved from offsets relative to the identifier section; static strings are offset from the end of the static section's four-byte header. Raw string bytes are preserved without assuming UTF-8. An explicit 16-bit big-endian word reader supports future opcode dispatch. Bounds, count caps, malformed strings, and truncation are tested using synthetic script payloads. No interpreter state, bytecode execution, quest semantics, or runtime script loading is implemented.
+
+## Complete CE core-interpreter opcode inventory
+
+`src/int_opcode.rs` contains all 76 contiguous core interpreter opcodes 0x8000..0x804B, preserving symbolic names from pinned CE `src/int/intrpret.h`. The lookup is verified for coverage, boundaries and selected arithmetic/control instructions. It is a registry for future VM work, **not** script execution. External game opcodes from `intextra` and library modules remain separate future work.
