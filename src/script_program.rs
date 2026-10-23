@@ -65,16 +65,17 @@ impl ScriptProgram {
             return Err(invalid("CE script exceeds safe program size"));
         }
         let count = read_i32(bytes, PROGRAM_HEADER_BYTES)?;
-        let count = usize::try_from(count)
-            .map_err(|_| invalid("negative CE procedure count"))?;
+        let count = usize::try_from(count).map_err(|_| invalid("negative CE procedure count"))?;
         if count > MAX_PROCEDURES {
             return Err(invalid("CE procedure count exceeds safe limit"));
         }
         let procedures_start = PROGRAM_HEADER_BYTES + 4;
         let procedures_end = procedures_start
-            .checked_add(count.checked_mul(PROCEDURE_BYTES).ok_or_else(|| {
-                invalid("CE procedure table size overflow")
-            })?)
+            .checked_add(
+                count
+                    .checked_mul(PROCEDURE_BYTES)
+                    .ok_or_else(|| invalid("CE procedure table size overflow"))?,
+            )
             .ok_or_else(|| invalid("CE procedure table offset overflow"))?;
         if bytes.get(procedures_start..procedures_end).is_none() {
             return Err(invalid("truncated CE procedure table"));
@@ -99,8 +100,8 @@ impl ScriptProgram {
         // CE identifiers points at the 32-bit section size. Relative
         // identifier offsets are measured from that pointer, not +4.
         let identifier_size = read_i32(bytes, procedures_end)?;
-        let identifier_size = usize::try_from(identifier_size)
-            .map_err(|_| invalid("negative CE identifier size"))?;
+        let identifier_size =
+            usize::try_from(identifier_size).map_err(|_| invalid("negative CE identifier size"))?;
         let identifiers_offset = procedures_end;
         let identifiers_end = identifiers_offset
             .checked_add(4)
@@ -111,14 +112,17 @@ impl ScriptProgram {
         }
 
         let static_size = read_i32(bytes, identifiers_end)?;
-        let static_size = usize::try_from(static_size)
-            .map_err(|_| invalid("negative CE static string size"))?;
+        let static_size =
+            usize::try_from(static_size).map_err(|_| invalid("negative CE static string size"))?;
         let static_strings_offset = identifiers_end;
         let static_strings_end = static_strings_offset
             .checked_add(4)
             .and_then(|pos| pos.checked_add(static_size))
             .ok_or_else(|| invalid("CE string section overflow"))?;
-        if bytes.get(static_strings_offset..static_strings_end).is_none() {
+        if bytes
+            .get(static_strings_offset..static_strings_end)
+            .is_none()
+        {
             return Err(invalid("truncated CE static strings"));
         }
         Ok(Self {
