@@ -31,12 +31,23 @@ fn linux_cli_lists_original_ce_procedure_metadata_without_executing() {
     put(&mut file, 1);
     file.push(0);
     fs::write(directory.join("test.int"), file).unwrap();
+    fs::write(directory.join("scripts.lst"), b"test.ssl # map_init\n").unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_rust-age"))
         .arg("--inspect-int")
         .arg(&root)
         .arg("scripts/test.int")
         .output()
         .unwrap();
+    let by_index = Command::new(env!("CARGO_BIN_EXE_rust-age"))
+        .arg("--inspect-script-index")
+        .arg(&root)
+        .arg("0")
+        .output()
+        .unwrap();
+    assert!(by_index.status.success(), "{:?}", by_index);
+    let by_index_stdout = String::from_utf8(by_index.stdout).unwrap();
+    assert!(by_index_stdout.contains("Original script file: scripts/test.int"));
+    assert!(by_index_stdout.contains("Original procedures: 1"));
     fs::remove_dir_all(root).unwrap();
     assert!(output.status.success(), "{:?}", output);
     let output = String::from_utf8(output.stdout).unwrap();

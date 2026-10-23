@@ -180,3 +180,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## CE scripts.lst positional names and read-only .INT resolution
 
 `src/script_list.rs` mirrors `scr_index_to_name` in the pinned CE `src/game/scripts.cc`: zero-based row numbering, first-dot extension substitution to `.int`, and `scr_list_str`'s lower-24-bit index mask. `GameAssets::script_path_by_index` caches the source list per installation and `script_program_by_index` resolves the original master-bank `scripts/<name>.int` asset for the bounded parser. Explicit cache invalidation sees changed patches. Synthetic tests check comment handling, casefolded loose files, missing data, traversal rejection and the index-to-INT pipeline. No compiled game scripts are executed or bundled.
+
+## CE script index CLI inspection
+
+`rust-age --inspect-script-index <installation> <zero-based index>` now follows the source list and original patch/DAT bank to display a compiled `.INT` program's path and procedure count without executing it. The synthetic CLI smoke test verifies both direct-file and source-index inspection.

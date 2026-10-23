@@ -23,6 +23,7 @@ fn usage() {
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
+    println!("       rust-age --inspect-script-index /path/to/Fallout 0");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
     println!(
@@ -144,6 +145,30 @@ fn main() {
                     println!("Script program metadata only; no bytecode executed.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 .INT script: {error}")),
+            }
+        }
+        [_, flag, directory, index] if flag == "--inspect-script-index" => {
+            let index = index
+                .parse::<u32>()
+                .unwrap_or_else(|_| fail("Invalid nonnegative script index"));
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let path = assets.script_path_by_index(index)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
+                })?;
+                let program = assets.script_program_by_index(index)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
+                })?;
+                Ok((path, program.procedures().len()))
+            })();
+            match result {
+                Ok((path, count)) => {
+                    println!("Fallout CE original script index: {index}");
+                    println!("Original script file: {path}");
+                    println!("Original procedures: {count}");
+                    println!("Read-only bytecode metadata; no script has been executed.");
+                }
+                Err(error) => fail(format!("Cannot inspect CE script index: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-pro" => {
