@@ -25,6 +25,10 @@ int main(int argc, char** argv) {
             stack.push_back(time / 10);
             steps = 2; pc = 4;
             break;
+        case 'h':
+            stack.push_back(100 * ((time / 600) / 60 % 24) + (time / 600) % 60);
+            steps = 2; pc = 4;
+            break;
         case 'k':
             stack.push_back(seconds < 0 ? 0 : seconds * 10);
             steps = 3; pc = 10;

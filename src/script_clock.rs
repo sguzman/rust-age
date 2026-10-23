@@ -1,6 +1,7 @@
 //! Explicit-clock, bounded Fallout 1 CE game-time native opcode subset.
 //! Pinned src/int/support/intextra.cc op_game_time (0x80EA),
-//! op_game_time_in_seconds (0x80EB), and op_game_ticks (0x80F2).
+//! op_game_time_in_seconds (0x80EB), op_game_ticks (0x80F2),
+//! and op_game_time_hour (0x80F6, using game/scripts.cc game_time_hour).
 //! No wall clock, event scheduler, actor callback, or game loop runs here.
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
@@ -8,6 +9,7 @@ use std::io;
 pub const GAME_TIME_OPCODE: u16 = 0x80EA;
 pub const GAME_TIME_IN_SECONDS_OPCODE: u16 = 0x80EB;
 pub const GAME_TICKS_OPCODE: u16 = 0x80F2;
+pub const GAME_TIME_HOUR_OPCODE: u16 = 0x80F6;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -28,14 +30,19 @@ impl ScriptGameClock {
     /// rejects overflowing multiplication rather than exposing C++ UB.
     pub fn apply_opcode(&self, opcode: u16, stack: &mut Vec<ScriptValue>) -> io::Result<()> {
         match opcode {
-            GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE => {
+            GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TIME_HOUR_OPCODE => {
                 if stack.len() >= MAX_STACK_VALUES {
                     return Err(invalid("CE game-time result exceeds bounded stack"));
                 }
-                let value = if opcode == GAME_TIME_OPCODE {
-                    self.ticks
-                } else {
-                    self.ticks / 10
+                // CE game_time_hour returns hhmm as an integer. Division
+                // and remainder truncate toward zero exactly as in C++.
+                let value = match opcode {
+                    GAME_TIME_OPCODE => self.ticks,
+                    GAME_TIME_IN_SECONDS_OPCODE => self.ticks / 10,
+                    GAME_TIME_HOUR_OPCODE => {
+                        100 * ((self.ticks / 600) / 60 % 24) + (self.ticks / 600) % 60
+                    }
+                    _ => unreachable!(),
                 };
                 stack.push(ScriptValue::Int(value));
             }
@@ -67,7 +74,8 @@ impl ScriptGameClock {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE,
+        ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE,
+        GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE,
     };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};
@@ -87,6 +95,25 @@ mod tests {
         stack.push(ScriptValue::Int(21));
         clock.apply_opcode(GAME_TICKS_OPCODE, &mut stack).unwrap();
         assert_eq!(stack[3], ScriptValue::Int(210));
+    }
+
+    #[test]
+    fn original_ce_hhmm_hour_handles_morning_evening_and_day_wrap() {
+        for (ticks, expected) in [
+            (0, 0),
+            (288_000, 800),
+            (558_000, 1530),
+            (863_400, 2359),
+            (864_000, 0),
+            (1_152_000, 800),
+            (-28_800, -48),
+        ] {
+            let mut stack = Vec::new();
+            ScriptGameClock { ticks }
+                .apply_opcode(GAME_TIME_HOUR_OPCODE, &mut stack)
+                .unwrap();
+            assert_eq!(stack, [ScriptValue::Int(expected)], "ticks {ticks}");
+        }
     }
 
     #[test]

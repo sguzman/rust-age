@@ -10,3 +10,11 @@ ticks_one k 125 1
 ticks_many k 125 1234
 chain_regular c 125 3
 chain_negative c -25 2
+hour_midnight h 0 0
+hour_0800 h 288000 0
+hour_1530 h 558000 0
+hour_2359 h 863400 0
+hour_wrapped h 864000 0
+hour_day_later h 1152000 0
+hour_negative h -28800 0
+hour_max h 2147483647 0
