@@ -1,0 +1,7 @@
+map_plus_game
+game_set_read
+local_pointer
+map_invalid
+local_float
+mixed_add
+game_missing
