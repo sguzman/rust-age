@@ -1814,7 +1814,7 @@ mod tests {
                 (0, 1, 0, 36),
                 (0, 0, 8, 36),
                 (0, 0, 0, -1),
-                (0, 0, 0, 32), // in file, but points to non-opcode data
+                (0, 0, 0, 34), // in file, after the frame opcode, not executable
                 (0, 0, 0, 600),
             ] {
                 if opcode_value == 0x801F && address != 36 {
