@@ -698,6 +698,60 @@ fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
 }
 
 #[test]
+fn active_due_condition_uses_retained_script_fixed_parameter_and_fails_closed() {
+    let mut environment = environment();
+    // CE fixed_param read; PUSH 1; EQUAL; STOP_PROGRAM.
+    let condition = [
+        0x80, 0xF7, 0xC0, 0x01, 0, 0, 0, 1, 0x80, 0x33, 0x80, 0x11,
+    ];
+    let body = [0x80, 0x1A, 0x80, 0x21];
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_condition(&body, &condition);
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut sessions = DetachedMapEventSessions::new();
+    sessions.begin_planned(&environment, &plan).unwrap();
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    assert_eq!(
+        environment
+            .preview_active_due_reads_bounded(&sessions, &plan, clock, 0, 4)
+            .unwrap(),
+        vec![0]
+    );
+    assert!(sessions.get(1).unwrap().is_active());
+    assert_eq!(sessions.get(1).unwrap().invocation().fixed_parameter(), 1);
+    assert_eq!(
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
+        0x02
+    );
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+
+    let mismatch = rust_age::script_lifecycle::PlannedMapAction {
+        external_parameter: Some(123),
+        ..plan
+    };
+    assert!(environment
+        .preview_active_due_reads_bounded(&sessions, &mismatch, clock, 0, 4)
+        .is_err());
+    assert!(sessions.get(1).unwrap().is_active());
+    sessions.finish(1).unwrap();
+    assert!(environment
+        .preview_active_due_reads_bounded(&sessions, &plan, clock, 0, 4)
+        .is_err());
+}
+
+#[test]
 fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests() {
     let mut environment = environment();
     environment.map_locals = environment

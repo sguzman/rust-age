@@ -392,6 +392,60 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    /// Inspect ready CE procedures against an already-active detached MAP
+    /// event with retained source/target/fixedParam context. Exact planned
+    /// action identity and owner are verified before any condition read.
+    /// This remains a read-only inspection, not CE event dispatch.
+    pub fn preview_active_due_reads_bounded(
+        &self,
+        sessions: &DetachedMapEventSessions,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        let _ = self.local_frame_for_planned(planned)?;
+        let event = sessions.get(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE active due session missing")
+        })?;
+        let action = i32::try_from(planned.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE active due action exceeds i32")
+        })?;
+        if !event.is_active()
+            || event.invocation().action() != action
+            || Some(event.owner_resolution()) != self.owner_for_instance(planned.instance_id)
+            || planned
+                .external_parameter
+                .is_some_and(|fixed| event.invocation().fixed_parameter() != fixed)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active due event does not match verified plan",
+            ));
+        }
+        let vm = self
+            .scripts
+            .runtime
+            .vm(planned.instance_id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE active due VM missing"))?;
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        vm.preview_due_procedures_with_host_bounded(
+            now_millis,
+            max_steps_per_condition,
+            &mut |opcode, stack| {
+                apply_readonly_event_native_with_vars(
+                    snapshot,
+                    event.invocation(),
+                    &self.map_locals,
+                    self.game_globals.as_ref(),
+                    planned.instance_id,
+                    opcode,
+                    stack,
+                )
+            },
+        )
+    }
+
     /// Preview only supported CE object, event and clock READ opcodes
     /// inside the local procedure, using a cloned installed VM and a pure
     /// native adapter. No global/local state writes, overrides, timers,
