@@ -20,7 +20,11 @@ use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
-use crate::script_native_vars::{apply_readonly_event_native_with_vars, ScriptClockContext};
+use crate::script_native_vars::{
+    apply_map_variable_opcode, apply_readonly_event_native_opcode,
+    apply_readonly_event_native_with_vars, ScriptClockContext, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
+    SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+};
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
@@ -55,6 +59,17 @@ pub struct PreparedScriptEnvironment {
     /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
     /// Zero indicates no recorded visit; no gameplay time is advanced.
     pub map_last_visit_ticks: i32,
+}
+
+/// Pure sandbox result from a CLONED CE local script preview.
+/// All state changes exist only in this returned value, never in the MAP,
+/// installed VM, real GAME_GLOBAL_VARS or gameplay scheduler.
+#[derive(Debug, Clone)]
+pub struct PreviewedSandboxAction {
+    pub returned: Option<ScriptValue>,
+    pub map_locals: MapScriptLocals,
+    pub game_globals: Option<GameGlobalState>,
+    pub overrides: bool,
 }
 
 impl PreparedScriptEnvironment {
@@ -127,6 +142,83 @@ impl PreparedScriptEnvironment {
             ));
         }
         Ok(preview.returned)
+    }
+
+    /// Run a validated local MAP script action on CLONED VM, MAP-variable,
+    /// GAME_GLOBAL_VARS and invocation state. Only source-derived variable
+    /// reads/writes, script_overrides, and pure object/clock/event queries
+    /// can run. Every other native/gameplay opcode fails closed. Returned
+    /// variable stores are speculative; caller must not confuse them with
+    /// committed original CE state or actual quest effects.
+    pub fn preview_planned_sandbox_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<PreviewedSandboxAction> {
+        let frame = self.local_frame_for_planned(planned)?;
+        let event = self.detached_event_for_planned(planned)?;
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        let mut map_locals = self.map_locals.clone();
+        let mut game_globals = self.game_globals.clone();
+        let mut invocation = *event.invocation();
+        let preview = self
+            .scripts
+            .runtime
+            .preview_local_action_with_host_bounded(
+                planned.instance_id,
+                planned.action,
+                max_steps,
+                &mut |opcode, stack| match opcode {
+                    LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE
+                    | SET_MAP_VAR_OPCODE => {
+                        apply_map_variable_opcode(
+                            &mut map_locals,
+                            planned.instance_id,
+                            opcode,
+                            stack,
+                        )
+                    }
+                    crate::game_globals::GLOBAL_VAR_OPCODE
+                    | crate::game_globals::SET_GLOBAL_VAR_OPCODE => game_globals
+                        .as_mut()
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "CE sandbox game globals absent",
+                            )
+                        })?
+                        .apply_opcode(opcode, stack),
+                    SCRIPT_OVERRIDES_OPCODE => {
+                        invocation.mark_overrides();
+                        Ok(())
+                    }
+                    _ => apply_readonly_event_native_opcode(
+                        snapshot,
+                        &invocation,
+                        opcode,
+                        stack,
+                    ),
+                },
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE sandbox local action missing after preflight",
+                )
+            })?;
+        if frame != preview.frame {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE sandbox action frame changed during preview",
+            ));
+        }
+        Ok(PreviewedSandboxAction {
+            returned: preview.returned,
+            map_locals,
+            game_globals,
+            overrides: invocation.overrides(),
+        })
     }
 
     /// Preview only supported CE object, event and clock READ opcodes
