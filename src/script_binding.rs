@@ -140,8 +140,12 @@ pub fn install_map_scripts(
         let instance_id = if binding.script_index >= 0 && binding.path.is_some() {
             let index = (binding.script_index as u32) & 0x00FF_FFFF;
             if let Some(program) = assets.script_program_by_index(index)? {
-                let id = u64::try_from(ordinal + 1)
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "CE script instance ID exceeds u64"))?;
+                let id = u64::try_from(ordinal + 1).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "CE script instance ID exceeds u64",
+                    )
+                })?;
                 runtime.register(id, ScriptVm::new(program))?;
                 Some(id)
             } else {
