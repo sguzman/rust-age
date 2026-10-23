@@ -31,11 +31,11 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 💡 T203 — Port tile/roof layering, compositing and lighting — `██████░░░░ 55%`
 - 🪟 T204 — Build native Linux window, framebuffer scaling and input loop — `██████░░░░ 55%`
 
-### 🗺️ P3 — Maps and world views — `████░░░░░░ 43%`
+### 🗺️ P3 — Maps and world views — `████░░░░░░ 44%`
 
 - 🧭 T301 — Implement original hex projection and map scrolling — `██████░░░░ 64%`
 - 🚶 T302 — Port pathfinding, collision and actor movement — `████░░░░░░ 40%`
-- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 69%`
+- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 70%`
 - 🌍 T304 — Render world map, town selection and location discovery — `░░░░░░░░░░ 0%`
 
 ## 📟 M2 — Menus, UI, audio and cinematics — `░░░░░░░░░░ 0%`
@@ -62,8 +62,8 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
 - ⚙️ T602 — Port interpreter, procedures and interpreter state — `█████░░░░░ 50%`
-- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `███░░░░░░░ 28%`
-- 🧪 T604 — Golden-script differential tests versus CE — `████░░░░░░ 35%`
+- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `███░░░░░░░ 29%`
+- 🧪 T604 — Golden-script differential tests versus CE — `████░░░░░░ 36%`
 
 ### 📜 P7 — Quests, dialogue and triggers — `█░░░░░░░░░ 10%`
 
