@@ -179,6 +179,37 @@ impl GameAssets {
         }
     }
 
+    /// Resolve original game-global defaults in data/vault13.gam without
+    /// instantiating engine objects or executing quest/script procedures.
+    /// Loose game-root data takes precedence; a master DAT entry is the
+    /// fallback. Missing files return None rather than fabricated defaults.
+    pub fn game_global_defaults(
+        &mut self,
+    ) -> io::Result<Option<crate::game_globals::GameGlobalState>> {
+        if let Some(loose) = resolve_casefold(&self.root, "data/vault13.gam")? {
+            let canonical_root = self.root.canonicalize()?;
+            let canonical_file = loose.canonicalize()?;
+            if !canonical_file.starts_with(canonical_root) {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "original game-global file escapes installation root",
+                ));
+            }
+            if loose.is_file() {
+                return crate::game_globals::GameGlobalState::decode_vault13_defaults(
+                    &fs::read(loose)?,
+                )
+                .map(Some);
+            }
+        }
+        match self.read(Bank::Master, "data/vault13.gam")? {
+            Some(bytes) => {
+                crate::game_globals::GameGlobalState::decode_vault13_defaults(&bytes).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Decode a script by original index. Execution remains disabled.
     pub fn script_program_by_index(
         &mut self,
@@ -374,6 +405,32 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn reads_installed_vault13_game_global_defaults_without_running_scripts() {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "rust-age-game-globals-{}-{stamp}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("DaTa")).unwrap();
+        fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
+        fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
+        let mut assets = GameAssets::open(&root).unwrap();
+        assert!(assets.game_global_defaults().unwrap().is_none());
+        fs::write(
+            root.join("DaTa").join("VAULT13.GAM"),
+            b"GAME_GLOBAL_VARS:\nTEST=8\nNEXT=-12\n",
+        )
+        .unwrap();
+        let defaults = assets.game_global_defaults().unwrap().unwrap();
+        assert_eq!(defaults.values(), [8, -12]);
+        assert_eq!(defaults.read(5), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn resolves_windows_separators_and_mixed_case() {
