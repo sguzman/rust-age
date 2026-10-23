@@ -136,6 +136,26 @@ fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> 
     })
 }
 
+/// CE source opcode termination is not just a boolean: EXIT and
+/// EXIT_PROGRAM set EXITED (0x01), while STOP_PROGRAM sets STOPPED (0x08).
+/// This reports only these modeled bits, not all original program flags
+/// or actual parent/child lifecycle effects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptHaltReason {
+    Exit,
+    ExitProgram,
+    StopProgram,
+}
+
+impl ScriptHaltReason {
+    pub fn ce_terminal_flag(self) -> u16 {
+        match self {
+            Self::Exit | Self::ExitProgram => 0x01,
+            Self::StopProgram => 0x08,
+        }
+    }
+}
+
 /// A discarded, candidate-only result of one bounded CE doEvents-style
 /// condition evaluation. The actual installed interpreter is never updated.
 /// Stack and procedure changes here are speculative and must not be applied
@@ -143,6 +163,7 @@ fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreviewedConditionFrame {
     pub satisfied: bool,
+    pub termination: ScriptHaltReason,
     pub data_stack: Vec<ScriptValue>,
     pub return_stack: Vec<ScriptValue>,
     pub frame_pointer: i32,
@@ -156,6 +177,7 @@ pub struct PreviewedConditionFrame {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreviewedDueProcedurePoll {
     pub ready: Vec<usize>,
+    pub condition_terminations: Vec<(usize, ScriptHaltReason)>,
     pub data_stack: Vec<ScriptValue>,
     pub return_stack: Vec<ScriptValue>,
     pub frame_pointer: i32,
@@ -177,6 +199,7 @@ pub struct ScriptVm {
     base_pointer: i32,
     critical_section: bool,
     halted: bool,
+    halt_reason: Option<ScriptHaltReason>,
 }
 
 impl ScriptVm {
@@ -193,6 +216,7 @@ impl ScriptVm {
             base_pointer: -1,
             critical_section: false,
             halted: false,
+            halt_reason: None,
         }
     }
 
@@ -206,6 +230,12 @@ impl ScriptVm {
 
     pub fn halted(&self) -> bool {
         self.halted
+    }
+
+    /// Termination kind from the last bounded CE core run, if any.
+    /// Does not implement the original program's full flags lifecycle.
+    pub fn halt_reason(&self) -> Option<ScriptHaltReason> {
+        self.halt_reason
     }
 
     pub fn frame_pointer(&self) -> i32 {
@@ -432,10 +462,15 @@ impl ScriptVm {
         probe.pc = offset;
         probe.critical_section = false;
         probe.halted = false;
+        probe.halt_reason = None;
         probe.run_variable_subset_bounded(max_steps, native)?;
         let satisfied = probe.pop_int()? != 0;
+        let termination = probe
+            .halt_reason
+            .ok_or_else(|| invalid("CE condition terminated without modeled halt reason"))?;
         Ok(PreviewedConditionFrame {
             satisfied,
+            termination,
             data_stack: probe.stack,
             return_stack: probe.return_stack,
             frame_pointer: probe.frame_pointer,
@@ -469,6 +504,7 @@ impl ScriptVm {
         // the clone's clock is updated, never the installed interpreter.
         scratch.clock_millis = now_millis as i32;
         let mut ready = Vec::new();
+        let mut condition_terminations = Vec::new();
         for index in 0..scratch.runtime_procedures.len() {
             let procedure = scratch.runtime_procedures[index];
             if procedure.flags & 0x02 != 0 {
@@ -477,6 +513,7 @@ impl ScriptVm {
                     max_steps_per_condition,
                     native,
                 )?;
+                condition_terminations.push((index, frame.termination));
                 scratch.stack = frame.data_stack;
                 scratch.return_stack = frame.return_stack;
                 scratch.frame_pointer = frame.frame_pointer;
@@ -493,6 +530,7 @@ impl ScriptVm {
         }
         Ok(PreviewedDueProcedurePoll {
             ready,
+            condition_terminations,
             data_stack: scratch.stack,
             return_stack: scratch.return_stack,
             frame_pointer: scratch.frame_pointer,
@@ -862,8 +900,14 @@ impl ScriptVm {
                 self.push_return(value)?;
             }
             0x0E | 0x10 | 0x11 => {
-                // EXIT, EXIT_PROGRAM and STOP_PROGRAM have distinct CE
-                // lifecycle effects; here all terminate the isolated run.
+                // The pinned CE handlers set EXITED for EXIT/EXIT_PROGRAM,
+                // and STOPPED for STOP_PROGRAM. Preserve the distinction
+                // without changing the bounded interpreter's halt policy.
+                self.halt_reason = Some(match opcode & 0x03FF {
+                    0x0E => ScriptHaltReason::Exit,
+                    0x10 => ScriptHaltReason::ExitProgram,
+                    _ => ScriptHaltReason::StopProgram,
+                });
                 self.halted = true;
             }
             0x12 => {
@@ -1321,6 +1365,61 @@ mod tests {
         assert!(vm.return_stack().is_empty());
         assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
         assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+    }
+
+    #[test]
+    fn ce_exit_and_stop_opcode_flags_remain_distinct_in_detached_condition_frames() {
+        use super::ScriptHaltReason;
+
+        for (opcode_value, reason, terminal_flag) in [
+            (0x800E, ScriptHaltReason::Exit, 0x01),
+            (0x8010, ScriptHaltReason::ExitProgram, 0x01),
+            (0x8011, ScriptHaltReason::StopProgram, 0x08),
+        ] {
+            let mut code = Vec::new();
+            push_int(&mut code, 1);
+            opcode(&mut code, opcode_value);
+            let vm = ScriptVm::new(fixture(&code));
+            let frame = vm
+                .preview_condition_frame_with_host_bounded(0, 2, &mut |_, _| {
+                    Err(super::invalid("CE native host not provided"))
+                })
+                .unwrap();
+            assert!(frame.satisfied);
+            assert_eq!(frame.termination, reason);
+            assert_eq!(frame.termination.ce_terminal_flag(), terminal_flag);
+            assert!(!vm.halted());
+            assert_eq!(vm.halt_reason(), None);
+            assert_eq!(vm.pc(), 0);
+
+            let mut standalone = vm;
+            standalone.run_bounded(2).unwrap();
+            assert_eq!(standalone.halt_reason(), Some(reason));
+            assert!(standalone.halted());
+        }
+
+        let mut first = Vec::new();
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8010);
+        let mut second = Vec::new();
+        push_int(&mut second, 1);
+        opcode(&mut second, 0x8011);
+        let vm = synthetic_due_vm(&first, &second, 0x02);
+        let candidate = vm
+            .preview_due_procedure_poll_with_host_bounded(100, 2, &mut |_, _| {
+                Err(super::invalid("gameplay opcodes forbidden"))
+            })
+            .unwrap();
+        assert_eq!(candidate.ready, [1]);
+        assert_eq!(
+            candidate.condition_terminations,
+            [
+                (0, ScriptHaltReason::ExitProgram),
+                (1, ScriptHaltReason::StopProgram),
+            ]
+        );
+        assert!(!vm.halted());
+        assert_eq!(vm.halt_reason(), None);
     }
 
     #[test]
