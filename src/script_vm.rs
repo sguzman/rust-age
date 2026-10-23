@@ -138,6 +138,9 @@ pub struct ScriptVm {
     pub program: ScriptProgram,
     pc: usize,
     stack: Vec<ScriptValue>,
+    return_stack: Vec<ScriptValue>,
+    frame_pointer: i32,
+    base_pointer: i32,
     halted: bool,
 }
 
@@ -147,6 +150,9 @@ impl ScriptVm {
             program,
             pc: 0,
             stack: Vec::new(),
+            return_stack: Vec::new(),
+            frame_pointer: -1,
+            base_pointer: -1,
             halted: false,
         }
     }
@@ -163,6 +169,18 @@ impl ScriptVm {
         self.halted
     }
 
+    pub fn frame_pointer(&self) -> i32 {
+        self.frame_pointer
+    }
+
+    pub fn base_pointer(&self) -> i32 {
+        self.base_pointer
+    }
+
+    pub fn return_stack(&self) -> &[ScriptValue] {
+        &self.return_stack
+    }
+
     fn push(&mut self, value: ScriptValue) -> io::Result<()> {
         if self.stack.len() >= MAX_STACK_VALUES {
             return Err(invalid("CE VM operand stack exhausted"));
@@ -175,6 +193,42 @@ impl ScriptVm {
         self.stack
             .pop()
             .ok_or_else(|| invalid("CE VM operand stack underflow"))
+    }
+
+
+    fn push_return(&mut self, value: ScriptValue) -> io::Result<()> {
+        if self.return_stack.len() >= MAX_STACK_VALUES {
+            return Err(invalid("CE VM return stack exhausted"));
+        }
+        self.return_stack.push(value);
+        Ok(())
+    }
+
+    fn pop_return(&mut self) -> io::Result<ScriptValue> {
+        self.return_stack
+            .pop()
+            .ok_or_else(|| invalid("CE VM return stack underflow"))
+    }
+
+    fn pop_return_int(&mut self) -> io::Result<i32> {
+        match self.pop_return()? {
+            ScriptValue::Int(value) => Ok(value),
+            _ => Err(invalid("CE VM integer return value required")),
+        }
+    }
+
+    /// Frame/global offsets index values remaining on the data stack. This
+    /// does not follow pointers outside the bounded Rust-owned stack.
+    fn at_base(&self, base: i32, offset: i32) -> io::Result<usize> {
+        let location = base
+            .checked_add(offset)
+            .ok_or_else(|| invalid("CE interpreter stack index overflow"))?;
+        let index = usize::try_from(location)
+            .map_err(|_| invalid("negative CE interpreter stack index"))?;
+        if index >= self.stack.len() {
+            return Err(invalid("CE interpreter stack slot out of bounds"));
+        }
+        Ok(index)
     }
 
     fn pop_int(&mut self) -> io::Result<i32> {
@@ -220,16 +274,41 @@ impl ScriptVm {
                 let dest = self.pop_int()?;
                 self.jump(dest)?;
             }
+            0x0C => {
+                let value = self.pop_return()?;
+                self.push(value)?;
+            }
+            0x0D => {
+                let value = self.pop()?;
+                self.push_return(value)?;
+            }
             0x0E | 0x10 | 0x11 => {
                 // EXIT, EXIT_PROGRAM and STOP_PROGRAM have distinct CE
                 // lifecycle effects; here all terminate the isolated run.
                 self.halted = true;
+            }
+            0x12 => {
+                let offset = self.pop_int()?;
+                let index = self.at_base(self.base_pointer, offset)?;
+                self.push(self.stack[index])?;
+            }
+            0x13 => {
+                let offset = self.pop_int()?;
+                let value = self.pop()?;
+                let index = self.at_base(self.base_pointer, offset)?;
+                self.stack[index] = value;
             }
             0x18 => {
                 let first = self.pop()?;
                 let second = self.pop()?;
                 self.push(first)?;
                 self.push(second)?;
+            }
+            0x19 => {
+                let first = self.pop_return()?;
+                let second = self.pop_return()?;
+                self.push_return(first)?;
+                self.push_return(second)?;
             }
             0x1A => {
                 self.pop()?;
@@ -238,6 +317,55 @@ impl ScriptVm {
                 let value = self.pop()?;
                 self.push(value)?;
                 self.push(value)?;
+            }
+            0x1E => {
+                self.pop_return()?;
+            }
+            0x29 => {
+                self.frame_pointer = self.pop_return_int()?;
+            }
+            0x2A => {
+                let target = usize::try_from(self.frame_pointer)
+                    .map_err(|_| invalid("CE POP_TO_BASE without an active frame"))?;
+                if target > self.stack.len() {
+                    return Err(invalid("CE frame extends beyond data stack"));
+                }
+                self.stack.truncate(target);
+            }
+            0x2B => {
+                let argument_count = self.pop_int()?;
+                let argument_count = usize::try_from(argument_count)
+                    .map_err(|_| invalid("negative CE frame argument count"))?;
+                if argument_count > self.stack.len() {
+                    return Err(invalid("CE frame argument count exceeds data stack"));
+                }
+                self.push_return(ScriptValue::Int(self.frame_pointer))?;
+                self.frame_pointer = i32::try_from(self.stack.len() - argument_count)
+                    .map_err(|_| invalid("CE frame pointer exceeds i32"))?;
+            }
+            0x2C => {
+                self.base_pointer = i32::try_from(self.stack.len())
+                    .map_err(|_| invalid("CE global base pointer exceeds i32"))?;
+            }
+            0x2E => {
+                let count = self.pop_int()?;
+                let count = usize::try_from(count)
+                    .map_err(|_| invalid("negative CE DUMP count"))?;
+                let remaining = self.stack.len()
+                    .checked_sub(count)
+                    .ok_or_else(|| invalid("CE DUMP stack underflow"))?;
+                self.stack.truncate(remaining);
+            }
+            0x31 => {
+                let offset = self.pop_int()?;
+                let value = self.pop()?;
+                let index = self.at_base(self.frame_pointer, offset)?;
+                self.stack[index] = value;
+            }
+            0x32 => {
+                let offset = self.pop_int()?;
+                let index = self.at_base(self.frame_pointer, offset)?;
+                self.push(self.stack[index])?;
             }
 
             0x2F => {
@@ -457,6 +585,88 @@ mod tests {
         let mut vm = ScriptVm::new(fixture(&code));
         vm.run_bounded(12).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Int(123)]);
+    }
+
+
+    #[test]
+    fn ce_return_stack_transfers_and_swapa_preserve_typed_values() {
+        let mut code = Vec::new();
+        push_int(&mut code, 1);
+        opcode(&mut code, 0x800D); // D_TO_A
+        push_int(&mut code, 2);
+        opcode(&mut code, 0x800D);
+        opcode(&mut code, 0x8019); // SWAPA
+        opcode(&mut code, 0x800C); // A_TO_D
+        opcode(&mut code, 0x800C);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1), ScriptValue::Int(2)]);
+        assert!(vm.return_stack().is_empty());
+    }
+
+    #[test]
+    fn ce_frame_base_fetch_and_restore_return_stack() {
+        let mut code = Vec::new();
+        push_int(&mut code, 42);
+        push_int(&mut code, 1);
+        opcode(&mut code, 0x802B); // PUSH_BASE
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8032); // FETCH local
+        opcode(&mut code, 0x8029); // POP_BASE
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(42), ScriptValue::Int(42)]);
+        assert_eq!(vm.frame_pointer(), -1);
+        assert!(vm.return_stack().is_empty());
+    }
+
+    #[test]
+    fn ce_local_and_global_store_preserve_stack_slot_addresses() {
+        let mut local = Vec::new();
+        push_int(&mut local, 42);
+        push_int(&mut local, 1);
+        opcode(&mut local, 0x802B);
+        push_int(&mut local, 99);
+        push_int(&mut local, 0);
+        opcode(&mut local, 0x8031); // STORE
+        push_int(&mut local, 0);
+        opcode(&mut local, 0x8032); // FETCH
+        opcode(&mut local, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&local));
+        vm.run_bounded(16).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(99), ScriptValue::Int(99)]);
+        assert_eq!(vm.frame_pointer(), 0);
+
+        let mut global = Vec::new();
+        opcode(&mut global, 0x802C); // SET_GLOBAL
+        push_int(&mut global, 77);
+        push_int(&mut global, 42);
+        push_int(&mut global, 0);
+        opcode(&mut global, 0x8013); // STORE_GLOBAL
+        push_int(&mut global, 0);
+        opcode(&mut global, 0x8012); // FETCH_GLOBAL
+        opcode(&mut global, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&global));
+        vm.run_bounded(16).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(42), ScriptValue::Int(42)]);
+        assert_eq!(vm.base_pointer(), 0);
+    }
+
+    #[test]
+    fn ce_frame_primitives_reject_uninitialized_and_invalid_stack_slots() {
+        let mut vm = ScriptVm::new(fixture(&0x8032_u16.to_be_bytes()));
+        assert!(vm.step().is_err());
+        let mut vm = ScriptVm::new(fixture(&0x8029_u16.to_be_bytes()));
+        assert!(vm.step().is_err());
+        let mut vm = ScriptVm::new(fixture(&0x802A_u16.to_be_bytes()));
+        assert!(vm.step().is_err());
+        let mut code = Vec::new();
+        push_int(&mut code, 2);
+        opcode(&mut code, 0x802B);
+        let mut vm = ScriptVm::new(fixture(&code));
+        assert!(vm.run_bounded(4).is_err());
     }
 
     #[test]

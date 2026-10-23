@@ -168,3 +168,7 @@ The isolated `ScriptVm` now also implements numeric comparisons (EQ, NE, LE, GE,
 ## Synthetic CE numeric interpreter differential suite
 
 `tests/int_numeric_cases.txt` holds invented short CE-style opcodes (no game data). `tests/int_numeric_oracle.cc` independently implements the pinned C++ numeric/stack semantics; `src/bin/int_numeric_probe.rs` executes the same cases with Rust `ScriptVm`. CI compares their typed stack results and rejects errors, including integer overflow promotion, negative MOD, boolean flow and conditional branches. This is **not** a compiled original CE interpreter oracle or proof that all game scripts execute; it is a differential regression fixture for the supported numeric subset.
+
+## Isolated CE interpreter frame and return-stack primitives
+
+`ScriptVm` now keeps separate bounded data/return stacks and signed CE frame/global base pointers (initial `-1`). The original `D_TO_A`, `A_TO_D`, `SWAPA`, `POP_ADDRESS`, `PUSH_BASE`, `POP_BASE`, `POP_TO_BASE`, `SET_GLOBAL`, `DUMP`, local `FETCH`/`STORE`, and global `FETCH_GLOBAL`/`STORE_GLOBAL` stack manipulations are implemented with range-checked indices. Synthetic tests check return ordering, frame restore, store/fetch and rejection of invalid pointers. Actual procedure invocation, dynamic strings, native opcodes, waiting and external calls remain unimplemented; this is not yet a full interpreter.
