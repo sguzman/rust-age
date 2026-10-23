@@ -268,8 +268,8 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 36,
-              "evidence": "CI-tested isolated typed CE ScriptVm: numeric/control opcodes, two stacks, local/global frames, local call/return, case-insensitive static-string procedure lookup, timed/conditional schedule/cancel opcodes, strict unsigned timed polling, and read-only host conditional polling with source-order priority, nonzero/zero/aborted results and atomic error handling. Procedure metadata is runtime-owned; original decoded INT is untouched. No production game host, complete VM, interpreter persistence or real asset parity."
+              "progress": 38,
+              "evidence": "CI-tested bounded CE ScriptVm includes typed numeric/stack/control/frame/local-call core; static-string and numeric/text comparison (strcmp byte ordering, CE five-decimal float formatting) plus null-pointer equality; named procedure lookup, timed/conditional schedule/cancel, strict unsigned timed polling, and callback-driven conditional precedence (true/false/incomplete and error-safe updates). Immutable source INT vs mutable runtime metadata. Dynamic strings, full game callbacks and production condition execution remain unimplemented."
             },
             {
               "id": "T603",
@@ -281,8 +281,8 @@
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 13,
-              "evidence": "Core CI passes independent adapted CE C++/Rust comparisons for 16 synthetic numeric bytecode fixtures, named-procedure lookup, and 20 timed/conditional/cancel/polling cases including conditional true/false/incomplete, strict unsigned time, and flag preservation. Source-level subset oracle only; no real compiled upstream game golden test or copyrighted scripts."
+              "progress": 15,
+              "evidence": "CI compares independent adapted CE C++/Rust numeric VM cases, name lookup, 20 synthetic schedule/conditional/polling cases and 15 static-string/int/float/pointer comparison cases; supported test set passes core CI. Does NOT yet compile/run original CE game interpreter or establish real-game golden parity."
             }
           ]
         },

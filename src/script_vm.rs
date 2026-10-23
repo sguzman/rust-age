@@ -6,7 +6,7 @@
 //!
 //! The interpreter is intentionally NOT connected to map scripts, callbacks,
 //! native opcodes, persistent state, or player input. Unknown opcodes error.
-//! Only numeric arithmetic and basic stack/control operations are supported.
+//! A narrow numeric, static-string, scheduling and stack/control subset is supported.
 use crate::script_program::ScriptProgram;
 use std::cmp::Ordering;
 use std::io;
