@@ -28,7 +28,7 @@ use crate::script_native_vars::{
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
-use crate::script_vm::ScriptValue;
+use crate::script_vm::{PreviewedConditionFrame, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
 
@@ -310,17 +310,17 @@ impl PreparedScriptEnvironment {
         })
     }
 
-    /// Preview a source-recorded CE conditional procedure using immutable
-    /// original MAP/quest state and a verified planned event context.
-    /// The scheduled procedure flags, installed VM, and event session
-    /// remain untouched; this does NOT dispatch a real CE event.
-    pub fn preview_planned_condition_reads_bounded(
+    /// Read a source-recorded CE conditional procedure and retain the
+    /// speculative post-evaluation interpreter frame for inspection.
+    /// Neither the installed VM nor MAP/quest globals can be committed by
+    /// this API; candidate scheduled-procedure changes are diagnostic only.
+    pub fn preview_planned_condition_frame_reads_bounded(
         &self,
         planned: &PlannedMapAction,
         procedure_index: usize,
         clock: ScriptClockContext,
         max_steps: usize,
-    ) -> io::Result<bool> {
+    ) -> io::Result<PreviewedConditionFrame> {
         let event = self.detached_event_for_planned(planned)?;
         let vm = self
             .scripts
@@ -340,7 +340,7 @@ impl PreparedScriptEnvironment {
             ));
         }
         let snapshot = event.snapshot(&self.object_queries, clock)?;
-        vm.preview_condition_with_host_bounded(
+        vm.preview_condition_frame_with_host_bounded(
             procedure.condition_offset,
             max_steps,
             &mut |opcode, stack| {
@@ -355,6 +355,24 @@ impl PreparedScriptEnvironment {
                 )
             },
         )
+    }
+
+    /// Inspect the truth of one verified CE condition without retaining
+    /// speculative frame effects. This never consumes a scheduled event.
+    pub fn preview_planned_condition_reads_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        procedure_index: usize,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<bool> {
+        self.preview_planned_condition_frame_reads_bounded(
+            planned,
+            procedure_index,
+            clock,
+            max_steps,
+        )
+        .map(|frame| frame.satisfied)
     }
 
     /// Inspect which scheduled CE script procedures are ready under current

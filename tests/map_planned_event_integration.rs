@@ -549,6 +549,12 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
     assert!(environment
         .preview_planned_condition_reads_bounded(&plan, 0, clock, 5)
         .unwrap());
+    let frame = environment
+        .preview_planned_condition_frame_reads_bounded(&plan, 0, clock, 5)
+        .unwrap();
+    assert!(frame.satisfied);
+    assert!(frame.data_stack.is_empty());
+    assert!(frame.return_stack.is_empty());
     assert_eq!(
         environment
             .preview_planned_due_reads_bounded(&plan, clock, 100, 5)
@@ -620,6 +626,46 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
     assert!(environment
         .preview_planned_condition_reads_bounded(&stale, 0, clock, 5)
         .is_err());
+}
+
+#[test]
+fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
+    let mut environment = environment();
+    let body = [0x80, 0x1A, 0x80, 0x21];
+    let mut condition = Vec::new();
+    // CALL_AT procedure index 1 in 7 seconds, then return fixed_param
+    // from the verified MAP event (1). Only the cloned procedure table
+    // may observe the new timed flag and future event timestamp.
+    condition.extend_from_slice(&0xC001_u16.to_be_bytes());
+    condition.extend_from_slice(&7_i32.to_be_bytes());
+    condition.extend_from_slice(&0xC001_u16.to_be_bytes());
+    condition.extend_from_slice(&1_i32.to_be_bytes());
+    condition.extend_from_slice(&[0x80, 0x06, 0x80, 0xF7, 0x80, 0x11]);
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_condition(&body, &condition);
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    let candidate = environment
+        .preview_planned_condition_frame_reads_bounded(&plan, 0, clock, 5)
+        .unwrap();
+    assert!(candidate.satisfied);
+    assert_eq!(candidate.procedures[1].flags & 0x01, 0x01);
+    assert_eq!(candidate.procedures[1].event_time, 7000);
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags,
+        0
+    );
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].event_time,
+        0
+    );
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
 
 #[test]
