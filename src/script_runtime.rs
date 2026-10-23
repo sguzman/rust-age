@@ -358,7 +358,7 @@ mod tests {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }
         }
-        bytes.extend_from_slice(&15_i32.to_be_bytes());
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
         bytes.extend_from_slice(b"main\0start\0");
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
