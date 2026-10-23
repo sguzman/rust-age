@@ -33,11 +33,8 @@ fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
     code.extend_from_slice(&index.to_be_bytes());
     code.extend_from_slice(&0xC001_u16.to_be_bytes());
     code.extend_from_slice(&value.to_be_bytes());
-    code.extend_from_slice(if *target == 0 {
-        &0x80C4_u16.to_be_bytes()
-    } else {
-        &0x80C6_u16.to_be_bytes()
-    });
+    let write_opcode = if *target == 0 { 0x80C4_u16 } else { 0x80C6_u16 };
+    code.extend_from_slice(&write_opcode.to_be_bytes());
     if *override_flag != 0 {
         code.extend_from_slice(&0x80B9_u16.to_be_bytes());
     }
