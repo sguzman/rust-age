@@ -1,6 +1,7 @@
 //! Synthetic CE MAP lifecycle plan -> installed VM -> inert event metadata.
 //! These are invented script and object records; no game procedure executes.
 use rust_age::collision::ObjectKey;
+use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
@@ -421,4 +422,66 @@ fn planned_script_readonly_native_preview_can_read_null_owner_but_not_mutate() {
         .preview_planned_event_reads_bounded(&action, clock, 5)
         .is_err());
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
+
+#[test]
+fn cloned_map_and_game_global_reads_use_immutable_values_and_deny_writes() {
+    let mut environment = environment();
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![14],
+            locals: vec![],
+        })
+        .unwrap();
+    environment.game_globals =
+        Some(GameGlobalState::from_initial_values(&[27]).unwrap());
+    let mut runtime = ScriptRuntime::new();
+    // POP argument marker; PUSH index zero; map_var; PUSH index zero;
+    // global_var; ADD; POP_FLAGS_RETURN_VAL_EXIT.
+    let mut body = vec![0x80, 0x1A, 0xC0, 0x01];
+    body.extend_from_slice(&0_i32.to_be_bytes());
+    body.extend_from_slice(&[0x80, 0xC3, 0xC0, 0x01]);
+    body.extend_from_slice(&0_i32.to_be_bytes());
+    body.extend_from_slice(&[0x80, 0xC5, 0x80, 0x39, 0x80, 0x25]);
+    runtime.register(1, synthetic_vm_with_body(&body)).unwrap();
+    environment.scripts.runtime = runtime;
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    assert_eq!(
+        environment
+            .preview_planned_event_reads_bounded(&plan, clock, 8)
+            .unwrap(),
+        Some(ScriptValue::Int(41))
+    );
+    assert_eq!(environment.map_locals.globals(), [14]);
+    assert_eq!(environment.game_globals.as_ref().unwrap().values(), [27]);
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+
+    environment.game_globals = None;
+    assert!(environment
+        .preview_planned_event_reads_bounded(&plan, clock, 8)
+        .is_err());
+    // The live script stays untouched even after the host refuses access.
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+
+    // A MAP global write is not a read-only CE opcode.
+    let mut write_runtime = ScriptRuntime::new();
+    write_runtime
+        .register(
+            1,
+            synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xC4, 0x80, 0x21]),
+        )
+        .unwrap();
+    environment.scripts.runtime = write_runtime;
+    assert!(environment
+        .preview_planned_event_reads_bounded(&plan, clock, 5)
+        .is_err());
+    assert_eq!(environment.map_locals.globals(), [14]);
 }

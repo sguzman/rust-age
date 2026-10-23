@@ -507,6 +507,42 @@ pub fn apply_readonly_event_native_opcode(
     }
 }
 
+/// Extended immutable local-preview adapter: native MAP-global and
+/// GAME_GLOBAL_VARS reads are supported without changing either backing
+/// state. Script-local reads may lazily allocate CE state and remain denied.
+/// All write opcodes and absent game-global banks fail closed.
+pub fn apply_readonly_event_native_with_vars(
+    snapshot: ScriptNativeEventSnapshot<'_>,
+    invocation: &ScriptInvocationState,
+    map: &MapScriptLocals,
+    game: Option<&GameGlobalState>,
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+) -> io::Result<()> {
+    match opcode {
+        MAP_VAR_OPCODE | crate::game_globals::GLOBAL_VAR_OPCODE => {
+            let Some(ScriptValue::Int(index)) = stack.last().copied() else {
+                return Err(invalid("CE read-only variable index must be integer"));
+            };
+            if stack.len() > MAX_STACK_VALUES {
+                return Err(invalid("CE read-only variable stack exceeds bound"));
+            }
+            let value = if opcode == MAP_VAR_OPCODE {
+                map.read_global_typed(index)
+                    .unwrap_or(ScriptValue::Int(-1))
+            } else {
+                ScriptValue::Int(
+                    game.ok_or_else(|| invalid("CE game globals not supplied"))?
+                        .read(index),
+                )
+            };
+            *stack.last_mut().ok_or_else(|| invalid("CE variable stack empty"))? = value;
+            Ok(())
+        }
+        _ => apply_readonly_event_native_opcode(snapshot, invocation, opcode, stack),
+    }
+}
+
 /// Execute the owner/clock/quest subset plus CE source_obj and target_obj
 /// through an explicit snapshot of one script event. The ordinary and
 /// owner-only hosts still refuse these opcodes.

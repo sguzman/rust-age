@@ -20,7 +20,7 @@ use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
-use crate::script_native_vars::{apply_readonly_event_native_opcode, ScriptClockContext};
+use crate::script_native_vars::{apply_readonly_event_native_with_vars, ScriptClockContext};
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
@@ -150,7 +150,14 @@ impl PreparedScriptEnvironment {
                 planned.action,
                 max_steps,
                 &mut |opcode, stack| {
-                    apply_readonly_event_native_opcode(snapshot, event.invocation(), opcode, stack)
+                    apply_readonly_event_native_with_vars(
+                        snapshot,
+                        event.invocation(),
+                        &self.map_locals,
+                        self.game_globals.as_ref(),
+                        opcode,
+                        stack,
+                    )
                 },
             )?
             .ok_or_else(|| {
@@ -211,7 +218,14 @@ impl PreparedScriptEnvironment {
                 planned.action,
                 max_steps,
                 &mut |opcode, stack| {
-                    apply_readonly_event_native_opcode(snapshot, event.invocation(), opcode, stack)
+                    apply_readonly_event_native_with_vars(
+                        snapshot,
+                        event.invocation(),
+                        &self.map_locals,
+                        self.game_globals.as_ref(),
+                        opcode,
+                        stack,
+                    )
                 },
             )?
             .ok_or_else(|| {
