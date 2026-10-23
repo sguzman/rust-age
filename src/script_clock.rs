@@ -250,6 +250,38 @@ mod tests {
     }
 
     #[test]
+    fn ce_local_interrupt_can_read_clock_only_from_explicit_pure_host() {
+        // Procedure body begins at byte offset 20. It discards CE's
+        // setupCall argument marker, reads hhmm and returns via 0x8025.
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
+        bytes[22..24].copy_from_slice(&GAME_TIME_HOUR_OPCODE.to_be_bytes());
+        bytes[24..26].copy_from_slice(&0x8025_u16.to_be_bytes());
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, 0, 0, 0, 20, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let vm = ScriptVm::new(ScriptProgram::decode(&bytes).unwrap());
+        assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
+        let clock = ScriptGameClock { ticks: 558_000 };
+        let value = vm
+            .preview_local_interrupt_with_host_bounded(
+                0,
+                4,
+                &mut |opcode, stack| clock.apply_opcode(opcode, stack),
+            )
+            .unwrap();
+        assert_eq!(value, ScriptValue::Int(1530));
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert!(!vm.halted());
+    }
+
+    #[test]
     fn unsafe_game_time_inputs_error_without_mutating_stack() {
         let clock = ScriptGameClock { ticks: 12 };
         for (opcode, original) in [

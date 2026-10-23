@@ -380,16 +380,33 @@ impl ScriptVm {
         })
     }
 
-    /// Synthetic-only local CE interrupt procedure preview. Mirrors the
-    /// CE setupCallWithReturnVal/setupCall data and return stack layout for
-    /// executeProc (return address 20), then handles 0x8025 on that isolated
-    /// invocation. Only supported core opcodes execute. This does NOT model
-    /// native game opcodes, externally imported procedures, callback pointers,
-    /// suspended programs, or a full game script's persistent VM state.
+    /// Preserve the core-only CE local interrupt preview, never supplying an
+    /// implicit game-native host. The VM is cloned and never mutated.
     pub fn preview_local_interrupt_bounded(
         &self,
         procedure_index: usize,
         max_steps: usize,
+    ) -> io::Result<ScriptValue> {
+        self.preview_local_interrupt_with_host_bounded(
+            procedure_index,
+            max_steps,
+            &mut |_, _| Err(invalid("CE interrupt native host not provided")),
+        )
+    }
+
+    /// Explicit-host, synthetic-only local CE interrupt procedure preview. Mirrors the
+    /// CE setupCallWithReturnVal/setupCall data and return stack layout for
+    /// executeProc (return address 20), then handles 0x8025 on that isolated
+    /// invocation. Supported core opcodes and a caller-gated native subset can
+    /// execute. Native host side effects are NOT rolled back when the probe
+    /// fails; use a read-only host for a genuinely side-effect-free preview.
+    /// Imported procedures, external variables, callback pointers,
+    /// suspended programs, or a full game script's persistent VM state.
+    pub fn preview_local_interrupt_with_host_bounded(
+        &self,
+        procedure_index: usize,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<ScriptValue> {
         let procedure = self
             .runtime_procedures
@@ -438,7 +455,7 @@ impl ScriptVm {
                 // is an isolated preview, the original VM stays unchanged.
                 return Ok(result);
             }
-            probe.step()?;
+            probe.step_with_variable_host(native)?;
             if probe.halted {
                 return Err(invalid("CE interrupt stopped before return"));
             }
