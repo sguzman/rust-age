@@ -22,7 +22,10 @@ int main(int argc, char** argv) {
         std::vector<int> ret{0, 20};
         std::vector<int> data{0, 0, 0, 0};
         data.pop_back(); // 0x801A POP zero-argument marker
-        data.push_back(value);
+        const bool clock = label.rfind("clock_", 0) == 0;
+        // Game time is in 1/10-second ticks; CE returns hhmm.
+        data.push_back(clock ? 100 * ((value / 600) / 60 % 24)
+                             + (value / 600) % 60 : value);
         const int result = data.back();
         data.pop_back();
         const int window = data.back();

@@ -6,3 +6,10 @@ imported 4 0 22 4
 needs_args 0 1 42 4
 under_budget 0 0 33 2
 no_budget 0 0 33 0
+clock_0800 0 0 288000 4
+clock_1530 0 0 558000 4
+clock_midnight 0 0 864000 4
+clock_negative 0 0 -28800 4
+clock_import 4 0 125 4
+clock_args 0 1 125 4
+clock_budget 0 0 125 2
