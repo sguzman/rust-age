@@ -6,6 +6,7 @@ use crate::collision::ObjectKey;
 use crate::event_queue::{EventQueue, EventType, QueueEvent};
 use crate::script_binding::BoundScriptRuntime;
 use crate::script_lifecycle::PlannedMapAction;
+use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
 
 pub const TIMED_PROCEDURE_ACTION: usize = 22;
@@ -118,6 +119,92 @@ impl BoundScriptRuntime {
     }
 }
 
+pub const ADD_TIMER_EVENT_OPCODE: u16 = 0x80F0;
+pub const REMOVE_TIMER_EVENT_OPCODE: u16 = 0x80F1;
+
+/// Explicit, synthetic mapping from opaque CE pointer values to stable Rust
+/// object keys and script IDs. Handles are NOT addresses or dereferenceable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimerObjectBinding {
+    pub handle: i32,
+    pub owner: ObjectKey,
+    pub sid: i32,
+}
+
+/// Source-faithful operand order for pinned intextra.cc op_add_timer_event
+/// (pop param, delay, Object*) and op_rm_timer_event (pop Object*).
+/// A null object is a no-op after consuming arguments. Unknown/ambiguous
+/// nonzero opaque handles error safely before modifying the stack or queue.
+/// The supplied queue and bindings belong solely to this synthetic host.
+pub fn apply_timer_native_opcode(
+    scripts: &BoundScriptRuntime,
+    queue: &mut EventQueue,
+    now_ticks: i32,
+    bindings: &[TimerObjectBinding],
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+) -> io::Result<()> {
+    let needed = match opcode {
+        ADD_TIMER_EVENT_OPCODE => 3,
+        REMOVE_TIMER_EVENT_OPCODE => 1,
+        _ => return Err(invalid("unknown CE timer native opcode")),
+    };
+    if stack.len() < needed {
+        return Err(invalid("CE timer native stack underflow"));
+    }
+    let at = stack.len() - needed;
+    let ScriptValue::Pointer(handle) = stack[at] else {
+        return Err(invalid("CE timer event object must be an opaque pointer"));
+    };
+    let (delay, parameter) = if opcode == ADD_TIMER_EVENT_OPCODE {
+        let (ScriptValue::Int(delay), ScriptValue::Int(parameter)) =
+            (stack[at + 1], stack[at + 2])
+        else {
+            return Err(invalid("CE timer delay and parameter must be integers"));
+        };
+        (delay, parameter)
+    } else {
+        (0, 0)
+    };
+    if handle != 0 {
+        let mut matching = bindings.iter().filter(|object| object.handle == handle);
+        let binding = matching
+            .next()
+            .ok_or_else(|| invalid("unknown CE opaque timer object handle"))?;
+        if matching.next().is_some() {
+            return Err(invalid("ambiguous CE opaque timer object handle"));
+        }
+        if opcode == ADD_TIMER_EVENT_OPCODE {
+            // Original native ignores the return from script_q_add.
+            let _ = scripts.queue_script_timer(
+                queue, now_ticks, delay, binding.owner, binding.sid, parameter,
+            )?;
+        } else {
+            // Original queue_remove removes ALL event types owned by object.
+            remove_object_timer_events(queue, binding.owner);
+        }
+    }
+    stack.truncate(at);
+    Ok(())
+}
+
+impl BoundScriptRuntime {
+    /// Explicitly gate timer opcodes to an isolated VM + caller-owned queue.
+    /// No real engine callback or game-time progression occurs.
+    pub fn run_timer_subset_bounded(
+        &self,
+        vm: &mut ScriptVm,
+        queue: &mut EventQueue,
+        now_ticks: i32,
+        bindings: &[TimerObjectBinding],
+        max_steps: usize,
+    ) -> io::Result<usize> {
+        vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| {
+            apply_timer_native_opcode(self, queue, now_ticks, bindings, opcode, stack)
+        })
+    }
+}
+
 /// Original op_rm_timer_event delegates to queue_remove(object), which
 /// removes every event type owned by that object, not just script timers.
 pub fn remove_object_timer_events(queue: &mut EventQueue, owner: ObjectKey) -> usize {
@@ -126,13 +213,17 @@ pub fn remove_object_timer_events(queue: &mut EventQueue, owner: ObjectKey) -> u
 
 #[cfg(test)]
 mod tests {
-    use super::{remove_object_timer_events, ScriptTimerEvent, TIMED_PROCEDURE_ACTION};
+    use super::{
+        apply_timer_native_opcode, remove_object_timer_events, ScriptTimerEvent,
+        TimerObjectBinding, ADD_TIMER_EVENT_OPCODE, REMOVE_TIMER_EVENT_OPCODE,
+        TIMED_PROCEDURE_ACTION,
+    };
     use crate::collision::ObjectKey;
     use crate::event_queue::{EventQueue, EventType, QueueEvent};
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
-    use crate::script_vm::ScriptVm;
+    use crate::script_vm::{ScriptValue, ScriptVm};
 
     fn prepared() -> BoundScriptRuntime {
         let names: [&[u8]; 2] = [b"main", b"timed_event_p_proc"];
@@ -178,6 +269,90 @@ mod tests {
             elevation: 0,
             ordinal,
         }
+    }
+
+    fn bytecode(code: &[u8]) -> ScriptVm {
+        assert!(code.len() <= 42);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..code.len()].copy_from_slice(code);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn push(code: &mut Vec<u8>, opcode: u16, value: i32) {
+        code.extend_from_slice(&opcode.to_be_bytes());
+        code.extend_from_slice(&value.to_be_bytes());
+    }
+
+    #[test]
+    fn ce_native_timer_add_and_remove_do_not_dispatch_scripts() {
+        let bound = prepared();
+        let object = TimerObjectBinding {
+            handle: 77,
+            owner: owner(1),
+            sid: 500,
+        };
+        let mut queue = EventQueue::new();
+        let mut add = Vec::new();
+        push(&mut add, 0xE001, 77);
+        push(&mut add, 0xC001, 20);
+        push(&mut add, 0xC001, -17);
+        add.extend_from_slice(&ADD_TIMER_EVENT_OPCODE.to_be_bytes());
+        add.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let mut vm = bytecode(&add);
+        assert_eq!(
+            bound
+                .run_timer_subset_bounded(&mut vm, &mut queue, 100, &[object], 8)
+                .unwrap(),
+            5
+        );
+        assert!(vm.halted());
+        assert!(vm.stack().is_empty());
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.next_time(), 120);
+        assert!(!bound.runtime.vm(1).unwrap().halted());
+
+        let mut remove = Vec::new();
+        push(&mut remove, 0xE001, 77);
+        remove.extend_from_slice(&REMOVE_TIMER_EVENT_OPCODE.to_be_bytes());
+        remove.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let mut vm = bytecode(&remove);
+        assert_eq!(
+            bound
+                .run_timer_subset_bounded(&mut vm, &mut queue, 100, &[object], 8)
+                .unwrap(),
+            3
+        );
+        assert!(queue.is_empty());
+        assert!(vm.stack().is_empty());
+    }
+
+    #[test]
+    fn ce_native_timer_null_object_and_bad_handles_are_bounded() {
+        let bound = prepared();
+        let mut queue = EventQueue::new();
+        let mut null = vec![
+            ScriptValue::Pointer(0),
+            ScriptValue::Int(5),
+            ScriptValue::Int(-3),
+        ];
+        apply_timer_native_opcode(
+            &bound, &mut queue, 100, &[], ADD_TIMER_EVENT_OPCODE, &mut null,
+        )
+        .unwrap();
+        assert!(null.is_empty());
+        assert!(queue.is_empty());
+        let original = vec![ScriptValue::Pointer(99)];
+        let mut unknown = original.clone();
+        assert!(apply_timer_native_opcode(
+            &bound, &mut queue, 100, &[], REMOVE_TIMER_EVENT_OPCODE, &mut unknown,
+        ).is_err());
+        assert_eq!(unknown, original);
+        let mut wrong = vec![ScriptValue::Int(1), ScriptValue::Int(2), ScriptValue::Int(3)];
+        assert!(apply_timer_native_opcode(
+            &bound, &mut queue, 100, &[], ADD_TIMER_EVENT_OPCODE, &mut wrong,
+        ).is_err());
+        assert_eq!(wrong.len(), 3);
     }
 
     #[test]
