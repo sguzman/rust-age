@@ -26,6 +26,7 @@ pub struct ScriptLocalRange {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MapScriptLocals {
     globals: Vec<i32>,
+    global_pointers: Vec<Option<i32>>,
     locals: Vec<i32>,
     pointers: Vec<Option<i32>>,
     instances: BTreeMap<u64, ScriptLocalRange>,
@@ -33,7 +34,7 @@ pub struct MapScriptLocals {
 
 impl BoundScriptRuntime {
     pub fn script_local_state(&self, map: &MapVariables) -> io::Result<MapScriptLocals> {
-        if map.locals.len() > MAX_LOCAL_SLOTS {
+        if map.globals.len() > MAX_LOCAL_SLOTS || map.locals.len() > MAX_LOCAL_SLOTS {
             return Err(invalid("CE MAP local variable array exceeds Rust bound"));
         }
         let mut instances = BTreeMap::new();
@@ -89,6 +90,7 @@ impl BoundScriptRuntime {
         }
         Ok(MapScriptLocals {
             globals: map.globals.clone(),
+            global_pointers: vec![None; map.globals.len()],
             locals: map.locals.clone(),
             pointers: vec![None; map.locals.len()],
             instances,
@@ -99,6 +101,58 @@ impl BoundScriptRuntime {
 impl MapScriptLocals {
     pub fn globals(&self) -> &[i32] {
         &self.globals
+    }
+
+    fn global_slot(&self, index: i32) -> io::Result<usize> {
+        let index = usize::try_from(index)
+            .map_err(|_| invalid("negative CE MAP global index"))?;
+        if index >= self.globals.len() {
+            return Err(invalid("CE MAP global index out of bounds"));
+        }
+        Ok(index)
+    }
+
+    /// CE map_get_global_var with original integer and pointer side arrays.
+    /// Pointer tags are opaque, never native Rust or C++ memory references.
+    pub fn read_global_typed(&self, index: i32) -> io::Result<ScriptValue> {
+        let slot = self.global_slot(index)?;
+        Ok(match self.global_pointers[slot] {
+            Some(pointer) => ScriptValue::Pointer(pointer),
+            None => ScriptValue::Int(self.globals[slot]),
+        })
+    }
+
+    /// CE map_set_global_var stores opaque pointers out of band, setting the
+    /// serialized integer slot to zero. Non-pointer writes clear that tag.
+    pub fn write_global_typed(&mut self, index: i32, value: ScriptValue) -> io::Result<()> {
+        if !matches!(value, ScriptValue::Int(_) | ScriptValue::Pointer(_)) {
+            return Err(invalid("unsupported CE MAP global value type"));
+        }
+        let slot = self.global_slot(index)?;
+        match value {
+            ScriptValue::Int(number) => {
+                self.globals[slot] = number;
+                self.global_pointers[slot] = None;
+            }
+            ScriptValue::Pointer(pointer) => {
+                self.globals[slot] = 0;
+                self.global_pointers[slot] = (pointer != 0).then_some(pointer);
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
+    /// Integer-only MAP-global accessor, rejects nonzero opaque pointers.
+    pub fn read_global(&self, index: i32) -> io::Result<i32> {
+        match self.read_global_typed(index)? {
+            ScriptValue::Int(value) => Ok(value),
+            _ => Err(invalid("CE global contains opaque pointer; typed access required")),
+        }
+    }
+
+    pub fn write_global(&mut self, index: i32, value: i32) -> io::Result<()> {
+        self.write_global_typed(index, ScriptValue::Int(value))
     }
 
     pub fn locals(&self) -> &[i32] {
@@ -275,6 +329,31 @@ mod tests {
         assert_eq!(state.locals(), [42, 11, 0, -5, 0]);
         assert_eq!(original.locals, [10, 11]); // source MAP is immutable.
         assert_eq!(original.globals, [99]);
+    }
+
+    #[test]
+    fn ce_map_globals_preserve_integer_values_and_opaque_pointer_tags() {
+        let bound = fixture();
+        let original = MapVariables {
+            globals: vec![12, -9],
+            locals: vec![10, 11],
+        };
+        let mut state = bound.script_local_state(&original).unwrap();
+        assert_eq!(state.read_global(0).unwrap(), 12);
+        state.write_global_typed(1, ScriptValue::Pointer(-44)).unwrap();
+        assert_eq!(state.globals(), [12, 0]);
+        assert_eq!(state.read_global_typed(1).unwrap(), ScriptValue::Pointer(-44));
+        assert!(state.read_global(1).is_err());
+        assert_eq!(state.read_global(0).unwrap(), 12);
+        state.write_global(1, 7).unwrap();
+        assert_eq!(state.read_global_typed(1).unwrap(), ScriptValue::Int(7));
+        state.write_global_typed(0, ScriptValue::Pointer(0)).unwrap();
+        assert_eq!(state.read_global_typed(0).unwrap(), ScriptValue::Int(0));
+        assert!(state.read_global_typed(-1).is_err());
+        assert!(state.write_global_typed(2, ScriptValue::Int(42)).is_err());
+        assert!(state.write_global_typed(0, ScriptValue::Float(1.5)).is_err());
+        assert_eq!(original.globals, [12, -9]);
+        assert_eq!(original.locals, [10, 11]);
     }
 
     #[test]
