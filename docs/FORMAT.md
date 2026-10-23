@@ -132,3 +132,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE-style asset lookup cache
 
 `GameAssets` now keeps category `art/*.lst` bytes/parsed rows, `proto/*.lst` one-based indices and PID-decoded `.PRO` records in a per-installation in-memory cache. This avoids repeated DAT seeks/list scans per object or sprite, closer to original CE's art/prototype cache lifecycle. `clear_lookup_cache` explicitly refreshes these lookup caches after changing loose patches. Direct `read` remains uncached. Synthetic tests verify cached identity, invalidation and post-invalidation list changes. This is not a frame/image LRU and has no persistent storage.
+
+## Composed static scene snapshot
+
+`src/scene.rs` assembles the original MAP loading format into one immutable `StaticScene`: header, global/local variable arrays, floor/roof square layers, serialized script metadata, per-elevation objects and nested inventories, and derived CE collision. It resolves variable-width object updates through original PID-to-PRO lookups, leveraging cached asset lists. The `route` method applies the CE pathfinder against static object occupancy. This is a **read-only parsed scene**, not a gameplay world; no mutable player, clock, combat, scripts or map transitions.
