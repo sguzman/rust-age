@@ -658,11 +658,23 @@ fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
     assert_eq!(candidate.procedures[1].flags & 0x01, 0x01);
     assert_eq!(candidate.procedures[1].event_time, 7000);
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[1]
+            .flags,
         0
     );
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].event_time,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[1]
+            .event_time,
         0
     );
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
