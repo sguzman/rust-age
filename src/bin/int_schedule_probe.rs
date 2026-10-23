@@ -29,9 +29,13 @@ fn make_program(code: &[u8], flags: i32) -> Result<ScriptProgram, Box<dyn Error>
     Ok(ScriptProgram::decode(&data)?)
 }
 
-fn run(operation: &str, flags: i32, first: i32, second: i32, now: i32)
-    -> Result<String, Box<dyn Error>>
-{
+fn run(
+    operation: &str,
+    flags: i32,
+    first: i32,
+    second: i32,
+    now: i32,
+) -> Result<String, Box<dyn Error>> {
     let mut code = Vec::new();
     if matches!(operation, "at" | "both" | "cancel") {
         push_int(&mut code, first); // seconds before procedure index
@@ -55,7 +59,10 @@ fn run(operation: &str, flags: i32, first: i32, second: i32, now: i32)
     vm.set_clock_millis(now);
     vm.run_bounded(16)?;
     let proc = vm.runtime_procedures()[0];
-    Ok(format!("{},{},{}", proc.flags, proc.event_time, proc.condition_offset))
+    Ok(format!(
+        "{},{},{}",
+        proc.flags, proc.event_time, proc.condition_offset
+    ))
 }
 
 fn main() {
