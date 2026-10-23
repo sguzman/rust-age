@@ -175,15 +175,18 @@ mod tests {
         fs::write(art.join("ICON.FRM"), frm).unwrap();
 
         let tables = ObjectTables {
-            elevations: [vec![synthetic_object(1), synthetic_object(0)], vec![], vec![]],
+            elevations: [
+                vec![synthetic_object(1), synthetic_object(0)],
+                vec![],
+                vec![],
+            ],
             total_objects: 2,
             bytes_consumed: 0,
         };
         let mut assets = GameAssets::open(&root).unwrap();
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
         let mut surface = IndexedSurface::new(640, 380).unwrap();
-        let stats =
-            ObjectPreview::draw(&mut assets, &tables, &view, 0, &mut surface).unwrap();
+        let stats = ObjectPreview::draw(&mut assets, &tables, &view, 0, &mut surface).unwrap();
         assert_eq!(stats.rendered, 1);
         assert_eq!(stats.hidden, 1);
         assert_eq!(stats.missing_art, 0);

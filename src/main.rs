@@ -23,7 +23,9 @@ fn usage() {
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
-    println!("       rust-age --export-map-object-preview /path/to/Fallout maps/v13.map objects.ppm");
+    println!(
+        "       rust-age --export-map-object-preview /path/to/Fallout maps/v13.map objects.ppm"
+    );
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
 }
