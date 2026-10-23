@@ -74,6 +74,12 @@ jobs:
           /tmp/rust-age-ce-native-bytecode tests/native_bytecode_cases.txt > /tmp/rust-age-ce-native-bytecode.txt
           cargo run --quiet --bin native_bytecode_probe > /tmp/rust-age-rust-native-bytecode.txt
           diff -u /tmp/rust-age-ce-native-bytecode.txt /tmp/rust-age-rust-native-bytecode.txt
+      - name: Compare CE C++ and Rust random/roll_dice native opcodes
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_random_oracle.cc -o /tmp/rust-age-ce-script-random
+          /tmp/rust-age-ce-script-random tests/script_random_cases.txt > /tmp/rust-age-ce-script-random.txt
+          cargo run --quiet --bin script_random_probe > /tmp/rust-age-rust-script-random.txt
+          diff -u /tmp/rust-age-ce-script-random.txt /tmp/rust-age-rust-script-random.txt
       - name: Compare CE C++ and Rust script_q timer payload and ordering
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_timer_oracle.cc -o /tmp/rust-age-ce-script-timer
