@@ -104,6 +104,12 @@ jobs:
           /tmp/rust-age-ce-object-read tests/script_object_read_cases.txt > /tmp/rust-age-ce-object-read.txt
           cargo run --quiet --bin script_object_read_probe > /tmp/rust-age-rust-object-read.txt
           diff -u /tmp/rust-age-ce-object-read.txt /tmp/rust-age-rust-object-read.txt
+      - name: Compare CE C++ and Rust detached local procedure returns
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_local_return_oracle.cc -o /tmp/rust-age-ce-local-return
+          /tmp/rust-age-ce-local-return tests/script_local_return_cases.txt > /tmp/rust-age-ce-local-return.txt
+          cargo run --quiet --bin script_local_return_probe > /tmp/rust-age-rust-local-return.txt
+          diff -u /tmp/rust-age-ce-local-return.txt /tmp/rust-age-rust-local-return.txt
       - name: Compare CE C++ and Rust local procedure-call preflight
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_local_frame_oracle.cc -o /tmp/rust-age-ce-local-frame
