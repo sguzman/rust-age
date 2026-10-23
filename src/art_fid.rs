@@ -55,15 +55,16 @@ impl ArtFid {
     /// Kept for old diagnostic callers that expect only direct list names.
     pub fn direct_category(self) -> io::Result<&'static str> {
         match self.category() {
-            1 | 8 => Err(invalid("animation-specific FID requires generated filename")),
+            1 | 8 => Err(invalid(
+                "animation-specific FID requires generated filename",
+            )),
             _ => self.directory(),
         }
     }
 
     /// CE art_alias_fid uses an alternate critter base for certain death art.
     pub fn needs_critter_alias(self) -> bool {
-        self.category() == 1
-            && matches!(self.animation(), 27 | 29 | 30 | 33 | 55 | 57 | 58 | 64)
+        self.category() == 1 && matches!(self.animation(), 27 | 29 | 30 | 33 | 55 | 57 | 58 | 64)
     }
 
     /// CE art_get_code, restricted to the declared animation 0..=64 and
@@ -118,7 +119,12 @@ impl ArtFid {
             return Err(invalid("invalid Fallout 1 head animation"));
         };
         let suffix = if second == b'f' {
-            format!("{}{}{}", char::from(first), char::from(second), self.weapon_animation())
+            format!(
+                "{}{}{}",
+                char::from(first),
+                char::from(second),
+                self.weapon_animation()
+            )
         } else {
             format!("{}{}", char::from(first), char::from(second))
         };
@@ -189,18 +195,54 @@ mod tests {
 
     #[test]
     fn critter_animation_names_mirror_ce_dispatch() {
-        assert_eq!(fid(1, 0, 0, 0, 0).filename("hmjmps").unwrap(), "hmjmpsaa.frm");
-        assert_eq!(fid(1, 0, 1, 0, 1).filename("hmjmps").unwrap(), "hmjmpsab.fr0");
-        assert_eq!(fid(1, 0, 0, 1, 0).filename("hmjmps").unwrap(), "hmjmpsda.frm");
-        assert_eq!(fid(1, 0, 13, 0, 0).filename("hmjmps").unwrap(), "hmjmpsan.frm");
-        assert_eq!(fid(1, 0, 13, 1, 0).filename("hmjmps").unwrap(), "hmjmpsde.frm");
-        assert_eq!(fid(1, 0, 18, 4, 0).filename("hmjmps").unwrap(), "hmjmpsgm.frm");
-        assert_eq!(fid(1, 0, 20, 0, 0).filename("hmjmps").unwrap(), "hmjmpsba.frm");
-        assert_eq!(fid(1, 0, 36, 0, 0).filename("hmjmps").unwrap(), "hmjmpsch.frm");
-        assert_eq!(fid(1, 0, 38, 1, 0).filename("hmjmps").unwrap(), "hmjmpsdc.frm");
-        assert_eq!(fid(1, 0, 47, 10, 0).filename("hmjmps").unwrap(), "hmjmpsml.frm");
-        assert_eq!(fid(1, 0, 63, 0, 0).filename("hmjmps").unwrap(), "hmjmpsrp.frm");
-        assert_eq!(fid(1, 0, 64, 0, 0).filename("hmjmps").unwrap(), "hmjmpsan.frm");
+        assert_eq!(
+            fid(1, 0, 0, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsaa.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 1, 0, 1).filename("hmjmps").unwrap(),
+            "hmjmpsab.fr0"
+        );
+        assert_eq!(
+            fid(1, 0, 0, 1, 0).filename("hmjmps").unwrap(),
+            "hmjmpsda.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 13, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsan.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 13, 1, 0).filename("hmjmps").unwrap(),
+            "hmjmpsde.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 18, 4, 0).filename("hmjmps").unwrap(),
+            "hmjmpsgm.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 20, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsba.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 36, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsch.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 38, 1, 0).filename("hmjmps").unwrap(),
+            "hmjmpsdc.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 47, 10, 0).filename("hmjmps").unwrap(),
+            "hmjmpsml.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 63, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsrp.frm"
+        );
+        assert_eq!(
+            fid(1, 0, 64, 0, 0).filename("hmjmps").unwrap(),
+            "hmjmpsan.frm"
+        );
         assert!(fid(1, 0, 38, 0, 0).filename("hmjmps").is_err());
         assert!(fid(1, 0, 65, 0, 0).filename("hmjmps").is_err());
         assert!(fid(1, 0, 0, 11, 0).filename("hmjmps").is_err());
@@ -210,11 +252,23 @@ mod tests {
 
     #[test]
     fn talking_head_fidget_and_regular_names_match_ce() {
-        assert_eq!(fid(8, 0, 0, 0, 0).filename("VREDFL").unwrap(), "VREDFLgv.frm");
-        assert_eq!(fid(8, 0, 1, 3, 0).filename("VREDFL").unwrap(), "VREDFLgf3.frm");
-        assert_eq!(fid(8, 0, 4, 9, 0).filename("VREDFL").unwrap(), "VREDFLnf9.frm");
+        assert_eq!(
+            fid(8, 0, 0, 0, 0).filename("VREDFL").unwrap(),
+            "VREDFLgv.frm"
+        );
+        assert_eq!(
+            fid(8, 0, 1, 3, 0).filename("VREDFL").unwrap(),
+            "VREDFLgf3.frm"
+        );
+        assert_eq!(
+            fid(8, 0, 4, 9, 0).filename("VREDFL").unwrap(),
+            "VREDFLnf9.frm"
+        );
         assert!(fid(8, 0, 12, 0, 0).filename("VREDFL").is_err());
-        assert_eq!(fid(4, 0, 0, 0, 0).filename("grid001.frm").unwrap(), "grid001.frm");
+        assert_eq!(
+            fid(4, 0, 0, 0, 0).filename("grid001.frm").unwrap(),
+            "grid001.frm"
+        );
         assert!(fid(4, 0, 0, 0, 0).filename("../bad").is_err());
     }
 }

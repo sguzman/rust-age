@@ -137,7 +137,11 @@ impl GameAssets {
     pub fn art_path_by_fid(&mut self, raw_fid: u32) -> io::Result<Option<(Bank, String)>> {
         let fid = ArtFid(raw_fid);
         let directory = fid.directory()?;
-        let bank = if fid.category() == 1 { Bank::Critter } else { Bank::Master };
+        let bank = if fid.category() == 1 {
+            Bank::Critter
+        } else {
+            Bank::Master
+        };
         let list_path = format!("art/{directory}/{directory}.lst");
         let Some(data) = self.read(bank, &list_path)? else {
             return Ok(None);
@@ -148,11 +152,12 @@ impl GameAssets {
             let line = data
                 .split_inclusive(|&b| b == b'\n')
                 .nth(index)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing critter alias row"))?;
-            let raw_alias = line
-                .split(|&b| b == b',')
-                .nth(1)
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing critter alias"))?;
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "missing critter alias row")
+                })?;
+            let raw_alias = line.split(|&b| b == b',').nth(1).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "missing critter alias")
+            })?;
             let alias = std::str::from_utf8(raw_alias)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "non-UTF8 critter alias"))?
                 .trim()
