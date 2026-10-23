@@ -27,6 +27,8 @@ pub const SET_MAP_VAR_OPCODE: u16 = 0x80C4;
 pub const SCRIPT_ACTION_OPCODE: u16 = 0x80C7;
 pub const SCRIPT_OVERRIDES_OPCODE: u16 = 0x80B9;
 pub const SELF_OBJ_OPCODE: u16 = 0x80BC;
+pub const SOURCE_OBJ_OPCODE: u16 = 0x80BD;
+pub const TARGET_OBJ_OPCODE: u16 = 0x80BE;
 pub const FIXED_PARAM_OPCODE: u16 = 0x80F7;
 const MAX_STACK_VALUES: usize = 0x800;
 
@@ -316,6 +318,16 @@ pub struct ScriptNativeOwnerSnapshot<'a> {
     pub resolution: Option<ScriptOwnerResolution>,
 }
 
+/// Explicit CE scr_set_objs-style source/target snapshots. None means the
+/// native is NOT authorized; Some(0) is a supplied NULL pointer. This is
+/// caller-owned synthetic event state, never inferred from a loaded MAP.
+#[derive(Debug, Clone, Copy)]
+pub struct ScriptNativeEventSnapshot<'a> {
+    pub owner: ScriptNativeOwnerSnapshot<'a>,
+    pub source: Option<i32>,
+    pub target: Option<i32>,
+}
+
 /// Existing detached script-state/clock host. It continues to reject all
 /// object-query natives unless a caller chooses the stronger, explicit
 /// run_invocation_with_native_snapshot_bounded entry point.
@@ -371,6 +383,32 @@ pub fn run_invocation_with_native_snapshot_bounded(
 /// Source-derived CE op_self_obj (0x80BC) through an explicit read-only,
 /// caller-owned script-to-MAP-owner resolution. This cannot synthesize
 /// spatial dummy objects, mutate the scene, or dispatch original scripts.
+/// Only explicit event object handles can be pushed, with stable null
+/// semantics and fail-closed checks for unknown/ambiguous opaque tokens.
+pub fn push_event_object(
+    stack: &mut Vec<ScriptValue>,
+    objects: Option<&[ScriptObjectSnapshot]>,
+    handle: Option<i32>,
+) -> io::Result<()> {
+    let handle = handle.ok_or_else(|| invalid("CE event source/target not supplied"))?;
+    if handle != 0 {
+        let objects = objects.ok_or_else(|| invalid("CE event object snapshots not supplied"))?;
+        if objects
+            .iter()
+            .filter(|object| object.handle == handle)
+            .count()
+            != 1
+        {
+            return Err(invalid("CE event object handle missing or ambiguous"));
+        }
+    }
+    if stack.len() >= MAX_STACK_VALUES {
+        return Err(invalid("CE event object result exceeds stack capacity"));
+    }
+    stack.push(ScriptValue::Pointer(handle));
+    Ok(())
+}
+
 pub fn run_invocation_with_owner_snapshot_bounded(
     vm: &mut ScriptVm,
     instance_id: u64,
@@ -378,6 +416,33 @@ pub fn run_invocation_with_owner_snapshot_bounded(
     globals: &mut GameGlobalState,
     invocation: &mut ScriptInvocationState,
     snapshot: ScriptNativeOwnerSnapshot<'_>,
+    max_steps: usize,
+) -> io::Result<usize> {
+    run_invocation_with_event_snapshot_bounded(
+        vm,
+        instance_id,
+        locals,
+        globals,
+        invocation,
+        ScriptNativeEventSnapshot {
+            owner: snapshot,
+            source: None,
+            target: None,
+        },
+        max_steps,
+    )
+}
+
+/// Execute the owner/clock/quest subset plus CE source_obj and target_obj
+/// through an explicit snapshot of one script event. The ordinary and
+/// owner-only hosts still refuse these opcodes.
+pub fn run_invocation_with_event_snapshot_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    invocation: &mut ScriptInvocationState,
+    snapshot: ScriptNativeEventSnapshot<'_>,
     max_steps: usize,
 ) -> io::Result<usize> {
     vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
@@ -393,11 +458,13 @@ pub fn run_invocation_with_owner_snapshot_bounded(
         }
         SELF_OBJ_OPCODE => {
             let resolution = snapshot
+                .owner
                 .resolution
                 .ok_or_else(|| invalid("CE self_obj owner resolution not provided"))?;
             let handle = match resolution {
                 ScriptOwnerResolution::Bound { handle, .. } => {
                     let objects = snapshot
+                        .owner
                         .native
                         .objects
                         .ok_or_else(|| invalid("CE self_obj object snapshots not provided"))?;
@@ -421,14 +488,21 @@ pub fn run_invocation_with_owner_snapshot_bounded(
             stack.push(ScriptValue::Pointer(handle));
             Ok(())
         }
+        SOURCE_OBJ_OPCODE => {
+            push_event_object(stack, snapshot.owner.native.objects, snapshot.source)
+        }
+        TARGET_OBJ_OPCODE => {
+            push_event_object(stack, snapshot.owner.native.objects, snapshot.target)
+        }
         GAME_TIME_OPCODE
         | GAME_TIME_IN_SECONDS_OPCODE
         | GAME_TICKS_OPCODE
         | GAME_TIME_HOUR_OPCODE
         | GET_MONTH_OPCODE
-        | GET_DAY_OPCODE => snapshot.native.clock.clock.apply_opcode(opcode, stack),
-        DAYS_SINCE_VISITED_OPCODE => snapshot.native.clock.clock.apply_visit_opcode(
+        | GET_DAY_OPCODE => snapshot.owner.native.clock.clock.apply_opcode(opcode, stack),
+        DAYS_SINCE_VISITED_OPCODE => snapshot.owner.native.clock.clock.apply_visit_opcode(
             snapshot
+                .owner
                 .native
                 .clock
                 .last_visit_ticks
@@ -438,6 +512,7 @@ pub fn run_invocation_with_owner_snapshot_bounded(
         ),
         TILE_CONTAINS_OBJ_PID_OPCODE => {
             let objects = snapshot
+                .owner
                 .native
                 .objects
                 .ok_or_else(|| invalid("CE object snapshots not provided"))?;
@@ -446,6 +521,7 @@ pub fn run_invocation_with_owner_snapshot_bounded(
         object_opcode @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE
         | OBJ_ART_FID_OPCODE) => {
             let objects = snapshot
+                .owner
                 .native
                 .objects
                 .ok_or_else(|| invalid("CE object snapshots not provided"))?;
@@ -462,11 +538,14 @@ mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
-        run_invocation_with_native_snapshot_bounded, run_invocation_with_owner_snapshot_bounded,
+        run_invocation_with_event_snapshot_bounded, run_invocation_with_native_snapshot_bounded,
+        run_invocation_with_owner_snapshot_bounded,
         run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
-        ScriptInvocationState, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, FIXED_PARAM_OPCODE,
+        ScriptInvocationState, ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot,
+        ScriptNativeSnapshot, FIXED_PARAM_OPCODE,
         LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
-        SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE, SOURCE_OBJ_OPCODE,
+        TARGET_OBJ_OPCODE,
     };
     use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
@@ -1071,6 +1150,154 @@ mod tests {
             2
         );
         assert_eq!(vm.stack(), [ScriptValue::Pointer(0)]);
+    }
+
+    #[test]
+    fn source_and_target_obj_require_explicit_event_handles() {
+        let mut code = Vec::new();
+        op(&mut code, SOURCE_OBJ_OPCODE);
+        op(&mut code, TILE_NUM_OPCODE);
+        op(&mut code, TARGET_OBJ_OPCODE);
+        op(&mut code, OBJ_PID_OPCODE);
+        op(&mut code, 0x8039);
+        op(&mut code, 0x8011);
+        let objects = [
+            ScriptObjectSnapshot {
+                handle: 41,
+                tile: 20120,
+                elevation: 0,
+                table_elevation: 0,
+                pid: 1,
+                fid: 0,
+            },
+            ScriptObjectSnapshot {
+                handle: 42,
+                tile: 20099,
+                elevation: 0,
+                table_elevation: 0,
+                pid: 17,
+                fid: 0,
+            },
+        ];
+        let native = ScriptNativeOwnerSnapshot {
+            native: ScriptNativeSnapshot {
+                clock: ScriptClockContext {
+                    clock: ScriptGameClock { ticks: 100 },
+                    last_visit_ticks: None,
+                },
+                objects: Some(&objects),
+            },
+            resolution: None,
+        };
+        let mut locals = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[8]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        let mut vm = program(&code);
+        assert_eq!(
+            run_invocation_with_event_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                &mut invocation,
+                ScriptNativeEventSnapshot {
+                    owner: native,
+                    source: Some(41),
+                    target: Some(42),
+                },
+                8,
+            )
+            .unwrap(),
+            6
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(20137)]);
+
+        let mut denied = program(&code);
+        assert!(run_invocation_with_owner_snapshot_bounded(
+            &mut denied,
+            1,
+            &mut locals,
+            &mut globals,
+            &mut invocation,
+            native,
+            8,
+        )
+        .is_err());
+        assert_eq!(denied.pc(), 0);
+        assert!(denied.stack().is_empty());
+
+        let mut bad = program(&code);
+        assert!(run_invocation_with_event_snapshot_bounded(
+            &mut bad,
+            1,
+            &mut locals,
+            &mut globals,
+            &mut invocation,
+            ScriptNativeEventSnapshot {
+                owner: native,
+                source: Some(999),
+                target: Some(42),
+            },
+            8,
+        )
+        .is_err());
+        assert_eq!(bad.pc(), 0);
+        assert!(bad.stack().is_empty());
+    }
+
+    #[test]
+    fn event_null_pointer_is_distinct_from_unprovided_event_context() {
+        let mut code = Vec::new();
+        op(&mut code, SOURCE_OBJ_OPCODE);
+        op(&mut code, 0x8011);
+        let mut locals = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        let native = ScriptNativeOwnerSnapshot {
+            native: ScriptNativeSnapshot {
+                clock: ScriptClockContext {
+                    clock: ScriptGameClock { ticks: 0 },
+                    last_visit_ticks: None,
+                },
+                objects: None,
+            },
+            resolution: None,
+        };
+        let mut vm = program(&code);
+        assert_eq!(
+            run_invocation_with_event_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                &mut invocation,
+                ScriptNativeEventSnapshot {
+                    owner: native,
+                    source: Some(0),
+                    target: None,
+                },
+                4,
+            )
+            .unwrap(),
+            2
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Pointer(0)]);
+        let mut denied = program(&code);
+        assert!(run_invocation_with_event_snapshot_bounded(
+            &mut denied,
+            1,
+            &mut locals,
+            &mut globals,
+            &mut invocation,
+            ScriptNativeEventSnapshot {
+                owner: native,
+                source: None,
+                target: None,
+            },
+            4,
+        )
+        .is_err());
+        assert_eq!(denied.pc(), 0);
     }
 
     #[test]
