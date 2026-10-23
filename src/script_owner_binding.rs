@@ -95,9 +95,7 @@ impl MapScriptOwners {
                     ScriptOwnerResolution::DuplicateScriptSid
                 } else {
                     match owners.get(&sid).map(Vec::as_slice).unwrap_or(&[]) {
-                        [] if category == 1 => {
-                            ScriptOwnerResolution::SpatialOwnerRequiresEngine
-                        }
+                        [] if category == 1 => ScriptOwnerResolution::SpatialOwnerRequiresEngine,
                         [] => ScriptOwnerResolution::NullOwner,
                         [(key, handle)] => {
                             let object = &objects.elevations[key.elevation][key.ordinal];
@@ -317,6 +315,9 @@ mod tests {
         let handles = MapObjectReadBindings::from_tables(&objects).unwrap();
         let bound = MapScriptOwners::from_map(&script_rows, &objects, &handles).unwrap();
         assert_eq!(bound.self_handle(3, 0), None);
-        assert_eq!(bound.entry(3, 1).unwrap().resolution, ScriptOwnerResolution::InvalidSid);
+        assert_eq!(
+            bound.entry(3, 1).unwrap().resolution,
+            ScriptOwnerResolution::InvalidSid
+        );
     }
 }

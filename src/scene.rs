@@ -143,7 +143,8 @@ impl StaticScene {
         let (scripts, map_locals) = self.unstarted_script_state(assets)?;
         let game_globals = assets.game_global_defaults()?;
         let object_queries = self.object_query_snapshot()?;
-        let script_owners = MapScriptOwners::from_map(&self.scripts, &self.objects, &object_queries)?;
+        let script_owners =
+            MapScriptOwners::from_map(&self.scripts, &self.objects, &object_queries)?;
         Ok(PreparedScriptEnvironment {
             scripts,
             map_locals,
