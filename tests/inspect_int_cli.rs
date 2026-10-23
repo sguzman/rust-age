@@ -41,6 +41,9 @@ fn linux_cli_lists_original_ce_procedure_metadata_without_executing() {
     assert!(output.status.success(), "{:?}", output);
     let output = String::from_utf8(output.stdout).unwrap();
     assert!(output.contains("Original CE procedures: 1"), "{output}");
-    assert!(output.contains("[0] main (offset 123, arguments 2)"), "{output}");
+    assert!(
+        output.contains("[0] main (offset 123, arguments 2)"),
+        "{output}"
+    );
     assert!(output.contains("no bytecode executed"), "{output}");
 }
