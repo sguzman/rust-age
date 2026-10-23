@@ -3,6 +3,7 @@
 // typed values and stacks; reads ONLY invented test bytecode, no game data.
 #include <cstdint>
 #include <cstring>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -37,7 +38,7 @@ static uint32_t read32(const std::vector<uint8_t>& b, size_t p) {
 static Value integer(int32_t n) { return {false, n, 0.0f}; }
 static Value floating(float n) { return {true, 0, n}; }
 static float to_float(Value v) { return v.floating ? v.fp : static_cast<float>(v.integer); }
-static bool truth(Value v) { return v.floating ? (std::signbit(v.fp) ? v.fp != 0.0f : v.fp != 0.0f) : v.integer != 0; }
+static bool truth(Value v) { return v.floating ? v.fp != 0.0f : v.integer != 0; }
 static int32_t popint(std::vector<Value>& stack) {
     if (stack.empty()) throw std::runtime_error("underflow");
     Value v=stack.back(); stack.pop_back();
