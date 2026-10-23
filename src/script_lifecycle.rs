@@ -2,6 +2,8 @@
 //! Pinned reference: src/game/scripts.cc scr_load_all_scripts,
 //! scr_exec_map_enter_scripts, scr_exec_map_update_scripts, scr_exec_map_exit_scripts.
 use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding};
+use crate::script_native_vars::ScriptInvocationState;
+use crate::script_procedures::SCRIPT_PROC_NAMES;
 use std::io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +25,30 @@ pub struct PlannedMapAction {
     pub procedure_index: usize,
     /// CE map-enter sets fixedParam to the inverse of map_data.flags bit 0.
     pub external_parameter: Option<i32>,
+}
+
+impl PlannedMapAction {
+    /// Convert a read-only lifecycle selection into detached invocation
+    /// metadata. Original CE exec_script_proc sets script->action and resets
+    /// overrides; MAP_ENTER also assigns fixedParam immediately beforehand.
+    /// This never enters a procedure or mutates the installed Rust VM.
+    pub fn detached_invocation(&self) -> io::Result<ScriptInvocationState> {
+        if self.action >= SCRIPT_PROC_NAMES.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE lifecycle action outside built-in procedure table",
+            ));
+        }
+        let action = i32::try_from(self.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE lifecycle action exceeds i32")
+        })?;
+        let mut state = ScriptInvocationState::installed();
+        state.begin_action(action);
+        if let Some(parameter) = self.external_parameter {
+            state.set_fixed_parameter(parameter);
+        }
+        Ok(state)
+    }
 }
 
 impl BoundScriptRuntime {
@@ -203,6 +229,12 @@ mod tests {
             [501, 602]
         );
         assert_eq!(enter[0].procedure_index, 2);
+        let mut context = enter[0].detached_invocation().unwrap();
+        assert_eq!(context.action(), 15);
+        assert_eq!(context.fixed_parameter(), 1);
+        assert!(!context.overrides());
+        assert!(context.begin_action(23));
+        assert_eq!(context.fixed_parameter(), 1); // exec_script_proc does not clear it.
         assert!(enter
             .iter()
             .all(|a| a.action == 15 && a.external_parameter == Some(1)));
@@ -210,6 +242,7 @@ mod tests {
             .plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 1)
             .unwrap();
         assert!(revisited.iter().all(|a| a.external_parameter == Some(0)));
+        assert_eq!(revisited[0].detached_invocation().unwrap().fixed_parameter(), 0);
         let update = bound
             .plan_map_lifecycle(MapLifecyclePhase::Update, 500, 0)
             .unwrap();
