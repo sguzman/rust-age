@@ -2,7 +2,7 @@
 //!
 //! Reference: src/game/map.cc (map_read_MapData, map_load_file,
 //! square_load) and src/game/map_defs.h.
-//! This does NOT load map scripts, dynamic objects or saved map state.
+//! Script, object and map-variable fields are decoded without executing code.
 
 use crate::object_tables::ObjectTables;
 use crate::script_data::ScriptTables;
@@ -40,6 +40,14 @@ pub struct MapHeader {
     pub global_variable_count: i32,
     pub map_number: i32,
     pub last_visit_time: i32,
+}
+
+/// CE map_load_global_vars/map_load_local_vars big-endian word tables.
+/// This is serialized map data, not a mutable quest-state interpreter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MapVariables {
+    pub globals: Vec<i32>,
+    pub locals: Vec<i32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,6 +178,29 @@ impl MapHeader {
         &self.name[..length]
     }
 
+    /// CE map_load_file reads globals first, then local variables.
+    /// The .GAM default-variable override for fresh maps is separate work.
+    pub fn decode_variables(&self, bytes: &[u8]) -> io::Result<MapVariables> {
+        let mut cursor = Cursor::new(
+            bytes
+                .get(HEADER_SIZE..)
+                .ok_or_else(|| invalid("truncated MAP variable header"))?,
+        );
+        let global_count = usize::try_from(self.global_variable_count)
+            .map_err(|_| invalid("invalid global count"))?;
+        let local_count = usize::try_from(self.local_variable_count)
+            .map_err(|_| invalid("invalid local count"))?;
+        let mut globals = Vec::with_capacity(global_count);
+        let mut locals = Vec::with_capacity(local_count);
+        for _ in 0..global_count {
+            globals.push(read_i32(&mut cursor)?);
+        }
+        for _ in 0..local_count {
+            locals.push(read_i32(&mut cursor)?);
+        }
+        Ok(MapVariables { globals, locals })
+    }
+
     /// Parse only static floor/roof tile arrays after the two variable tables.
     /// Keep the remaining script/object section intact for subsequent ports.
     pub fn decode_squares(&self, bytes: &[u8]) -> io::Result<MapSquares> {
@@ -283,6 +314,25 @@ mod tests {
         assert_eq!(squares.floor_hidden(0, 0), Some(false));
         assert_eq!(squares.floor_id(1, 0), None);
         assert_eq!(squares.roof_id(0, SQUARE_COUNT), None);
+    }
+
+    #[test]
+    fn decodes_global_and_local_map_variables_in_original_order() {
+        let mut bytes = header(2 | 4 | 8, 2, 1);
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(&(-7_i32).to_be_bytes());
+        bytes.extend_from_slice(&99_i32.to_be_bytes());
+        bytes.extend_from_slice(&[0_u8; 5 * 4 + 4 * 4]);
+        let header = MapHeader::decode(&bytes).unwrap();
+        let vars = header.decode_variables(&bytes).unwrap();
+        assert_eq!(vars.globals, vec![5, -7]);
+        assert_eq!(vars.locals, vec![99]);
+        let layers = header.decode_squares(&bytes).unwrap();
+        assert_eq!(layers.scripts_offset, HEADER_SIZE + 3 * 4);
+        let (_, objects, end) = layers.decode_objects_with(&bytes, |_| Ok(None)).unwrap();
+        assert_eq!(objects.total_objects, 0);
+        assert_eq!(end, bytes.len());
+        assert!(header.decode_variables(&bytes[..HEADER_SIZE + 8]).is_err());
     }
 
     #[test]

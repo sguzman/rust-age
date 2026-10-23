@@ -174,6 +174,10 @@ fn main() {
                             .count()
                     );
                     println!("Original scripts begin at byte {}", squares.scripts_offset);
+                    println!(
+                        "Map variable slots: {} global, {} local",
+                        header.global_variable_count, header.local_variable_count
+                    );
                     println!("Serialized script records: {}", scripts.script_count());
                     println!("Serialized top-level objects: {}", objects.total_objects);
                     println!("Original object data ends at byte {object_end}");

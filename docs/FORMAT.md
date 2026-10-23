@@ -120,3 +120,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Differential CE C++ path oracle
 
 `tests/path_oracle.cc` isolates the pinned CE `make_path_func` search under synthetic tile/blocker cases and `src/bin/path_probe.rs` emits the corresponding Rust sequences. CI compiles the C++ oracle and performs a byte-for-byte comparison to prevent subtle changes to tie ordering, turning cost, edge handling or route reconstruction. This verifies only the fixed numeric cases, not runtime collision, doors or gameplay motion.
+
+## Serialized MAP variable tables
+
+`MapHeader::decode_variables` now reads the exact CE `map_load_file` order: big-endian 32-bit global values immediately after the 236-byte header, followed by local values, then static squares and scripts. Synthetic mixed-sign tests verify slot ordering, truncation detection and correct offset into script/object data. This is read-only metadata; fresh-map `.GAM` overrides and all quest/VM mutations are not implemented.
