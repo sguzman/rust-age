@@ -6,6 +6,7 @@ use rust_age::map::{MapHeader, MapSquares, MapVariables};
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
 use rust_age::scene::StaticScene;
+use rust_age::script_clock::ScriptGameClock;
 use rust_age::script_data::{ScriptRecord, ScriptTables};
 use rust_age::script_native_vars::{
     run_invocation_with_owner_snapshot_bounded, ScriptClockContext, ScriptInvocationState,
@@ -13,7 +14,6 @@ use rust_age::script_native_vars::{
 };
 use rust_age::script_owner_binding::ScriptOwnerResolution;
 use rust_age::script_vm::ScriptValue;
-use rust_age::script_clock::ScriptGameClock;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -105,7 +105,10 @@ fn sample_scene() -> StaticScene {
 
 #[test]
 fn installed_int_stays_unstarted_then_reads_serialized_owner_safely() {
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
     let root = std::env::temp_dir().join(format!(
         "rust-age-owner-integration-{}-{stamp}",
         std::process::id()
@@ -138,12 +141,17 @@ fn installed_int_stays_unstarted_then_reads_serialized_owner_safely() {
     ));
     assert_eq!(environment.owner_for_instance(999), None);
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
-    assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+    assert!(environment
+        .scripts
+        .runtime
+        .vm(1)
+        .unwrap()
+        .stack()
+        .is_empty());
 
-    let mut globals = environment
-        .game_globals
-        .take()
-        .unwrap_or_else(|| rust_age::game_globals::GameGlobalState::from_initial_values(&[]).unwrap());
+    let mut globals = environment.game_globals.take().unwrap_or_else(|| {
+        rust_age::game_globals::GameGlobalState::from_initial_values(&[]).unwrap()
+    });
     let mut invocation = ScriptInvocationState::installed();
     let vm = environment.scripts.runtime.vm_mut(1).unwrap();
     assert_eq!(
