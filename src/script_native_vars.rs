@@ -195,7 +195,7 @@ impl ScriptInvocationState {
         self.fixed_parameter
     }
 
-    fn mark_overrides(&mut self) {
+    pub(crate) fn mark_overrides(&mut self) {
         if self.present {
             self.overrides = true;
         }
