@@ -165,9 +165,12 @@ impl ScriptRuntime {
         for program in &mut self.programs {
             let id = program.id;
             for index in 0..program.vm.runtime_procedures().len() {
-                if program.vm.consume_due_procedure_with(index, now_millis, |offset| {
-                    evaluate(id, index, offset)
-                })? {
+                if program
+                    .vm
+                    .consume_due_procedure_with(index, now_millis, |offset| {
+                        evaluate(id, index, offset)
+                    })?
+                {
                     dispatch(id, index, &mut program.vm)?;
                     completed.push(DueProcedure {
                         program_id: id,
@@ -408,9 +411,11 @@ mod tests {
         runtime.register(2, vm(0x01, 1, 0)).unwrap();
         runtime.set_suspended(true);
         assert!(runtime
-            .dispatch_due_with(100, |_, _, _| panic!("suspended condition"), |_, _, _| {
-                panic!("suspended dispatch")
-            })
+            .dispatch_due_with(
+                100,
+                |_, _, _| panic!("suspended condition"),
+                |_, _, _| { panic!("suspended dispatch") }
+            )
             .unwrap()
             .is_empty());
         runtime.set_suspended(false);
@@ -433,7 +438,10 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].program_id, 2);
         assert_eq!(result[1].program_id, 1);
-        assert!(runtime.dispatch_due_with(100, |_, _, _| Ok(Some(true)), |_, _, _| Ok(())).unwrap().is_empty());
+        assert!(runtime
+            .dispatch_due_with(100, |_, _, _| Ok(Some(true)), |_, _, _| Ok(()))
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -457,10 +465,14 @@ mod tests {
         assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 1);
         let mut visited_after = Vec::new();
         runtime
-            .dispatch_due_with(100, |_, _, _| Ok(None), |id, _, _| {
-                visited_after.push(id);
-                Ok(())
-            })
+            .dispatch_due_with(
+                100,
+                |_, _, _| Ok(None),
+                |id, _, _| {
+                    visited_after.push(id);
+                    Ok(())
+                },
+            )
             .unwrap();
         assert_eq!(visited_after, [1]);
     }
