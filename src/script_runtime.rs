@@ -422,7 +422,7 @@ impl ScriptRuntime {
 mod tests {
     use super::{DueProcedure, PlannedLocalActionFrame, ScriptRuntime};
     use crate::script_program::ScriptProgram;
-    use crate::script_vm::ScriptVm;
+    use crate::script_vm::{ScriptValue, ScriptVm};
 
     fn vm(flags: i32, time: i32, condition: i32) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
