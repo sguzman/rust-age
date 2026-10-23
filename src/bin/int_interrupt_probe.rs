@@ -30,11 +30,9 @@ fn probe(label: &str, flags: i32, argc: i32, value: i32, budget: usize) -> Strin
     match make_vm(value, flags, argc, clock).and_then(|vm| {
         if clock {
             let clock = ScriptGameClock { ticks: value };
-            vm.preview_local_interrupt_with_host_bounded(
-                0,
-                budget,
-                &mut |opcode, stack| clock.apply_opcode(opcode, stack),
-            )
+            vm.preview_local_interrupt_with_host_bounded(0, budget, &mut |opcode, stack| {
+                clock.apply_opcode(opcode, stack)
+            })
             .map_err(Into::into)
         } else {
             vm.preview_local_interrupt_bounded(0, budget)
