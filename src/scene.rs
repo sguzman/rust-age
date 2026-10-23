@@ -311,9 +311,7 @@ impl PreparedScriptEnvironment {
             .scripts
             .runtime
             .vm(planned.instance_id)
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "CE sandbox VM missing")
-            })?
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE sandbox VM missing"))?
             .runtime_procedures()
             .to_vec();
         let mut invocation = *event.invocation();

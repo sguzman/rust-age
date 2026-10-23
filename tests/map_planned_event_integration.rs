@@ -467,8 +467,10 @@ fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects()
     body.extend_from_slice(&1_i32.to_be_bytes()); // one second delay
     body.extend_from_slice(&0xC001_u16.to_be_bytes());
     body.extend_from_slice(&1_i32.to_be_bytes()); // map_enter_p_proc
-    body.extend_from_slice(&[0x80, 0x06, 0x80, 0x21]); // CALL_AT; POP_FLAGS_EXIT
-    assert_eq!(body.len(), 18);
+    // Schedule a local CE procedure, set a speculative script override,
+    // and return without ever touching the installed MAP or script session.
+    body.extend_from_slice(&[0x80, 0x06, 0x80, 0xB9, 0x80, 0x21]);
+    assert_eq!(body.len(), 20);
     environment.scripts.runtime = {
         let mut runtime = ScriptRuntime::new();
         runtime.register(1, synthetic_vm_with_body(&body)).unwrap();
@@ -488,7 +490,10 @@ fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects()
     assert_eq!(sandbox.vm_frame.binding.procedure_index, 1);
     assert_eq!(sandbox.vm_frame.candidate.program_counter, 20);
     assert_eq!(sandbox.vm_frame.candidate.returned, None);
-    assert_eq!(sandbox.vm_frame.candidate.return_stack, [ScriptValue::Int(0)]);
+    assert_eq!(
+        sandbox.vm_frame.candidate.return_stack,
+        [ScriptValue::Int(0)]
+    );
     assert_eq!(sandbox.vm_frame.candidate.procedures[1].flags & 0x01, 0x01);
     assert_eq!(sandbox.vm_frame.candidate.procedures[1].event_time, 1000);
     let effects = sandbox.effects().unwrap();
@@ -496,8 +501,14 @@ fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects()
     assert_eq!(effects.quest_globals_changed, 0);
     assert_eq!(effects.map.map_globals_changed, 0);
     assert_eq!(effects.map.local_slots_changed, 0);
-    assert!(!effects.overrides);
+    assert!(effects.overrides);
+    assert!(sandbox.overrides);
     assert_eq!(sandbox.discard().unwrap(), effects);
+    assert!(!environment
+        .detached_event_for_planned(&plan)
+        .unwrap()
+        .invocation()
+        .overrides());
     let installed = environment.scripts.runtime.vm(1).unwrap();
     assert_eq!(installed.runtime_procedures()[1].flags, 0);
     assert_eq!(installed.runtime_procedures()[1].event_time, 0);
