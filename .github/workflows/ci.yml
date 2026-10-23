@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare CE C++ and Rust local POP_FLAGS interpreter return frames
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_pop_flags_oracle.cc -o /tmp/rust-age-ce-pop-flags
+          /tmp/rust-age-ce-pop-flags tests/script_pop_flags_cases.txt > /tmp/rust-age-ce-pop-flags.txt
+          cargo run --quiet --bin script_pop_flags_probe > /tmp/rust-age-rust-pop-flags.txt
+          diff -u /tmp/rust-age-ce-pop-flags.txt /tmp/rust-age-rust-pop-flags.txt
       - name: Compare CE C++ and Rust doEvents condition flag and PC restoration
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_condition_restore_oracle.cc -o /tmp/rust-age-ce-condition-restore
