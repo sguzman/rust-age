@@ -1,0 +1,16 @@
+present_first r present 0 0
+present_second r present 1 0
+present_last r present 2 0
+present_negative r present -1 0
+present_equal_len r present 3 0
+present_beyond r present 19 0
+present_write w present 1 123
+present_write_negative w present -1 123
+present_write_beyond w present 19 456
+present_write_last w present 2 -88
+empty_read r empty 0 0
+empty_negative r empty -1 0
+empty_write w empty 0 44
+empty_write_negative w empty -1 44
+int_max w present 0 2147483647
+int_min w present 0 -2147483648
