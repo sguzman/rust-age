@@ -130,26 +130,48 @@ impl GameAssets {
         }
     }
 
-    /// Resolve direct FID types through their own original art/<dir>/<dir>.lst.
-    /// Critters and heads have generated names and remain explicitly unported.
-    pub fn direct_art_path(&mut self, fid: u32) -> io::Result<Option<String>> {
-        let fid = ArtFid(fid);
-        let directory = fid.direct_category()?;
+    /// Resolve CE art_get_name for static art, critters and talking heads.
+    /// Critters live in critter.dat; other types live in master.dat.
+    /// Special death-frame aliases require an explicit original critters.lst
+    /// alias entry rather than guessing a runtime-controlled fallback index.
+    pub fn art_path_by_fid(&mut self, raw_fid: u32) -> io::Result<Option<(Bank, String)>> {
+        let fid = ArtFid(raw_fid);
+        let directory = fid.directory()?;
+        let bank = if fid.category() == 1 { Bank::Critter } else { Bank::Master };
         let list_path = format!("art/{directory}/{directory}.lst");
-        let Some(data) = self.read(Bank::Master, &list_path)? else {
+        let Some(data) = self.read(bank, &list_path)? else {
             return Ok(None);
         };
         let names = ArtList::parse(&data);
-        let Some(name) = names.file_name(fid.index())? else {
+        let mut index = fid.index();
+        if fid.needs_critter_alias() {
+            let line = data
+                .split_inclusive(|&b| b == b'\n')
+                .nth(index)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing critter alias row"))?;
+            let raw_alias = line
+                .split(|&b| b == b',')
+                .nth(1)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "missing critter alias"))?;
+            let alias = std::str::from_utf8(raw_alias)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "non-UTF8 critter alias"))?
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid critter alias"))?;
+            index = alias;
+        }
+        let Some(name) = names.file_name(index)? else {
             return Ok(None);
         };
-        if name.is_empty() || name == "." {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "empty art filename",
-            ));
-        }
-        Ok(Some(format!("art/{directory}/{name}")))
+        let filename = fid.filename(name)?;
+        Ok(Some((bank, format!("art/{directory}/{filename}"))))
+    }
+
+    /// Compatibility wrapper for callers expecting direct (master-bank) art.
+    pub fn direct_art_path(&mut self, fid: u32) -> io::Result<Option<String>> {
+        ArtFid(fid).direct_category()?;
+        self.art_path_by_fid(fid)
+            .map(|resolved| resolved.map(|(_, path)| path))
     }
 
     /// Resolve CE's original tile art IDs to the filenames in tiles.lst.

@@ -104,3 +104,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE static art FID category resolution
 
 `ArtFid` separates the original FID's type (bits 24–27), 12-bit filename index, animation (16–23), weapon animation (12–15) and rotation (28–30). `GameAssets::direct_art_path` resolves static item/scenery/wall/tile/misc/interface/inventory/background/skilldex names via their own original `art/<dir>/<dir>.lst` file in the user's master bank. This mirrors the direct/default branch of pinned CE `art_get_name`. **Critter and head art are explicitly rejected** until CE's generated animation suffixes and alias handling are ported; this resolver must never silently invent those filenames.
+
+## CE critter and head filename generation
+
+`ArtFid` now mirrors CE `art_get_code` using named animation/weapon branches (stand, walk, dodge, throw, knockdown/death, weapon action, single-frame death), CE `head1`/`head2` talking-head suffix tables, and `.fr0`–`.fr6` directional critter filenames. `GameAssets::art_path_by_fid` chooses the critter archive for critter sprites and master archive for other art. Special critter death aliases use the explicit comma-separated alias in `critters.lst`; if absent, the reader deliberately errors rather than pretending to know CE's runtime fallback. Animation playback, actual asset comparison, cache aliases and actor rendering are still pending.
