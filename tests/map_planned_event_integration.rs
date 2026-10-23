@@ -460,6 +460,53 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
 }
 
 #[test]
+fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects() {
+    let mut environment = environment();
+    let mut body = vec![0x80, 0x1A]; // setupCall argument marker
+    body.extend_from_slice(&0xC001_u16.to_be_bytes());
+    body.extend_from_slice(&1_i32.to_be_bytes()); // one second delay
+    body.extend_from_slice(&0xC001_u16.to_be_bytes());
+    body.extend_from_slice(&1_i32.to_be_bytes()); // map_enter_p_proc
+    body.extend_from_slice(&[0x80, 0x06, 0x80, 0x21]); // CALL_AT; POP_FLAGS_EXIT
+    assert_eq!(body.len(), 18);
+    environment.scripts.runtime = {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, synthetic_vm_with_body(&body)).unwrap();
+        runtime
+    };
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 200 },
+        last_visit_ticks: None,
+    };
+    let sandbox = environment
+        .preview_planned_sandbox_bounded(&plan, clock, 6)
+        .unwrap();
+    assert_eq!(sandbox.vm_frame.binding.procedure_index, 1);
+    assert_eq!(sandbox.vm_frame.candidate.program_counter, 20);
+    assert_eq!(sandbox.vm_frame.candidate.returned, None);
+    assert_eq!(sandbox.vm_frame.candidate.return_stack, [ScriptValue::Int(0)]);
+    assert_eq!(sandbox.vm_frame.candidate.procedures[1].flags & 0x01, 0x01);
+    assert_eq!(sandbox.vm_frame.candidate.procedures[1].event_time, 1000);
+    let effects = sandbox.effects().unwrap();
+    assert_eq!(effects.procedure_entries_changed, 1);
+    assert_eq!(effects.quest_globals_changed, 0);
+    assert_eq!(effects.map.map_globals_changed, 0);
+    assert_eq!(effects.map.local_slots_changed, 0);
+    assert!(!effects.overrides);
+    assert_eq!(sandbox.discard().unwrap(), effects);
+    let installed = environment.scripts.runtime.vm(1).unwrap();
+    assert_eq!(installed.runtime_procedures()[1].flags, 0);
+    assert_eq!(installed.runtime_procedures()[1].event_time, 0);
+    assert!(installed.stack().is_empty());
+    assert!(installed.return_stack().is_empty());
+    assert_eq!(installed.pc(), 0);
+}
+
+#[test]
 fn planned_script_readonly_native_preview_can_read_null_owner_but_not_mutate() {
     let mut environment = environment();
     let mut runtime = ScriptRuntime::new();

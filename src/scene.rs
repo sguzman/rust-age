@@ -67,11 +67,14 @@ pub struct PreparedScriptEnvironment {
 #[derive(Debug, Clone)]
 pub struct PreviewedSandboxAction {
     pub returned: Option<ScriptValue>,
+    /// Full candidate local CE interpreter state, never an installed VM.
+    pub vm_frame: PreviewedBoundLocalActionVmFrame,
     pub map_locals: MapScriptLocals,
     pub game_globals: Option<GameGlobalState>,
     pub overrides: bool,
     baseline_map: MapScriptLocals,
     baseline_game_globals: Option<GameGlobalState>,
+    baseline_procedures: Vec<crate::script_program::ProcedureEntry>,
 }
 
 /// An inspection-only description of speculative script changes. No engine
@@ -80,6 +83,9 @@ pub struct PreviewedSandboxAction {
 pub struct SandboxEffectSummary {
     pub map: MapScriptChangeSummary,
     pub quest_globals_changed: usize,
+    /// Count of hypothetical CE procedure-table entries whose stored
+    /// schedule/flags differ; not a count of dispatched game callbacks.
+    pub procedure_entries_changed: usize,
     pub overrides: bool,
 }
 
@@ -103,9 +109,22 @@ impl PreviewedSandboxAction {
                 ));
             }
         };
+        if self.baseline_procedures.len() != self.vm_frame.candidate.procedures.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE sandbox procedure table length changed",
+            ));
+        }
+        let procedure_entries_changed = self
+            .baseline_procedures
+            .iter()
+            .zip(&self.vm_frame.candidate.procedures)
+            .filter(|(before, after)| before != after)
+            .count();
         Ok(SandboxEffectSummary {
             map,
             quest_globals_changed,
+            procedure_entries_changed,
             overrides: self.overrides,
         })
     }
@@ -288,11 +307,20 @@ impl PreparedScriptEnvironment {
         let mut game_globals = self.game_globals.clone();
         let baseline_map = map_locals.clone();
         let baseline_game_globals = game_globals.clone();
+        let baseline_procedures = self
+            .scripts
+            .runtime
+            .vm(planned.instance_id)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE sandbox VM missing")
+            })?
+            .runtime_procedures()
+            .to_vec();
         let mut invocation = *event.invocation();
         let preview = self
             .scripts
             .runtime
-            .preview_local_action_with_host_bounded(
+            .preview_local_action_frame_with_host_bounded(
                 planned.instance_id,
                 planned.action,
                 max_steps,
@@ -327,19 +355,21 @@ impl PreparedScriptEnvironment {
                     "CE sandbox local action missing after preflight",
                 )
             })?;
-        if frame != preview.frame {
+        if frame != preview.binding {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE sandbox action frame changed during preview",
             ));
         }
         Ok(PreviewedSandboxAction {
-            returned: preview.returned,
+            returned: preview.candidate.returned,
+            vm_frame: preview,
             map_locals,
             game_globals,
             overrides: invocation.overrides(),
             baseline_map,
             baseline_game_globals,
+            baseline_procedures,
         })
     }
 
