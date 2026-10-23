@@ -874,6 +874,7 @@ impl ScriptVm {
             0x80B4
                 | 0x80B5
                 | 0x80B9
+                | 0x80BB
                 | 0x80D4
                 | 0x80EA
                 | 0x80EB

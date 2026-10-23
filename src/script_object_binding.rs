@@ -40,6 +40,7 @@ impl MapObjectReadBindings {
                     handle,
                     tile: header.tile,
                     elevation: header.elevation,
+                    table_elevation: elevation,
                     pid: header.pid as i32,
                     fid: header.fid,
                 });

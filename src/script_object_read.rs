@@ -7,6 +7,7 @@
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
 
+pub const TILE_CONTAINS_OBJ_PID_OPCODE: u16 = 0x80BB;
 pub const TILE_NUM_OPCODE: u16 = 0x80D4;
 pub const ELEVATION_OPCODE: u16 = 0x80EC;
 pub const OBJ_PID_OPCODE: u16 = 0x8100;
@@ -23,6 +24,9 @@ pub struct ScriptObjectSnapshot {
     pub handle: i32,
     pub tile: i32,
     pub elevation: i32,
+    /// Which CE objectTable[] contains the object; this can differ from
+    /// the serialized header elevation read by op_elevation.
+    pub table_elevation: usize,
     pub pid: i32,
     pub fid: i32,
 }
@@ -72,6 +76,37 @@ pub fn apply_object_read_opcode(
     Ok(())
 }
 
+/// Pinned intextra.cc op_tile_contains_obj_pid (0x80BB) pops PID,
+/// elevation and tile (in that order), scans the given elevation's
+/// top-level obj_find_first_at/next list and pushes integer 1/0.
+/// No callback, engine pointer, or child inventory traversal occurs.
+pub fn apply_tile_contains_obj_pid(
+    objects: &[ScriptObjectSnapshot],
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+) -> io::Result<()> {
+    if opcode != TILE_CONTAINS_OBJ_PID_OPCODE {
+        return Err(invalid("unsupported CE tile-contains native opcode"));
+    }
+    if stack.len() < 3 {
+        return Err(invalid("CE tile-contains requires tile, elevation and PID"));
+    }
+    let at = stack.len() - 3;
+    let (ScriptValue::Int(tile), ScriptValue::Int(elevation), ScriptValue::Int(pid)) =
+        (stack[at], stack[at + 1], stack[at + 2])
+    else {
+        return Err(invalid("CE tile-contains operands must be integers"));
+    };
+    let found = usize::try_from(elevation).is_ok_and(|e| {
+        objects.iter().any(|object| {
+            object.table_elevation == e && object.tile == tile && object.pid == pid
+        })
+    });
+    stack.truncate(at);
+    stack.push(ScriptValue::Int(i32::from(found)));
+    Ok(())
+}
+
 /// Detached synthetic bytecode only. A plain ScriptVm still rejects these
 /// native opcodes; installing a MAP does not execute them.
 pub fn run_object_read_subset_bounded(
@@ -80,15 +115,20 @@ pub fn run_object_read_subset_bounded(
     max_steps: usize,
 ) -> io::Result<usize> {
     vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| {
-        apply_object_read_opcode(objects, opcode, stack)
+        if opcode == TILE_CONTAINS_OBJ_PID_OPCODE {
+            apply_tile_contains_obj_pid(objects, opcode, stack)
+        } else {
+            apply_object_read_opcode(objects, opcode, stack)
+        }
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_object_read_opcode, run_object_read_subset_bounded, ScriptObjectSnapshot,
-        ELEVATION_OPCODE, OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE, TILE_NUM_OPCODE,
+        apply_object_read_opcode, apply_tile_contains_obj_pid, run_object_read_subset_bounded,
+        ScriptObjectSnapshot, ELEVATION_OPCODE, OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE,
+        TILE_CONTAINS_OBJ_PID_OPCODE, TILE_NUM_OPCODE,
     };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};
@@ -97,6 +137,7 @@ mod tests {
         handle: 77,
         tile: 20100,
         elevation: 2,
+        table_elevation: 0,
         pid: 0x1000_0123,
         fid: 0x3400_0456,
     };
@@ -135,6 +176,51 @@ mod tests {
             assert!(apply_object_read_opcode(objects, opcode, &mut stack).is_err());
             assert_eq!(stack, original);
         }
+    }
+
+    #[test]
+    fn tile_contains_uses_object_table_elevation_not_serialized_field() {
+        let objects = [OBJECT, ScriptObjectSnapshot {
+            handle: 78,
+            tile: 20100,
+            elevation: 0,
+            table_elevation: 2,
+            pid: 0x1000_0123,
+            fid: 0,
+        }];
+        for (tile, elevation, pid, expected) in [
+            (20100, 0, 0x1000_0123, 1),
+            (20100, 2, 0x1000_0123, 1),
+            (20100, 1, 0x1000_0123, 0),
+            (20100, -1, 0x1000_0123, 0),
+            (20101, 0, 0x1000_0123, 0),
+            (20100, 0, 0x1000_0124, 0),
+        ] {
+            let mut stack = vec![
+                ScriptValue::Int(tile),
+                ScriptValue::Int(elevation),
+                ScriptValue::Int(pid),
+            ];
+            apply_tile_contains_obj_pid(
+                &objects,
+                TILE_CONTAINS_OBJ_PID_OPCODE,
+                &mut stack,
+            )
+            .unwrap();
+            assert_eq!(stack, [ScriptValue::Int(expected)]);
+        }
+        let mut invalid = vec![
+            ScriptValue::Pointer(1),
+            ScriptValue::Int(0),
+            ScriptValue::Int(0),
+        ];
+        assert!(apply_tile_contains_obj_pid(
+            &objects,
+            TILE_CONTAINS_OBJ_PID_OPCODE,
+            &mut invalid,
+        )
+        .is_err());
+        assert_eq!(invalid[0], ScriptValue::Pointer(1));
     }
 
     #[test]

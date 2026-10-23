@@ -104,6 +104,12 @@ jobs:
           /tmp/rust-age-ce-object-read tests/script_object_read_cases.txt > /tmp/rust-age-ce-object-read.txt
           cargo run --quiet --bin script_object_read_probe > /tmp/rust-age-rust-object-read.txt
           diff -u /tmp/rust-age-ce-object-read.txt /tmp/rust-age-rust-object-read.txt
+      - name: Compare CE C++ and Rust tile-contains-PID script query
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_tile_contains_oracle.cc -o /tmp/rust-age-ce-tile-contains
+          /tmp/rust-age-ce-tile-contains tests/script_tile_contains_cases.txt > /tmp/rust-age-ce-tile-contains.txt
+          cargo run --quiet --bin script_tile_contains_probe > /tmp/rust-age-rust-tile-contains.txt
+          diff -u /tmp/rust-age-ce-tile-contains.txt /tmp/rust-age-rust-tile-contains.txt
       - name: Compare CE C++ and Rust game-time advance ordering
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_time_advance_oracle.cc -o /tmp/rust-age-ce-time-advance

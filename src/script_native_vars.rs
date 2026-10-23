@@ -13,8 +13,9 @@ use crate::script_clock::{
 };
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_read::{
-    apply_object_read_opcode, ScriptObjectSnapshot, ELEVATION_OPCODE, OBJ_ART_FID_OPCODE,
-    OBJ_PID_OPCODE, TILE_NUM_OPCODE,
+    apply_object_read_opcode, apply_tile_contains_obj_pid, ScriptObjectSnapshot,
+    ELEVATION_OPCODE, OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE, TILE_CONTAINS_OBJ_PID_OPCODE,
+    TILE_NUM_OPCODE,
 };
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
@@ -368,6 +369,12 @@ pub fn run_invocation_with_native_snapshot_bounded(
             opcode,
             stack,
         ),
+        TILE_CONTAINS_OBJ_PID_OPCODE => {
+            let objects = snapshot
+                .objects
+                .ok_or_else(|| invalid("CE object snapshots not provided"))?;
+            apply_tile_contains_obj_pid(objects, opcode, stack)
+        }
         object_opcode @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE
         | OBJ_ART_FID_OPCODE) => {
             let objects = snapshot
@@ -824,6 +831,7 @@ mod tests {
             handle: 77,
             tile: 20_100,
             elevation: 2,
+            table_elevation: 0,
             pid: 17,
             fid: 123,
         }];

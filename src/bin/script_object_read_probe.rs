@@ -18,6 +18,7 @@ fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
     let object = ScriptObjectSnapshot {
         handle: parts[2].parse()?,
         elevation: parts[3].parse()?,
+        table_elevation: 0,
         tile: parts[4].parse()?,
         pid: parts[5].parse()?,
         fid: parts[6].parse()?,
