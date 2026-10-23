@@ -914,7 +914,11 @@ impl ScriptVm {
         } else {
             None
         };
-        let value = if preserve_value { self.stack.pop() } else { None };
+        let value = if preserve_value {
+            self.stack.pop()
+        } else {
+            None
+        };
         self.stack.truncate(self.stack.len() - 3);
         self.critical_section = flags & 0x80 != 0;
         self.halt_reason = None;
@@ -1749,7 +1753,7 @@ mod tests {
 
             // POP_FLAGS_RETURN jumps and continues the interpreter.
             let mut vm = local_return_fixture(flags, 0x8020, 0, 0, 0, 36);
-            for _ in 0..5 {
+            for _ in 0..6 {
                 vm.step().unwrap();
             }
             assert_eq!(vm.pc(), 36);
@@ -1760,7 +1764,7 @@ mod tests {
 
             // POP_FLAGS_EXIT returns to the C++ interpret caller.
             let mut vm = local_return_fixture(flags, 0x8021, 0, 0, 0, 36);
-            assert_eq!(vm.run_bounded(5).unwrap(), 5);
+            assert_eq!(vm.run_bounded(6).unwrap(), 6);
             assert_eq!(vm.pc(), 36);
             assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::ReturnFromCall));
             assert_eq!(vm.modeled_program_low_flags(), flags as u16);
@@ -1770,7 +1774,7 @@ mod tests {
             // POP_FLAGS_RETURN_VAL_EXIT saves the value across frame pop.
             for value in [0, 1, -81, i32::MIN, i32::MAX] {
                 let mut vm = local_return_fixture(flags, 0x8025, value, 0, 0, 40);
-                assert_eq!(vm.run_bounded(6).unwrap(), 6);
+                assert_eq!(vm.run_bounded(7).unwrap(), 7);
                 assert_eq!(vm.pc(), 40);
                 assert_eq!(vm.stack(), [ScriptValue::Int(value)]);
                 assert!(vm.return_stack().is_empty());
@@ -1797,8 +1801,8 @@ mod tests {
                 let mut vm = local_return_fixture(flags, opcode_value, 5, window, wait, address);
                 let count = match opcode_value {
                     0x801F => 3,
-                    0x8025 => 5,
-                    _ => 4,
+                    0x8025 => 6,
+                    _ => 5,
                 };
                 for _ in 0..count {
                     vm.step().unwrap();
