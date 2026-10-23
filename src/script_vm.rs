@@ -398,11 +398,9 @@ impl ScriptVm {
         procedure_index: usize,
         max_steps: usize,
     ) -> io::Result<Option<ScriptValue>> {
-        self.preview_local_action_with_host_bounded(
-            procedure_index,
-            max_steps,
-            &mut |_, _| Err(invalid("CE local action native host not provided")),
-        )
+        self.preview_local_action_with_host_bounded(procedure_index, max_steps, &mut |_, _| {
+            Err(invalid("CE local action native host not provided"))
+        })
     }
 
     /// Explicit synthetic local CE action preview with caller-supplied

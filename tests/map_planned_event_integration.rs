@@ -353,12 +353,21 @@ fn planned_script_readonly_native_preview_can_read_null_owner_but_not_mutate() {
         .preview_planned_local_core_bounded(&action, 5)
         .is_err());
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
-    assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+    assert!(environment
+        .scripts
+        .runtime
+        .vm(1)
+        .unwrap()
+        .stack()
+        .is_empty());
 
     let mut denying = ScriptRuntime::new();
     // POP; script_overrides (a write); POP_FLAGS_EXIT
     denying
-        .register(1, synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xB9, 0x80, 0x21]))
+        .register(
+            1,
+            synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xB9, 0x80, 0x21]),
+        )
         .unwrap();
     environment.scripts.runtime = denying;
     assert!(environment

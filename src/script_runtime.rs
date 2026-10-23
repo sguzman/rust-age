@@ -245,12 +245,9 @@ impl ScriptRuntime {
         action: usize,
         max_steps: usize,
     ) -> io::Result<Option<PreviewedLocalAction>> {
-        self.preview_local_action_with_host_bounded(
-            program_id,
-            action,
-            max_steps,
-            &mut |_, _| Err(invalid("CE local action native host not provided")),
-        )
+        self.preview_local_action_with_host_bounded(program_id, action, max_steps, &mut |_, _| {
+            Err(invalid("CE local action native host not provided"))
+        })
     }
 
     /// Same cloned, bounded local call preview with an explicit opcode host.
@@ -269,11 +266,8 @@ impl ScriptRuntime {
         let vm = self
             .vm(program_id)
             .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
-        let returned = vm.preview_local_action_with_host_bounded(
-            frame.procedure_index,
-            max_steps,
-            native,
-        )?;
+        let returned =
+            vm.preview_local_action_with_host_bounded(frame.procedure_index, max_steps, native)?;
         Ok(Some(PreviewedLocalAction { frame, returned }))
     }
 

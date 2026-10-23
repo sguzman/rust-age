@@ -1475,7 +1475,11 @@ mod tests {
         assert_eq!(stack, [ScriptValue::Pointer(0), ScriptValue::Int(15)]);
 
         let previous = stack.clone();
-        for opcode in [SCRIPT_OVERRIDES_OPCODE, SET_MAP_VAR_OPCODE, LOCAL_VAR_OPCODE] {
+        for opcode in [
+            SCRIPT_OVERRIDES_OPCODE,
+            SET_MAP_VAR_OPCODE,
+            LOCAL_VAR_OPCODE,
+        ] {
             assert!(super::apply_readonly_event_native_opcode(
                 snapshot,
                 &invocation,

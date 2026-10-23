@@ -150,12 +150,7 @@ impl PreparedScriptEnvironment {
                 planned.action,
                 max_steps,
                 &mut |opcode, stack| {
-                    apply_readonly_event_native_opcode(
-                        snapshot,
-                        event.invocation(),
-                        opcode,
-                        stack,
-                    )
+                    apply_readonly_event_native_opcode(snapshot, event.invocation(), opcode, stack)
                 },
             )?
             .ok_or_else(|| {
