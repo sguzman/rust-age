@@ -486,9 +486,7 @@ impl ScriptVm {
                     scratch.runtime_procedures[index].flags = 0;
                     ready.push(index);
                 }
-            } else if procedure.flags & 0x01 != 0
-                && (procedure.event_time as u32) < now_millis
-            {
+            } else if procedure.flags & 0x01 != 0 && (procedure.event_time as u32) < now_millis {
                 scratch.runtime_procedures[index].flags = 0;
                 ready.push(index);
             }
@@ -1229,11 +1227,7 @@ mod tests {
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
     }
 
-    fn synthetic_due_vm(
-        first: &[u8],
-        second: &[u8],
-        second_flags: i32,
-    ) -> ScriptVm {
+    fn synthetic_due_vm(first: &[u8], second: &[u8], second_flags: i32) -> ScriptVm {
         assert!(first.len() <= 24);
         assert!(second.len() <= 12);
         let mut bytes = vec![0_u8; 42];
