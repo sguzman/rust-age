@@ -92,8 +92,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 44,
-              "evidence": "FRM decoding, v19 MAP reader, and prototype prefix/item/scenery subtypes in src/frm.rs, src/map.rs and src/prototype.rs. MAP/LST/FRM synthetic pipeline passed CI 39877712951; PRO added tests pending current CI; real game-data parity outstanding."
+              "progress": 58,
+              "evidence": "CI-tested read-only FRM, full critter PRO stats, PID-indexed PRO lookup, MAP v19 square/script tables, per-elevation objects and recursive inventory records. Synthetic installed-data MAP→PRO test and CI 39890198422 green; no commercial-data audit or gameplay."
             }
           ]
         }
@@ -121,8 +121,8 @@
               "id": "T202",
               "emoji": "🧟",
               "name": "Load FRM sprites, directions and animation timing",
-              "progress": 65,
-              "evidence": "FRM frame decode and native SDL browser; deterministic monotonic AnimationTimeline frame selection passed core CI 39879621422; space-key SDL playback compile latest CI pending; genuine game art QA outstanding."
+              "progress": 72,
+              "evidence": "CI 39894854107 green for FRM/AnimationTimeline, optional SDL2 viewer and CE art FID generation, critter/talking-head suffixes, special alias lookup and bank routing. Native genuine-game QA and runtime actor animations remain pending."
             },
             {
               "id": "T203",
@@ -156,14 +156,15 @@
               "id": "T302",
               "emoji": "🚶",
               "name": "Port pathfinding, collision and actor movement",
-              "progress": 0
+              "progress": 18,
+              "evidence": "Read-only src/pathfinding.rs port of CE make_path_func: 2000-node bounded search, seen-on-insert, screen-space idist, noncombat turn penalty, collision callback, synthetic routes; core CI 39895105447 passed. No object collision, doors, runtime actor movement or C++ differential oracle yet."
             },
             {
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 43,
-              "evidence": "CE MAP v19 and square layer parsing, original LST/FRM floor and roof diagnostics, headless PPM and native map browser; synthetic roof pass passed CI 39878970336; scripts/objects/transitions absent."
+              "progress": 57,
+              "evidence": "Read-only MAP v19 square/script/object integration, per-elevation object and nested inventory readers, PRO subtype resolution via original DAT/patch banks, static floor/roof diagnostics. Synthetic integration and core CI 39890198422 passed. No transitions, live object placement or executed map scripts."
             },
             {
               "id": "T304",

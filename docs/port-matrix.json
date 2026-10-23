@@ -29,13 +29,19 @@
     },
     {
       "source": "src/game/anim.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/pathfinding.rs",
+        "src/animation.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/art.cc",
       "rust": [
-        "src/frm.rs"
+        "src/frm.rs",
+        "src/art_list.rs",
+        "src/art_fid.rs",
+        "src/assets.rs"
       ],
       "status": "partial"
     },
@@ -78,8 +84,10 @@
     },
     {
       "source": "src/game/critter.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/prototype.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/cycle.cc",
@@ -208,7 +216,8 @@
     {
       "source": "src/game/map.cc",
       "rust": [
-        "src/map.rs"
+        "src/map.rs",
+        "src/object_tables.rs"
       ],
       "status": "partial"
     },
@@ -226,8 +235,11 @@
     },
     {
       "source": "src/game/object.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/object_data.rs",
+        "src/object_tables.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/options.cc",
@@ -262,7 +274,8 @@
     {
       "source": "src/game/proto.cc",
       "rust": [
-        "src/prototype.rs"
+        "src/prototype.rs",
+        "src/prototype_list.rs"
       ],
       "status": "partial"
     },
@@ -283,8 +296,10 @@
     },
     {
       "source": "src/game/scripts.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/script_data.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/select.cc",

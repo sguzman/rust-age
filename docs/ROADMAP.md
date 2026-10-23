@@ -5,37 +5,37 @@ Progress is the arithmetic mean of atomic task percentages. Completed tasks are 
 the ledger but omitted from this display. Partial scaffold ≠ playable game.
 Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 
-## 🧱 M0 — Foundation and Fallout 1 asset compatibility — `████████░░ 75%`
+## 🧱 M0 — Foundation and Fallout 1 asset compatibility — `████████░░ 76%`
 **Acceptance gate:** Reference pinned; native Rust diagnostic works; Fallout 1 archive and content readers verified.
 
 ### 🧭 P0 — Provenance, scaffolding and quality controls — `████████░░ 84%`
 
 - 🔎 T004 — Establish C++ baseline comparison and reference fixtures — `████░░░░░░ 35%`
 
-### 📦 P1 — Game-data archive, codec and filesystem — `███████░░░ 69%`
+### 📦 P1 — Game-data archive, codec and filesystem — `███████░░░ 71%`
 
 - 🧰 T101 — Check a user-supplied Fallout 1 installation — `████████░░ 80%`
 - 🗜️ T102 — Translate CE LZSS decoder with synthetic unit cases — `████████░░ 80%`
 - 🗃️ T103 — Implement CE DAT archive directory and entry extraction — `███████░░░ 68%`
 - 🗂️ T104 — Implement loose-file patches, path resolution and case policy — `████████░░ 75%`
 - 📄 T105 — Implement game configuration, messages and encodings — `███████░░░ 65%`
-- 🧬 T106 — Decode FRM, PRO, map and script asset structures — `████░░░░░░ 44%`
+- 🧬 T106 — Decode FRM, PRO, map and script asset structures — `██████░░░░ 58%`
 
-## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `████░░░░░░ 41%`
+## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█████░░░░░ 46%`
 **Acceptance gate:** An original Fallout 1 location renders faithfully, with movement and transitions.
 
-### 🎨 P2 — Art and rendering — `██████░░░░ 56%`
+### 🎨 P2 — Art and rendering — `██████░░░░ 58%`
 
 - 🌈 T201 — Port palettes, fades and color cycling — `██████░░░░ 55%`
-- 🧟 T202 — Load FRM sprites, directions and animation timing — `███████░░░ 65%`
+- 🧟 T202 — Load FRM sprites, directions and animation timing — `███████░░░ 72%`
 - 💡 T203 — Port tile/roof layering, compositing and lighting — `█████░░░░░ 48%`
 - 🪟 T204 — Build native Linux window, framebuffer scaling and input loop — `██████░░░░ 55%`
 
-### 🗺️ P3 — Maps and world views — `███░░░░░░░ 27%`
+### 🗺️ P3 — Maps and world views — `████░░░░░░ 35%`
 
 - 🧭 T301 — Implement original hex projection and map scrolling — `██████░░░░ 64%`
-- 🚶 T302 — Port pathfinding, collision and actor movement — `░░░░░░░░░░ 0%`
-- 🚪 T303 — Port map/elevation load and spatial exits — `████░░░░░░ 43%`
+- 🚶 T302 — Port pathfinding, collision and actor movement — `██░░░░░░░░ 18%`
+- 🚪 T303 — Port map/elevation load and spatial exits — `██████░░░░ 57%`
 - 🌍 T304 — Render world map, town selection and location discovery — `░░░░░░░░░░ 0%`
 
 ## 📟 M2 — Menus, UI, audio and cinematics — `░░░░░░░░░░ 0%`
