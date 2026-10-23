@@ -28,7 +28,7 @@ use crate::script_native_vars::{
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
-use crate::script_vm::{PreviewedConditionFrame, ScriptValue};
+use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
 
@@ -379,13 +379,13 @@ impl PreparedScriptEnvironment {
     /// immutable MAP/quest/clock inputs. Conditional events take priority
     /// over timed events, and CE's strict time comparison is preserved.
     /// The installed VM, scheduler flags and world state never change.
-    pub fn preview_planned_due_reads_bounded(
+    pub fn preview_planned_due_frame_reads_bounded(
         &self,
         planned: &PlannedMapAction,
         clock: ScriptClockContext,
         now_millis: u32,
         max_steps_per_condition: usize,
-    ) -> io::Result<Vec<usize>> {
+    ) -> io::Result<PreviewedDueProcedurePoll> {
         let event = self.detached_event_for_planned(planned)?;
         let vm = self
             .scripts
@@ -393,7 +393,7 @@ impl PreparedScriptEnvironment {
             .vm(planned.instance_id)
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE due VM missing"))?;
         let snapshot = event.snapshot(&self.object_queries, clock)?;
-        vm.preview_due_procedures_with_host_bounded(
+        vm.preview_due_procedure_poll_with_host_bounded(
             now_millis,
             max_steps_per_condition,
             &mut |opcode, stack| {
@@ -410,18 +410,36 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    /// Convenience ready-index-only projection of the detached sequential
+    /// MAP poll. The registered CE scheduler remains unchanged.
+    pub fn preview_planned_due_reads_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        self.preview_planned_due_frame_reads_bounded(
+            planned,
+            clock,
+            now_millis,
+            max_steps_per_condition,
+        )
+        .map(|candidate| candidate.ready)
+    }
+
     /// Inspect ready CE procedures against an already-active detached MAP
     /// event with retained source/target/fixedParam context. Exact planned
     /// action identity and owner are verified before any condition read.
     /// This remains a read-only inspection, not CE event dispatch.
-    pub fn preview_active_due_reads_bounded(
+    pub fn preview_active_due_frame_reads_bounded(
         &self,
         sessions: &DetachedMapEventSessions,
         planned: &PlannedMapAction,
         clock: ScriptClockContext,
         now_millis: u32,
         max_steps_per_condition: usize,
-    ) -> io::Result<Vec<usize>> {
+    ) -> io::Result<PreviewedDueProcedurePoll> {
         let _ = self.local_frame_for_planned(planned)?;
         let event = sessions.get(planned.instance_id).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "CE active due session missing")
@@ -452,7 +470,7 @@ impl PreparedScriptEnvironment {
                 io::Error::new(io::ErrorKind::InvalidData, "CE active due VM missing")
             })?;
         let snapshot = event.snapshot(&self.object_queries, clock)?;
-        vm.preview_due_procedures_with_host_bounded(
+        vm.preview_due_procedure_poll_with_host_bounded(
             now_millis,
             max_steps_per_condition,
             &mut |opcode, stack| {
@@ -467,6 +485,25 @@ impl PreparedScriptEnvironment {
                 )
             },
         )
+    }
+
+    /// Project ready indices from an active, verified detached event poll.
+    pub fn preview_active_due_reads_bounded(
+        &self,
+        sessions: &DetachedMapEventSessions,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        self.preview_active_due_frame_reads_bounded(
+            sessions,
+            planned,
+            clock,
+            now_millis,
+            max_steps_per_condition,
+        )
+        .map(|candidate| candidate.ready)
     }
 
     /// Preview only supported CE object, event and clock READ opcodes

@@ -657,6 +657,14 @@ fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
     assert!(candidate.satisfied);
     assert_eq!(candidate.procedures[1].flags & 0x01, 0x01);
     assert_eq!(candidate.procedures[1].event_time, 7000);
+    let due = environment
+        .preview_planned_due_frame_reads_bounded(&plan, clock, 0, 5)
+        .unwrap();
+    assert_eq!(due.ready, [0]);
+    assert_eq!(due.procedures[0].flags, 0);
+    assert_eq!(due.procedures[1].flags & 0x01, 0x01);
+    assert_eq!(due.procedures[1].event_time, 7000);
+    assert!(due.data_stack.is_empty());
     assert_eq!(
         environment
             .scripts
@@ -778,6 +786,22 @@ fn active_due_condition_uses_retained_script_fixed_parameter_and_fails_closed() 
             .preview_active_due_reads_bounded(&sessions, &plan, clock, 0, 4)
             .unwrap(),
         vec![0]
+    );
+    let candidate = environment
+        .preview_active_due_frame_reads_bounded(&sessions, &plan, clock, 0, 4)
+        .unwrap();
+    assert_eq!(candidate.ready, [0]);
+    assert!(candidate.data_stack.is_empty());
+    assert_eq!(candidate.procedures[0].flags, 0);
+    assert_eq!(
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
+        0x02
     );
     assert!(sessions.get(1).unwrap().is_active());
     assert_eq!(sessions.get(1).unwrap().invocation().fixed_parameter(), 1);
