@@ -12,7 +12,9 @@ pub struct ScriptRunInfo {
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 /// Bound the legacy atoi-style decimal prefix conversion and reject overflow.
@@ -42,7 +44,9 @@ fn local_variable_count(value: &[u8]) -> io::Result<i32> {
         count = count
             .checked_mul(10)
             .and_then(|number| number.checked_add(i64::from(digit - b'0')))
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "overflowed CE local_vars"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "overflowed CE local_vars")
+            })?;
         digits += 1;
     }
     if digits == 0 {
@@ -84,7 +88,9 @@ impl ScriptList {
         };
         let comment = &line[hash..];
         let vars = if let Some(offset) = find_bytes(comment, b"local_vars=") {
-            Some(local_variable_count(&comment[offset + b"local_vars=".len()..])?)
+            Some(local_variable_count(
+                &comment[offset + b"local_vars=".len()..],
+            )?)
         } else {
             None
         };
@@ -139,7 +145,6 @@ mod tests {
         assert_eq!(list.file_name(4).unwrap(), None);
     }
 
-
     #[test]
     fn reads_ce_map_init_exit_flags_and_atoi_style_local_variable_count() {
         let scripts = ScriptList::parse(b"ONE.ssl # map_init map_exit local_vars=12 trailing\nTWO.ssl # local_vars=-3 extra\nTHREE.ssl # local_vars=not-a-number\nFOUR.ssl\nFIVE.ssl # MAP_INIT\n");
@@ -147,8 +152,14 @@ mod tests {
         assert!(first.map_init);
         assert!(first.map_exit);
         assert_eq!(first.local_variables, Some(12));
-        assert_eq!(scripts.run_info(1).unwrap().unwrap().local_variables, Some(-3));
-        assert_eq!(scripts.run_info(2).unwrap().unwrap().local_variables, Some(0));
+        assert_eq!(
+            scripts.run_info(1).unwrap().unwrap().local_variables,
+            Some(-3)
+        );
+        assert_eq!(
+            scripts.run_info(2).unwrap().unwrap().local_variables,
+            Some(0)
+        );
         assert_eq!(scripts.run_info(3).unwrap().unwrap().local_variables, None);
         assert!(!scripts.run_info(4).unwrap().unwrap().map_init);
         assert_eq!(scripts.run_info(5).unwrap(), None);
@@ -156,7 +167,8 @@ mod tests {
 
     #[test]
     fn rejects_overflowed_ce_local_variables_without_panicking() {
-        let scripts = ScriptList::parse(b"BAD.ssl # local_vars=999999999999999999999999999999999\n");
+        let scripts =
+            ScriptList::parse(b"BAD.ssl # local_vars=999999999999999999999999999999999\n");
         assert!(scripts.run_info(0).is_err());
     }
 

@@ -161,7 +161,6 @@ impl GameAssets {
         Ok(file.map(|name| format!("scripts/{name}")))
     }
 
-
     /// Read map_init, map_exit and declared locals from the same cached
     /// scripts.lst, without constructing a VM or reading .INT bytecode.
     pub fn script_run_info_by_index(
