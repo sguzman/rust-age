@@ -2,7 +2,7 @@
 //!
 //! Reference: src/game/proto.cc, proto_read_protoSubNode,
 //! proto_read_item_data and proto_read_scenery_data.
-//! Critter stat arrays are not implemented yet; remaining bytes stay opaque.
+//! Critter stat arrays are decoded in CE's fixed-size big-endian order.
 
 use std::io::{self, Cursor, Read};
 
@@ -75,6 +75,49 @@ impl LightFields {
     }
 }
 
+/// Original CE critter_read_data payload (1 + 35 + 35 + 18 + 3 words).
+/// SAVEABLE_STAT_COUNT is 35 and SKILL_COUNT is 18 in the pinned CE headers.
+pub const SAVEABLE_STAT_COUNT: usize = 35;
+pub const SKILL_COUNT: usize = 18;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CritterData {
+    pub flags: i32,
+    pub base_stats: [i32; SAVEABLE_STAT_COUNT],
+    pub bonus_stats: [i32; SAVEABLE_STAT_COUNT],
+    pub skills: [i32; SKILL_COUNT],
+    pub body_type: i32,
+    pub experience: i32,
+    pub kill_type: i32,
+}
+
+impl CritterData {
+    fn read(input: &mut impl Read) -> io::Result<Self> {
+        let flags = word(input)?;
+        let mut base_stats = [0; SAVEABLE_STAT_COUNT];
+        for value in &mut base_stats {
+            *value = word(input)?;
+        }
+        let mut bonus_stats = [0; SAVEABLE_STAT_COUNT];
+        for value in &mut bonus_stats {
+            *value = word(input)?;
+        }
+        let mut skills = [0; SKILL_COUNT];
+        for value in &mut skills {
+            *value = word(input)?;
+        }
+        Ok(Self {
+            flags,
+            base_stats,
+            bonus_stats,
+            skills,
+            body_type: word(input)?,
+            experience: word(input)?,
+            kill_type: word(input)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrototypeBody {
     Item {
@@ -95,6 +138,7 @@ pub enum PrototypeBody {
         head_fid: i32,
         ai_packet: i32,
         team: i32,
+        data: CritterData,
     },
     Scenery {
         light: LightFields,
@@ -128,7 +172,7 @@ pub struct Prototype {
     pub fid: i32,
     pub kind: ObjectKind,
     pub body: PrototypeBody,
-    /// Raw, unimplemented data (normally critter stat arrays).
+    /// Additional file bytes after the CE-parsed prototype. Usually empty.
     pub remaining_bytes: Vec<u8>,
 }
 
@@ -185,11 +229,13 @@ impl Prototype {
                 let head_fid = word(&mut input)?;
                 let ai_packet = word(&mut input)?;
                 let team = word(&mut input)?;
+                let data = CritterData::read(&mut input)?;
                 PrototypeBody::Critter {
                     light,
                     head_fid,
                     ai_packet,
                     team,
+                    data,
                 }
             }
             ObjectKind::Scenery => {
@@ -246,7 +292,7 @@ impl Prototype {
 
 #[cfg(test)]
 mod tests {
-    use super::{ObjectKind, Prototype, PrototypeBody};
+    use super::{ObjectKind, Prototype, PrototypeBody, SAVEABLE_STAT_COUNT, SKILL_COUNT};
 
     fn encode(values: &[i32]) -> Vec<u8> {
         values.iter().flat_map(|n| n.to_be_bytes()).collect()
@@ -338,12 +384,39 @@ mod tests {
     }
 
     #[test]
-    fn critter_extra_data_remains_uninterpreted() {
+    fn critter_stat_tables_match_ce_sizes_and_preserve_trailing_bytes() {
         let mut bytes = encode(&[0x0100_0010, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10]);
-        bytes.extend_from_slice(&[1, 2, 3, 4]);
+        let mut values = vec![17];
+        values.extend((0..SAVEABLE_STAT_COUNT as i32).map(|x| x + 100));
+        values.extend((0..SAVEABLE_STAT_COUNT as i32).map(|x| x - 100));
+        values.extend((0..SKILL_COUNT as i32).map(|x| x + 200));
+        values.extend([3, 500, 6]);
+        assert_eq!(values.len(), 92);
+        bytes.extend_from_slice(&encode(&values));
+        assert_eq!(bytes.len(), 0x19C);
+        bytes.extend_from_slice(&[0xAA, 0xBB]);
         let parsed = Prototype::decode(&bytes).unwrap();
         assert_eq!(parsed.kind, ObjectKind::Critter);
-        assert_eq!(parsed.remaining_bytes, vec![1, 2, 3, 4]);
+        assert_eq!(parsed.remaining_bytes, vec![0xAA, 0xBB]);
+        match parsed.body {
+            PrototypeBody::Critter { data, .. } => {
+                assert_eq!(data.flags, 17);
+                assert_eq!(data.base_stats[34], 134);
+                assert_eq!(data.bonus_stats[34], -66);
+                assert_eq!(data.skills[17], 217);
+                assert_eq!(data.body_type, 3);
+                assert_eq!(data.experience, 500);
+                assert_eq!(data.kill_type, 6);
+            }
+            _ => panic!("expected critter"),
+        }
+    }
+
+    #[test]
+    fn truncated_critter_stats_are_rejected() {
+        let mut bytes = encode(&[0x0100_0010, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10]);
+        bytes.extend_from_slice(&vec![0; 91 * 4]);
+        assert!(Prototype::decode(&bytes).is_err());
     }
 
     #[test]

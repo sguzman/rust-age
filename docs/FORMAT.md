@@ -76,3 +76,7 @@ This is strictly a read-only, synthetic-test-backed reader. It does not instanti
 ## Native C++ / Rust differential geometry oracle
 
 `tests/spatial_oracle.cc` is a small, self-contained C++ translation of CE's original integer tile and square projection formulas. `src/bin/spatial_probe.rs` emits the corresponding Rust coordinates. GitHub CI compiles the C++ oracle and compares more than 2,000 lines of hex, floor-square and roof-square output across several center positions, including even and odd columns. This verifies **numeric projection only**; it does not compare map files, visual lighting, world movement or game script semantics.
+
+## CE critter prototype stat tables
+
+The critter `.PRO` path now uses `critter_read_data` from the pinned CE `src/game/critter.cc`, reading **35 base stats**, **35 bonus stats**, **18 skills**, flags, body type, experience and kill type as original big-endian i32 fields. Synthetic fixtures assert a complete 0x19C-byte critter record, tail-byte preservation, and truncation rejection. This is a data reader only: stats calculations, combat, AI, actor construction and save compatibility remain unimplemented.
