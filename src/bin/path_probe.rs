@@ -38,6 +38,10 @@ fn main() {
                 .collect::<Vec<_>>()
                 .join(","),
         };
-        println!("P {from} {to} {mode} {} {} {steps}", u8::from(not_combat), u8::from(check_dest));
+        println!(
+            "P {from} {to} {mode} {} {} {steps}",
+            u8::from(not_combat),
+            u8::from(check_dest)
+        );
     }
 }
