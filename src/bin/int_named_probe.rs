@@ -47,9 +47,15 @@ fn probe(names: &str, query: &str) -> Result<String, Box<dyn Error>> {
 fn main() {
     for line in include_str!("../../tests/int_named_cases.txt").lines() {
         let mut parts = line.split_whitespace();
-        let Some(label) = parts.next() else { continue };
-        let Some(names) = parts.next() else { continue };
-        let Some(query) = parts.next() else { continue };
+        let Some(label) = parts.next() else {
+            continue;
+        };
+        let Some(names) = parts.next() else {
+            continue;
+        };
+        let Some(query) = parts.next() else {
+            continue;
+        };
         let result = probe(names, query).unwrap_or_else(|_| "ERR".to_owned());
         println!("{label} {result}");
     }
