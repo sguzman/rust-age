@@ -51,10 +51,19 @@ fn prepared() -> Result<BoundScriptRuntime, Box<dyn Error>> {
     })
 }
 fn owner(index: usize) -> ObjectKey {
-    ObjectKey { elevation: 0, ordinal: index }
+    ObjectKey {
+        elevation: 0,
+        ordinal: index,
+    }
 }
 fn probe(
-    label: &str, now: i32, delay: i32, sid: i32, fixed: i32, who: usize, due: i32,
+    label: &str,
+    now: i32,
+    delay: i32,
+    sid: i32,
+    fixed: i32,
+    who: usize,
+    due: i32,
 ) -> Result<String, Box<dyn Error>> {
     let bound = prepared()?;
     let mut queue = EventQueue::new();
@@ -73,8 +82,12 @@ fn probe(
             Some(plan) => format!("{}:{}", plan.action, plan.procedure_index),
             None => "none".to_owned(),
         };
-        let hex = entry.payload.iter().map(|n| format!("{n:02x}"))
-            .collect::<Vec<_>>().join("");
+        let hex = entry
+            .payload
+            .iter()
+            .map(|n| format!("{n:02x}"))
+            .collect::<Vec<_>>()
+            .join("");
         popped.push(format!(
             "{}:{}:{}@{}:{}",
             timer.sid, action, timer.fixed_parameter, timer.time, hex
@@ -97,11 +110,16 @@ fn main() {
         }
         let result = (|| -> Result<String, Box<dyn Error>> {
             probe(
-                fields[0], fields[1].parse()?, fields[2].parse()?,
-                fields[3].parse()?, fields[4].parse()?,
-                fields[5].parse()?, fields[6].parse()?,
+                fields[0],
+                fields[1].parse()?,
+                fields[2].parse()?,
+                fields[3].parse()?,
+                fields[4].parse()?,
+                fields[5].parse()?,
+                fields[6].parse()?,
             )
-        })().unwrap_or_else(|_| "ERR".to_owned());
+        })()
+        .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", fields[0], result);
     }
 }
