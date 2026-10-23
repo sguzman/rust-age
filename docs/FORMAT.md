@@ -108,3 +108,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE critter and head filename generation
 
 `ArtFid` now mirrors CE `art_get_code` using named animation/weapon branches (stand, walk, dodge, throw, knockdown/death, weapon action, single-frame death), CE `head1`/`head2` talking-head suffix tables, and `.fr0`–`.fr6` directional critter filenames. `GameAssets::art_path_by_fid` chooses the critter archive for critter sprites and master archive for other art. Special critter death aliases use the explicit comma-separated alias in `critters.lst`; if absent, the reader deliberately errors rather than pretending to know CE's runtime fallback. Animation playback, actual asset comparison, cache aliases and actor rendering are still pending.
+
+## CE make_path_func traversal (pure logic)
+
+`src/pathfinding.rs` reproduces the original `anim.cc` 2000-slot open/closed search, visited-on-insert semantics, screen-coordinate `idist` heuristic, CE hex-neighbor order, original 50-point step cost and 10-point noncombat turning penalty. It returns a bounded direction sequence and checks obstacles via a caller-supplied passability callback (doors, collision and combat are not implemented). Tests cover nearest-neighbor parity, destination occupancy flag, detours, reachability and invalid tiles. This has not been compared against a compiled original C++ A* oracle and is not yet wired to runtime actor movement.

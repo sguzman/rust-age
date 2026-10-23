@@ -15,6 +15,7 @@ pub mod message;
 pub mod object_data;
 pub mod object_tables;
 pub mod palette;
+pub mod pathfinding;
 pub mod prototype;
 pub mod prototype_list;
 pub mod script_data;
