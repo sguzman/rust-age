@@ -12,7 +12,7 @@ use rust_age::script_object_binding::MapObjectReadBindings;
 use rust_age::script_owner_binding::MapScriptOwners;
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
-use rust_age::script_vm::{ScriptValue, ScriptVm};
+use rust_age::script_vm::ScriptVm;
 use std::error::Error;
 
 fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
@@ -124,19 +124,36 @@ fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
         },
         8,
     )?;
-    if sandbox.returned != None {
+    if sandbox.returned.is_some() {
         return Err("sandbox write unexpectedly returned value".into());
     }
     if environment.map_locals.globals() != map_values.as_slice()
-        || environment.game_globals.as_ref().ok_or("missing baseline globals")?.values()
+        || environment
+            .game_globals
+            .as_ref()
+            .ok_or("missing baseline globals")?
+            .values()
             != game_values.as_slice()
         || environment.scripts.runtime.vm(1).ok_or("missing VM")?.pc() != 0
     {
         return Err("sandbox mutated original installed CE source state".into());
     }
-    let map0_out = sandbox.map_locals.globals().first().copied().unwrap_or(*map0);
-    let map1_out = sandbox.map_locals.globals().get(1).copied().unwrap_or(*map1);
-    let game = sandbox.game_globals.as_ref().ok_or("missing sandbox globals")?;
+    let map0_out = sandbox
+        .map_locals
+        .globals()
+        .first()
+        .copied()
+        .unwrap_or(*map0);
+    let map1_out = sandbox
+        .map_locals
+        .globals()
+        .get(1)
+        .copied()
+        .unwrap_or(*map1);
+    let game = sandbox
+        .game_globals
+        .as_ref()
+        .ok_or("missing sandbox globals")?;
     let game0_out = game.values().first().copied().unwrap_or(*game0);
     let game1_out = game.values().get(1).copied().unwrap_or(*game1);
     let effects = sandbox.discard()?;
