@@ -578,3 +578,48 @@ fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests(
         .is_err());
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
+
+#[test]
+fn failed_sandbox_after_speculative_writes_and_overrides_rolls_back_entire_action() {
+    let mut environment = environment();
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![12],
+            locals: vec![],
+        })
+        .unwrap();
+    environment.game_globals = Some(GameGlobalState::from_initial_values(&[3]).unwrap());
+    // POP frame marker; write MAP global slot zero as 19; script_overrides;
+    // unsupported gameplay clock advancement. All earlier writes remain
+    // detached when the final CE opcode fails.
+    let mut code = vec![0x80, 0x1A, 0xC0, 0x01];
+    code.extend_from_slice(&0_i32.to_be_bytes());
+    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&19_i32.to_be_bytes());
+    code.extend_from_slice(&[0x80, 0xC4, 0x80, 0xB9, 0x80, 0xFC, 0x80, 0x21]);
+    assert_eq!(code.len(), 22);
+    let mut runtime = ScriptRuntime::new();
+    runtime.register(1, synthetic_vm_with_body(&code)).unwrap();
+    environment.scripts.runtime = runtime;
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: None,
+    };
+    for budget in [4, 6, 12] {
+        assert!(environment
+            .preview_planned_sandbox_bounded(&plan, clock, budget)
+            .is_err());
+        assert_eq!(environment.map_locals.globals(), [12]);
+        assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
+        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+        assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+        let event = environment.detached_event_for_planned(&plan).unwrap();
+        assert!(!event.invocation().overrides());
+        assert!(event.is_active());
+    }
+}
