@@ -115,7 +115,10 @@ fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     assert_eq!(frame.return_marker, 20);
     assert_eq!(frame.argument_marker, 0);
     assert!(!frame.critical);
-    assert_eq!(env.preview_planned_local_core_bounded(&action, 4).unwrap(), None);
+    assert_eq!(
+        env.preview_planned_local_core_bounded(&action, 4).unwrap(),
+        None
+    );
     assert!(env.preview_planned_local_core_bounded(&action, 1).is_err());
     let mut event = env.detached_event_for_planned(&action).unwrap();
     assert!(event.is_active());

@@ -112,11 +112,7 @@ impl PreparedScriptEnvironment {
         let preview = self
             .scripts
             .runtime
-            .preview_local_action_core_bounded(
-                planned.instance_id,
-                planned.action,
-                max_steps,
-            )?
+            .preview_local_action_core_bounded(planned.instance_id, planned.action, max_steps)?
             .ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
