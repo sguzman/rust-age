@@ -154,6 +154,19 @@ impl ScriptProgram {
         read_u16(&self.data, file_offset)
     }
 
+    /// Mirror CE interpretFindProcedure: return the first case-insensitive
+    /// procedure-name match, including the main procedure at index zero.
+    /// Identifier bytes stay in the original game encoding; ASCII names are
+    /// compared without lossy Unicode conversion or executing bytecode.
+    pub fn find_procedure(&self, name: &[u8]) -> io::Result<Option<usize>> {
+        for index in 0..self.procedures.len() {
+            if self.procedure_name(index)?.eq_ignore_ascii_case(name) {
+                return Ok(Some(index));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn procedure_name(&self, index: usize) -> io::Result<&[u8]> {
         let entry = self
             .procedures
@@ -230,6 +243,14 @@ mod tests {
         assert_eq!(program.procedure_name(1).unwrap(), b"foo");
         assert_eq!(program.static_string(0).unwrap(), b"hello");
         assert_eq!(program.word_at(0).unwrap(), 0x8000);
+    }
+
+    #[test]
+    fn ce_procedure_lookup_matches_first_name_case_insensitively() {
+        let program = ScriptProgram::decode(&fixture()).unwrap();
+        assert_eq!(program.find_procedure(b"MAIN").unwrap(), Some(0));
+        assert_eq!(program.find_procedure(b"fOo").unwrap(), Some(1));
+        assert_eq!(program.find_procedure(b"not_a_proc").unwrap(), None);
     }
 
     #[test]
