@@ -1350,6 +1350,107 @@ mod tests {
     }
 
     #[test]
+    fn sequential_condition_poll_observes_new_call_when_on_later_entry() {
+        // In pinned CE doEvents, procedure zero may arm procedure one while
+        // its own condition is being evaluated. The later entry is visited
+        // with its newly written conditional flag and bytecode offset.
+        let mut first = Vec::new();
+        push_int(&mut first, 28); // procedure one's condition entry
+        push_int(&mut first, 1); // procedure one
+        opcode(&mut first, 0x8007); // CE CALL_WHEN
+        push_int(&mut first, 0); // first condition is false
+        opcode(&mut first, 0x8011);
+        let mut second = Vec::new();
+        push_int(&mut second, 1); // later condition is true
+        opcode(&mut second, 0x8011);
+        let vm = synthetic_due_vm(&first, &second, 0);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(300, 5, &mut |_, _| {
+                Err(super::invalid("gameplay natives disabled"))
+            })
+            .unwrap();
+        assert_eq!(poll.ready, [1]);
+        assert_eq!(poll.condition_terminations.len(), 2);
+        assert_eq!(poll.procedures[0].flags, 0x02);
+        assert_eq!(poll.procedures[1].flags, 0);
+        assert_eq!(poll.procedures[1].condition_offset, 28);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(vm.runtime_procedures()[1].condition_offset, 28);
+        assert!(vm.stack().is_empty());
+    }
+
+    #[test]
+    fn sequential_condition_poll_cancel_blocks_later_condition() {
+        let mut first = Vec::new();
+        push_int(&mut first, 1);
+        opcode(&mut first, 0x8048); // CE CANCEL later conditional event
+        push_int(&mut first, 0); // first condition false
+        opcode(&mut first, 0x8011);
+        let mut second = Vec::new();
+        push_int(&mut second, 1);
+        opcode(&mut second, 0x8011);
+        let vm = synthetic_due_vm(&first, &second, 0x02);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(300, 4, &mut |_, _| {
+                Err(super::invalid("gameplay natives disabled"))
+            })
+            .unwrap();
+        assert!(poll.ready.is_empty());
+        assert_eq!(poll.condition_terminations.len(), 1);
+        assert_eq!(poll.procedures[0].flags, 0x02);
+        assert_eq!(poll.procedures[1].flags, 0);
+        assert_eq!(poll.procedures[1].condition_offset, 0);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[1].condition_offset, 28);
+    }
+
+    #[test]
+    fn sequential_condition_poll_cancel_all_disarms_earlier_and_later_entries() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x8049); // CE CANCEL_ALL
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8011);
+        let mut second = Vec::new();
+        push_int(&mut second, 1);
+        opcode(&mut second, 0x8011);
+        let vm = synthetic_due_vm(&first, &second, 0x02);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(300, 3, &mut |_, _| {
+                Err(super::invalid("gameplay natives disabled"))
+            })
+            .unwrap();
+        assert!(poll.ready.is_empty());
+        assert_eq!(poll.condition_terminations.len(), 1);
+        assert_eq!(poll.procedures[0].flags, 0);
+        assert_eq!(poll.procedures[1].flags, 0);
+        assert_eq!(poll.procedures[0].condition_offset, 0);
+        assert_eq!(poll.procedures[1].condition_offset, 0);
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+    }
+
+    #[test]
+    fn sequential_condition_poll_rejects_bad_new_call_when_offset_atomically() {
+        let mut first = Vec::new();
+        push_int(&mut first, -1);
+        push_int(&mut first, 1);
+        opcode(&mut first, 0x8007);
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8011);
+        let vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        assert!(vm
+            .preview_due_procedure_poll_with_host_bounded(300, 5, &mut |_, _| {
+                Err(super::invalid("gameplay natives disabled"))
+            })
+            .is_err());
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(vm.runtime_procedures()[1].condition_offset, 28);
+        assert!(vm.stack().is_empty());
+        assert_eq!(vm.pc(), 0);
+    }
+
+    #[test]
     fn sequential_condition_poll_discards_prior_stack_effects_on_error() {
         let mut first = Vec::new();
         push_int(&mut first, 77);
