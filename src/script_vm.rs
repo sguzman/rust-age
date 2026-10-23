@@ -374,8 +374,7 @@ impl ScriptVm {
             return Err(invalid("CE local interrupt arguments not supported"));
         }
         let mut probe = self.clone();
-        let old_pc = i32::try_from(probe.pc)
-            .map_err(|_| invalid("CE return PC exceeds i32"))?;
+        let old_pc = i32::try_from(probe.pc).map_err(|_| invalid("CE return PC exceeds i32"))?;
         let body = usize::try_from(procedure.body_offset)
             .map_err(|_| invalid("negative CE interrupt body offset"))?;
         probe.program.word_at(body)?;
@@ -397,9 +396,7 @@ impl ScriptVm {
                 // CE op_pop_flags_return_val_exit pops the return value,
                 // window ID, checkWait pointer, flags, and return PC in order.
                 let result = probe.pop()?;
-                if probe.pop()? != ScriptValue::Int(0)
-                    || probe.pop()? != ScriptValue::Pointer(0)
-                {
+                if probe.pop()? != ScriptValue::Int(0) || probe.pop()? != ScriptValue::Pointer(0) {
                     return Err(invalid("unsupported CE interrupt host frame"));
                 }
                 let flags = probe.pop_int()?;
