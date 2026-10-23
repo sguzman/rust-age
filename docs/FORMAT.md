@@ -72,3 +72,7 @@ This is strictly a read-only, synthetic-test-backed reader. It does not instanti
 ## FRM animation timeline
 
 `AnimationTimeline` selects looping FRM frame indices from **elapsed monotonic time**, independent of the SDL2 redraw loop. It uses the original `art_frame_fps` ten-FPS fallback for zero-rate assets and exact integer nanosecond arithmetic for frame boundaries. Negative header frame rates are currently rejected as invalid scheduling input. This is a pure timing primitive, not a gameplay event queue or automatic sprite animator.
+
+## Native C++ / Rust differential geometry oracle
+
+`tests/spatial_oracle.cc` is a small, self-contained C++ translation of CE's original integer tile and square projection formulas. `src/bin/spatial_probe.rs` emits the corresponding Rust coordinates. GitHub CI compiles the C++ oracle and compares more than 2,000 lines of hex, floor-square and roof-square output across several center positions, including even and odd columns. This verifies **numeric projection only**; it does not compare map files, visual lighting, world movement or game script semantics.
