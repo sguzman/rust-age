@@ -1818,10 +1818,10 @@ mod tests {
         // the data stack. CALL_AT writes the procedure table in that VM.
         let mut first = Vec::new();
         opcode(&mut first, 0x801A); // consume setupCall argument marker
+        push_int(&mut first, 37); // return value retained beneath CALL_AT operands
         push_int(&mut first, 1); // delay in seconds
         push_int(&mut first, 1); // second procedure
-        opcode(&mut first, 0x8006); // CALL_AT
-        push_int(&mut first, 37); // return value
+        opcode(&mut first, 0x8006); // CALL_AT at CE's synthetic return marker 20
         opcode(&mut first, 0x8025); // POP_FLAGS_RETURN_VAL_EXIT
         assert_eq!(first.len(), 24);
         let mut vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
