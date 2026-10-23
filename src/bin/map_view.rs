@@ -77,7 +77,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let destination = &mut pixels[y * pitch..y * pitch + WIDTH * 3];
                     for (x, index) in row.iter().enumerate() {
                         let offset = x * 3;
-                        destination[offset..offset + 3].copy_from_slice(&palette.rgb8_preview(*index));
+                        destination[offset..offset + 3]
+                            .copy_from_slice(&palette.rgb8_preview(*index));
                     }
                 }
             })
