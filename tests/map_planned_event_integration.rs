@@ -484,3 +484,80 @@ fn cloned_map_and_game_global_reads_use_immutable_values_and_deny_writes() {
         .is_err());
     assert_eq!(environment.map_locals.globals(), [14]);
 }
+
+#[test]
+fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests() {
+    let mut environment = environment();
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![12],
+            locals: vec![],
+        })
+        .unwrap();
+    environment.game_globals = Some(GameGlobalState::from_initial_values(&[3]).unwrap());
+
+    // POP setupCall's argument marker; PUSH map index 0; PUSH value 19;
+    // set_map_var; script_overrides; POP_FLAGS_EXIT.
+    let mut code = vec![0x80, 0x1A, 0xC0, 0x01];
+    code.extend_from_slice(&0_i32.to_be_bytes());
+    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&19_i32.to_be_bytes());
+    code.extend_from_slice(&[0x80, 0xC4, 0x80, 0xB9, 0x80, 0x21]);
+    assert_eq!(code.len(), 20);
+    let mut runtime = ScriptRuntime::new();
+    runtime.register(1, synthetic_vm_with_body(&code)).unwrap();
+    environment.scripts.runtime = runtime;
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    let sandbox = environment
+        .preview_planned_sandbox_bounded(&plan, clock, 8)
+        .unwrap();
+    assert_eq!(sandbox.returned, None);
+    assert!(sandbox.overrides);
+    assert_eq!(sandbox.map_locals.globals(), [19]);
+    assert_eq!(sandbox.game_globals.as_ref().unwrap().values(), [3]);
+    assert_eq!(environment.map_locals.globals(), [12]);
+    assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+
+    // The identical CE setup frame can also mutate a *cloned* quest flag.
+    code[15] = 0xC6; // SET_GLOBAL_VAR (0x80C6) in place of MAP-var write
+    let mut runtime = ScriptRuntime::new();
+    runtime.register(1, synthetic_vm_with_body(&code)).unwrap();
+    environment.scripts.runtime = runtime;
+    let sandbox = environment
+        .preview_planned_sandbox_bounded(&plan, clock, 8)
+        .unwrap();
+    assert_eq!(sandbox.map_locals.globals(), [12]);
+    assert_eq!(sandbox.game_globals.as_ref().unwrap().values(), [19]);
+    assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
+
+    // Missing originals are never fabricated by the opt-in sandbox.
+    environment.game_globals = None;
+    assert!(environment
+        .preview_planned_sandbox_bounded(&plan, clock, 8)
+        .is_err());
+    assert_eq!(environment.map_locals.globals(), [12]);
+
+    // A gameplay time-advance native remains forbidden even in this sandbox.
+    let mut runtime = ScriptRuntime::new();
+    runtime
+        .register(
+            1,
+            synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xFC, 0x80, 0x21]),
+        )
+        .unwrap();
+    environment.scripts.runtime = runtime;
+    assert!(environment
+        .preview_planned_sandbox_bounded(&plan, clock, 8)
+        .is_err());
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
