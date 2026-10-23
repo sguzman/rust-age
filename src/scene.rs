@@ -12,7 +12,8 @@ use crate::object_tables::ObjectTables;
 use crate::pathfinding::make_path;
 use crate::prototype::PrototypeBody;
 use crate::script_binding::{
-    bind_script_procedures, bind_scripts, ScriptBinding, ScriptProcedureBinding,
+    bind_script_procedures, bind_scripts, install_map_scripts, BoundScriptRuntime, ScriptBinding,
+    ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
 use std::io;
@@ -81,6 +82,15 @@ impl StaticScene {
         assets: &mut GameAssets,
     ) -> io::Result<Vec<ScriptProcedureBinding>> {
         bind_script_procedures(assets, &self.scripts)
+    }
+
+    /// Decode installed .INT programs into independent, unstarted Rust VMs.
+    /// This is a read-only preparation path, not map script lifecycle entry.
+    pub fn unstarted_script_runtime(
+        &self,
+        assets: &mut GameAssets,
+    ) -> io::Result<BoundScriptRuntime> {
+        install_map_scripts(assets, &self.scripts)
     }
 
     /// CE-style numeric route through the initial static object collision.

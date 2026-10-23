@@ -7,6 +7,8 @@ use crate::assets::GameAssets;
 use crate::script_data::ScriptTables;
 use crate::script_list::ScriptRunInfo;
 use crate::script_procedures::build_lookup_table;
+use crate::script_runtime::ScriptRuntime;
+use crate::script_vm::ScriptVm;
 use std::collections::BTreeMap;
 use std::io;
 
@@ -108,9 +110,57 @@ pub fn bind_script_procedures(
     Ok(resolved)
 }
 
+/// MAP script record installation diagnostics; missing scripts remain
+/// visible and keep their original bindings, rather than receiving a VM.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledScriptBinding {
+    pub binding: ScriptBinding,
+    pub instance_id: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BoundScriptRuntime {
+    pub runtime: ScriptRuntime,
+    pub entries: Vec<InstalledScriptBinding>,
+}
+
+/// Load one *independent* Rust VM per resolved MAP script record, following
+/// original MAP -> scripts.lst -> installed INT paths. Script instances get
+/// stable 1-based record-ordinal Rust IDs; these IDs are not original SIDs.
+/// This only decodes bytecode and registers instances: it never executes a
+/// procedure or fires a Fallout engine event.
+pub fn install_map_scripts(
+    assets: &mut GameAssets,
+    tables: &ScriptTables,
+) -> io::Result<BoundScriptRuntime> {
+    let bindings = bind_scripts(assets, tables)?;
+    let mut runtime = ScriptRuntime::new();
+    let mut entries = Vec::with_capacity(bindings.len());
+    for (ordinal, binding) in bindings.into_iter().enumerate() {
+        let instance_id = if binding.script_index >= 0 && binding.path.is_some() {
+            let index = (binding.script_index as u32) & 0x00FF_FFFF;
+            if let Some(program) = assets.script_program_by_index(index)? {
+                let id = u64::try_from(ordinal + 1)
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "CE script instance ID exceeds u64"))?;
+                runtime.register(id, ScriptVm::new(program))?;
+                Some(id)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        entries.push(InstalledScriptBinding {
+            binding,
+            instance_id,
+        });
+    }
+    Ok(BoundScriptRuntime { runtime, entries })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{bind_script_procedures, bind_scripts};
+    use super::{bind_script_procedures, bind_scripts, install_map_scripts};
     use crate::assets::GameAssets;
     use crate::script_data::{ScriptRecord, ScriptTables};
     use std::fs;
@@ -193,6 +243,16 @@ mod tests {
         assert_eq!(detail[2].procedure_count, None); // missing installed INT
         assert_eq!(detail[3].procedure_count, None); // negative index
         assert!(detail[3].actions.is_none());
+        let loaded = install_map_scripts(&mut assets, &tables).unwrap();
+        assert_eq!(loaded.entries.len(), 4);
+        assert_eq!(loaded.runtime.len(), 1);
+        assert_eq!(loaded.entries[0].instance_id, Some(1));
+        assert!(loaded.entries[1].instance_id.is_none());
+        assert!(loaded.entries[2].instance_id.is_none());
+        assert!(loaded.entries[3].instance_id.is_none());
+        assert_eq!(loaded.runtime.vm(1).unwrap().program.procedures().len(), 1);
+        assert_eq!(loaded.runtime.vm(1).unwrap().pc(), 0);
+        assert!(loaded.runtime.vm(1).unwrap().stack().is_empty());
         fs::remove_dir_all(root).unwrap();
     }
 }
