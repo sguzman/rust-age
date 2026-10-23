@@ -81,10 +81,11 @@ fn synthetic_vm_with_followup_condition(expected_fixed_parameter: i32) -> Script
     second.extend_from_slice(&0xC001_u16.to_be_bytes());
     second.extend_from_slice(&expected_fixed_parameter.to_be_bytes());
     second.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]); // EQUAL; STOP
-    let mut bytes = vec![0_u8; 64];
+    // CE stores the procedure table immediately after the 42-byte
+    // bytecode header. Do not insert an invented 22-byte padding section.
+    let mut bytes = vec![0_u8; 42];
     bytes[..first.len()].copy_from_slice(&first);
     bytes[28..28 + second.len()].copy_from_slice(&second);
-    bytes[48..52].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
     bytes.extend_from_slice(&2_i32.to_be_bytes());
     let mut names = Vec::new();
     for (name, flags, condition_offset) in [
@@ -92,7 +93,9 @@ fn synthetic_vm_with_followup_condition(expected_fixed_parameter: i32) -> Script
         (b"map_enter_p_proc".as_slice(), 0_i32, 0_i32),
     ] {
         let identifier_offset = 4 + names.len() as i32;
-        for field in [identifier_offset, flags, 0, condition_offset, 48, 0] {
+        // This preview never dispatches the body. Point its synthetic
+        // entry to a valid opcode without overlapping the CE table.
+        for field in [identifier_offset, flags, 0, condition_offset, 28, 0] {
             bytes.extend_from_slice(&field.to_be_bytes());
         }
         names.extend_from_slice(name);
