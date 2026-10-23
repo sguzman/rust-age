@@ -16,10 +16,7 @@ fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
     let mut bytes = vec![0_u8; 42];
     bytes[20..22].copy_from_slice(&opcode.to_be_bytes());
     bytes.extend_from_slice(&2_i32.to_be_bytes());
-    for record in [
-        [4_i32, 0, 0, 0, 0, 0],
-        [9_i32, *flags, 0, 0, *body, *argc],
-    ] {
+    for record in [[4_i32, 0, 0, 0, 0, 0], [9_i32, *flags, 0, 0, *body, *argc]] {
         for field in record {
             bytes.extend_from_slice(&field.to_be_bytes());
         }
