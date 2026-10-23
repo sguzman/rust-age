@@ -1,5 +1,5 @@
 // GPL-2.0-or-later. Independent invented C++ oracle adapted from pinned
-// Fallout 1 CE MAP-global bounds/read, integer EQUAL and IF branch semantics.
+// Fallout 1 CE MAP-global bounds/read, integer EQUAL, IF and WHILE branch semantics.
 // These are synthetic values, not tests against compiled original gameplay.
 #include <fstream>
 #include <iostream>
@@ -9,10 +9,10 @@ int main(int argc, char** argv) {
     if (argc != 2) return 2;
     std::ifstream stream(argv[1]);
     if (!stream) return 2;
-    std::string name;
+    std::string name, mode;
     int count, index, wanted, first, second;
-    while (stream >> name >> count >> index >> wanted >> first >> second) {
-        if (count < 0 || count > 2) return 2;
+    while (stream >> name >> mode >> count >> index >> wanted >> first >> second) {
+        if ((mode != "IF" && mode != "WHILE") || count < 0 || count > 2) return 2;
         const int values[] = {first, second};
         const int mapValue = index >= 0 && index < count
             ? values[index] : -1;

@@ -14,12 +14,17 @@ use rust_age::script_vm::ScriptVm;
 use std::error::Error;
 
 fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
-    let values = parts[1..]
+    let values = parts[2..]
         .iter()
         .map(|value| value.parse::<i32>())
         .collect::<Result<Vec<_>, _>>()?;
     let [count, index, wanted, first, second] = values.as_slice() else {
         return Err("wrong synthetic CE condition case length".into());
+    };
+    let (control, false_arm, step_budget) = match parts[1] {
+        "IF" => (0x802F_u16, 32_i32, 8_usize),
+        "WHILE" => (0x8030_u16, 34_i32, 9_usize),
+        _ => return Err("invalid CE condition branch selector".into()),
     };
     let count = usize::try_from(*count)?;
     if count > 2 {
@@ -51,17 +56,21 @@ fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
     // otherwise it drops the destination and executes the true arm.
     let mut code = Vec::new();
     code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH false-arm address
-    code.extend_from_slice(&32_i32.to_be_bytes());
+    code.extend_from_slice(&false_arm.to_be_bytes());
     code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH MAP index
     code.extend_from_slice(&index.to_be_bytes());
     code.extend_from_slice(&0x80C3_u16.to_be_bytes()); // map_var
     code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH expected value
     code.extend_from_slice(&wanted.to_be_bytes());
-    code.extend_from_slice(&[0x80, 0x33, 0x80, 0x2F]); // EQUAL; IF
+    code.extend_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+    code.extend_from_slice(&control.to_be_bytes()); // IF or WHILE
+    if control == 0x8030 {
+        code.extend_from_slice(&0x801A_u16.to_be_bytes()); // WHILE keeps the true branch target
+    }
     code.extend_from_slice(&0xC001_u16.to_be_bytes()); // true
     code.extend_from_slice(&1_i32.to_be_bytes());
     code.extend_from_slice(&0x8011_u16.to_be_bytes()); // STOP
-    assert_eq!(code.len(), 32);
+    assert_eq!(code.len(), usize::try_from(false_arm)?);
     code.extend_from_slice(&0xC001_u16.to_be_bytes()); // false
     code.extend_from_slice(&0_i32.to_be_bytes());
     code.extend_from_slice(&0x8011_u16.to_be_bytes());
@@ -76,7 +85,7 @@ fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
     bytes.extend_from_slice(&0_i32.to_be_bytes());
     let vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
     let invocation = ScriptInvocationState::installed();
-    let result = vm.preview_condition_with_host_bounded(0, 8, &mut |opcode, stack| {
+    let result = vm.preview_condition_with_host_bounded(0, step_budget, &mut |opcode, stack| {
         apply_readonly_event_native_with_vars(
             snapshot,
             &invocation,
@@ -101,7 +110,7 @@ fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
 fn main() {
     for line in include_str!("../../tests/script_condition_read_cases.txt").lines() {
         let parts: Vec<_> = line.split_whitespace().collect();
-        if parts.len() != 6 {
+        if parts.len() != 7 {
             continue;
         }
         let result = probe(&parts)

@@ -1,20 +1,40 @@
-equal_first 2 0 12 12 25
-equal_second 2 1 25 12 25
-unequal_first 2 0 25 12 25
-unequal_second 2 1 12 12 25
-single_equal 1 0 4 4 9
-single_unequal 1 0 9 4 9
-absent_fallback 0 0 -1 5 9
-absent_nonmatch 0 0 0 5 9
-negative_fallback 2 -1 -1 5 9
-negative_nonmatch 2 -3 5 5 9
-high_fallback 2 2 -1 5 9
-high_nonmatch 2 2 9 5 9
-single_high_fallback 1 1 -1 5 9
-minimum_integer 2 0 -2147483648 -2147483648 0
-maximum_integer 2 1 2147483647 0 2147483647
-zeros_match 2 0 0 0 0
-zeros_nonmatch 2 1 1 0 0
-negative_values 2 1 -44 -30 -44
-single_negative_index 1 -1 -1 -1 0
-absent_negative_index 0 -1 -1 0 0
+equal_first_if IF 2 0 12 12 25
+equal_first_while WHILE 2 0 12 12 25
+equal_second_if IF 2 1 25 12 25
+equal_second_while WHILE 2 1 25 12 25
+unequal_first_if IF 2 0 25 12 25
+unequal_first_while WHILE 2 0 25 12 25
+unequal_second_if IF 2 1 12 12 25
+unequal_second_while WHILE 2 1 12 12 25
+single_equal_if IF 1 0 4 4 9
+single_equal_while WHILE 1 0 4 4 9
+single_unequal_if IF 1 0 9 4 9
+single_unequal_while WHILE 1 0 9 4 9
+absent_fallback_if IF 0 0 -1 5 9
+absent_fallback_while WHILE 0 0 -1 5 9
+absent_nonmatch_if IF 0 0 0 5 9
+absent_nonmatch_while WHILE 0 0 0 5 9
+negative_fallback_if IF 2 -1 -1 5 9
+negative_fallback_while WHILE 2 -1 -1 5 9
+negative_nonmatch_if IF 2 -3 5 5 9
+negative_nonmatch_while WHILE 2 -3 5 5 9
+high_fallback_if IF 2 2 -1 5 9
+high_fallback_while WHILE 2 2 -1 5 9
+high_nonmatch_if IF 2 2 9 5 9
+high_nonmatch_while WHILE 2 2 9 5 9
+single_high_fallback_if IF 1 1 -1 5 9
+single_high_fallback_while WHILE 1 1 -1 5 9
+minimum_integer_if IF 2 0 -2147483648 -2147483648 0
+minimum_integer_while WHILE 2 0 -2147483648 -2147483648 0
+maximum_integer_if IF 2 1 2147483647 0 2147483647
+maximum_integer_while WHILE 2 1 2147483647 0 2147483647
+zeros_match_if IF 2 0 0 0 0
+zeros_match_while WHILE 2 0 0 0 0
+zeros_nonmatch_if IF 2 1 1 0 0
+zeros_nonmatch_while WHILE 2 1 1 0 0
+negative_values_if IF 2 1 -44 -30 -44
+negative_values_while WHILE 2 1 -44 -30 -44
+single_negative_index_if IF 1 -1 -1 -1 0
+single_negative_index_while WHILE 1 -1 -1 -1 0
+absent_negative_index_if IF 0 -1 -1 0 0
+absent_negative_index_while WHILE 0 -1 -1 0 0
