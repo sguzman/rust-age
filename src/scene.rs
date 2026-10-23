@@ -153,7 +153,10 @@ impl DetachedMapEventSessions {
         target: Option<ObjectKey>,
     ) -> io::Result<()> {
         let owner = environment.owner_for_instance(instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE script event instance unresolved")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE script event instance unresolved",
+            )
         })?;
         let entry = self
             .sessions
@@ -202,7 +205,10 @@ impl DetachedMapEventSessions {
         self.sessions
             .get_mut(&instance_id)
             .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "CE script event session missing")
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE script event session missing",
+                )
             })?
             .finish_action()
     }
