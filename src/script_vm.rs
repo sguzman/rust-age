@@ -382,6 +382,82 @@ impl ScriptVm {
 
     /// Preserve the core-only CE local interrupt preview, never supplying an
     /// implicit game-native host. The VM is cloned and never mutated.
+    /// Bounded, clone-only preview of a local CE executeProc/setupCall
+    /// procedure body. The real CE interpreter uses return marker 20 and
+    /// ends local calls with POP_FLAGS_EXIT (0x8021) or
+    /// POP_FLAGS_RETURN_VAL_EXIT (0x8025). This permits supported core
+    /// opcodes only: every game-native operation, external call, wait and
+    /// side effect outside the cloned VM fails closed. The installed VM,
+    /// MAP, quest globals, event state and script lifecycle are unchanged.
+    ///
+    /// A returned None means the original local procedure completed without
+    /// a return value; Some(value) corresponds to 0x8025. This does NOT
+    /// dispatch a game script or model the first-load runProgram path.
+    pub fn preview_local_action_core_bounded(
+        &self,
+        procedure_index: usize,
+        max_steps: usize,
+    ) -> io::Result<Option<ScriptValue>> {
+        let procedure = self
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE local action procedure index outside table"))?;
+        if procedure.flags & 0x04 != 0 {
+            return Err(invalid("CE imported local action is not supported"));
+        }
+        if procedure.argument_count != 0 {
+            return Err(invalid("CE local action arguments are not supported"));
+        }
+        let body = usize::try_from(procedure.body_offset)
+            .map_err(|_| invalid("CE local action has negative body offset"))?;
+        self.program.word_at(body)?;
+        let mut probe = self.clone();
+        let original_pc =
+            i32::try_from(probe.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
+        probe.push_return(ScriptValue::Int(original_pc))?;
+        probe.push_return(ScriptValue::Int(20))?;
+        let flags = if probe.critical_section { 0x80 } else { 0 };
+        probe.push(ScriptValue::Int(flags))?;
+        probe.push(ScriptValue::Pointer(0))?;
+        probe.push(ScriptValue::Int(0))?; // synthetic window ID
+        probe.push(ScriptValue::Int(0))?; // CE setupCall argument marker
+        probe.critical_section = procedure.flags & 0x10 != 0;
+        probe.halted = false;
+        probe.pc = body;
+
+        for _ in 0..max_steps {
+            let opcode = probe.program.word_at(probe.pc)?;
+            if opcode == 0x8021 || opcode == 0x8025 {
+                let returned = if opcode == 0x8025 {
+                    Some(probe.pop()?)
+                } else {
+                    None
+                };
+                // setupCall's no-argument marker must have been consumed
+                // by the script before the return operation.
+                if probe.pop()? != ScriptValue::Int(0)
+                    || probe.pop()? != ScriptValue::Pointer(0)
+                {
+                    return Err(invalid("CE local action host frame is not balanced"));
+                }
+                let _saved_flags = probe.pop_int()?;
+                if probe.pop_return_int()? != 20 {
+                    return Err(invalid("CE local action return marker mismatch"));
+                }
+                if probe.return_stack.last() != Some(&ScriptValue::Int(original_pc)) {
+                    return Err(invalid("CE local action saved PC was modified"));
+                }
+                return Ok(returned);
+            }
+            probe.step()?; // never supplies native or engine callbacks
+            if probe.halted {
+                return Err(invalid("CE local action stopped without a return"));
+            }
+        }
+        Err(invalid("CE local action preview instruction budget exhausted"))
+    }
+
     pub fn preview_local_interrupt_bounded(
         &self,
         procedure_index: usize,
@@ -965,6 +1041,59 @@ mod tests {
 
     fn opcode(buffer: &mut Vec<u8>, value: u16) {
         buffer.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn local_action_vm(instructions: &[u8], flags: i32, argument_count: i32) -> ScriptVm {
+        assert!(instructions.len() <= 22);
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..20 + instructions.len()].copy_from_slice(instructions);
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, flags, 0, 0, 20, argument_count] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn local_action_core_preview_exits_with_source_accurate_return_frame() {
+        let instructions = [0x80_u8, 0x1A, 0x80, 0x21]; // POP; POP_FLAGS_EXIT
+        let vm = local_action_vm(&instructions, 0x10, 0);
+        assert_eq!(vm.preview_local_action_core_bounded(0, 4).unwrap(), None);
+        assert_eq!(vm.pc(), 0);
+        assert!(!vm.halted());
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+    }
+
+    #[test]
+    fn local_action_value_return_and_failure_are_fully_detached() {
+        let mut code = vec![0x80, 0x1A, 0xC0, 0x01];
+        code.extend_from_slice(&42_i32.to_be_bytes());
+        code.extend_from_slice(&0x8025_u16.to_be_bytes());
+        let vm = local_action_vm(&code, 0, 0);
+        assert_eq!(
+            vm.preview_local_action_core_bounded(0, 3).unwrap(),
+            Some(ScriptValue::Int(42))
+        );
+        assert!(vm.preview_local_action_core_bounded(0, 2).is_err());
+        assert!(vm.preview_local_action_core_bounded(9, 5).is_err());
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+
+        let unbalanced = local_action_vm(&[0x80, 0x21], 0, 0);
+        assert!(unbalanced.preview_local_action_core_bounded(0, 2).is_err());
+        let halted = local_action_vm(&[0x80, 0x1A, 0x80, 0x11], 0, 0);
+        assert!(halted.preview_local_action_core_bounded(0, 3).is_err());
+        let native = local_action_vm(&[0x80, 0xBD, 0x80, 0x21], 0, 0);
+        assert!(native.preview_local_action_core_bounded(0, 3).is_err());
+        let imported = local_action_vm(&[0x80, 0x1A, 0x80, 0x21], 0x04, 0);
+        assert!(imported.preview_local_action_core_bounded(0, 3).is_err());
+        let args = local_action_vm(&[0x80, 0x1A, 0x80, 0x21], 0, 1);
+        assert!(args.preview_local_action_core_bounded(0, 3).is_err());
     }
 
     #[test]
