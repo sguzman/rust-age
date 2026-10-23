@@ -40,10 +40,9 @@ fn main() {
         if parts.len() != 3 {
             continue;
         }
-        let result = (|| -> Result<String, Box<dyn Error>> {
-            probe(parts[1], parts[2].parse()?)
-        })()
-        .unwrap_or_else(|_| "ERR".to_owned());
+        let result =
+            (|| -> Result<String, Box<dyn Error>> { probe(parts[1], parts[2].parse()?) })()
+                .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", parts[0], result);
     }
 }
