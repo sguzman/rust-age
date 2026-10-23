@@ -857,6 +857,7 @@ impl ScriptVm {
             opcode,
             0x80B4 | 0x80B5 | 0x80B9 | 0x80EA | 0x80EB | 0x80F0 | 0x80F1 | 0x80F2 | 0x80F6 | 0x80F7
         ) && !(0x80C1..=0x80C7).contains(&opcode)
+            && !(0x8118..=0x8119).contains(&opcode)
         {
             return self.step();
         }
