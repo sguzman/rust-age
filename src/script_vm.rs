@@ -196,6 +196,26 @@ pub struct PreviewedConditionFrame {
     pub procedures: Vec<crate::script_program::ProcedureEntry>,
 }
 
+/// A returned-only, discard-only post-call frame from CE's local
+/// executeProc/setupCall protocol. This is the scratch VM AFTER the local
+/// call finished by POP_FLAGS_EXIT/POP_FLAGS_RETURN_VAL_EXIT, including its
+/// retained saved-PC return marker and hypothetical procedure scheduling.
+///
+/// Nothing in this structure may be applied to the installed VM: native
+/// adapters MUST be pure/read-only and game dispatch is still disabled.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewedLocalActionVmFrame {
+    pub returned: Option<ScriptValue>,
+    pub program_counter: usize,
+    pub saved_low_flags: u16,
+    pub restored_low_flags: u16,
+    pub data_stack: Vec<ScriptValue>,
+    pub return_stack: Vec<ScriptValue>,
+    pub frame_pointer: i32,
+    pub base_pointer: i32,
+    pub procedures: Vec<crate::script_program::ProcedureEntry>,
+}
+
 /// Discard-only CE doEvents candidate result. Earlier conditional stack
 /// and scheduling effects are visible to later procedures in the clone.
 /// No installed VM, MAP globals, or native game callbacks are modified.
@@ -649,17 +669,34 @@ impl ScriptVm {
         })
     }
 
-    /// Explicit synthetic local CE action preview with caller-supplied
-    /// opcode handling. The program VM itself is cloned, but this callback
-    /// may have external side effects: callers must use pure read-only
-    /// native hosts when requesting a side-effect-free preview. Imported
-    /// procedures and unsupported core opcodes still fail closed.
+    /// Backwards-compatible returned-value projection of the full
+    /// scratch local-action frame below. The original interpreter is never
+    /// committed or mutated.
     pub fn preview_local_action_with_host_bounded(
         &self,
         procedure_index: usize,
         max_steps: usize,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<Option<ScriptValue>> {
+        self.preview_local_action_frame_with_host_bounded(
+            procedure_index,
+            max_steps,
+            native,
+        )
+        .map(|frame| frame.returned)
+    }
+
+    /// Inspect the full candidate state after a source-derived local
+    /// executeProc/setupCall frame returns, including procedure writes.
+    /// All effects remain on a CLONE. Callers must only supply read-only
+    /// native adapters; they are not rolled back if the adapter mutates its
+    /// own external state. Imported calls and unsupported opcodes fail.
+    pub fn preview_local_action_frame_with_host_bounded(
+        &self,
+        procedure_index: usize,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<PreviewedLocalActionVmFrame> {
         let procedure = self
             .runtime_procedures
             .get(procedure_index)
@@ -679,8 +716,11 @@ impl ScriptVm {
             i32::try_from(probe.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
         probe.push_return(ScriptValue::Int(original_pc))?;
         probe.push_return(ScriptValue::Int(20))?;
-        let flags = if probe.critical_section { 0x80 } else { 0 };
-        probe.push(ScriptValue::Int(flags))?;
+        let flags = probe.modeled_program_low_flags();
+        if flags & !0x80 != 0 {
+            return Err(invalid("CE local action has unsupported saved program flags"));
+        }
+        probe.push(ScriptValue::Int(i32::from(flags)))?;
         probe.push(ScriptValue::Pointer(0))?;
         probe.push(ScriptValue::Int(0))?; // synthetic window ID
         probe.push(ScriptValue::Int(0))?; // CE setupCall argument marker
@@ -706,10 +746,25 @@ impl ScriptVm {
                 if probe.return_stack.last() != Some(&ScriptValue::Int(original_pc)) {
                     return Err(invalid("CE local action saved PC was modified"));
                 }
-                return Ok(if opcode == 0x8025 {
-                    Some(probe.pop()?)
+                // Keep the CE value on the candidate operand stack.
+                // The older value-only API projects a COPY of this field.
+                let returned = if opcode == 0x8025 {
+                    Some(*probe.stack.last().ok_or_else(|| {
+                        invalid("CE local action return value missing after POP_FLAGS")
+                    })?)
                 } else {
                     None
+                };
+                return Ok(PreviewedLocalActionVmFrame {
+                    returned,
+                    program_counter: probe.pc,
+                    saved_low_flags: flags,
+                    restored_low_flags: probe.modeled_program_low_flags(),
+                    data_stack: probe.stack,
+                    return_stack: probe.return_stack,
+                    frame_pointer: probe.frame_pointer,
+                    base_pointer: probe.base_pointer,
+                    procedures: probe.runtime_procedures,
                 });
             }
             probe.step_with_variable_host(native)?;
@@ -1754,6 +1809,66 @@ mod tests {
         }
         bytes.extend_from_slice(&[0_u8; 12]);
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn detached_ce_local_action_frame_preserves_scheduled_mutations_only_on_clone() {
+        // Pinned CE source: executeProc pushes a zero argument marker,
+        // executes the body, and its return-value exit leaves a value on
+        // the data stack. CALL_AT writes the procedure table in that VM.
+        let mut first = Vec::new();
+        opcode(&mut first, 0x801A); // consume setupCall argument marker
+        push_int(&mut first, 1); // delay in seconds
+        push_int(&mut first, 1); // second procedure
+        opcode(&mut first, 0x8006); // CALL_AT
+        push_int(&mut first, 37); // return value
+        opcode(&mut first, 0x8025); // POP_FLAGS_RETURN_VAL_EXIT
+        assert_eq!(first.len(), 24);
+        let mut vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        vm.set_clock_millis(2000);
+        let before = vm.runtime_procedures().to_vec();
+        let frame = vm
+            .preview_local_action_frame_with_host_bounded(0, 6, &mut |_, _| {
+                Err(super::invalid("CE gameplay native unavailable"))
+            })
+            .unwrap();
+        assert_eq!(frame.returned, Some(ScriptValue::Int(37)));
+        assert_eq!(frame.data_stack, [ScriptValue::Int(37)]);
+        // setupCall saves the pre-invocation PC below the interrupt marker.
+        assert_eq!(frame.return_stack, [ScriptValue::Int(0)]);
+        assert_eq!(frame.program_counter, 20);
+        assert_eq!(frame.saved_low_flags, 0);
+        assert_eq!(frame.restored_low_flags, 0);
+        assert_eq!(frame.procedures[1].flags & 0x01, 0x01);
+        assert_eq!(frame.procedures[1].event_time, 3000);
+        assert_eq!(before[1].flags, 0);
+        assert_eq!(vm.runtime_procedures(), before);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(vm.pc(), 0);
+        assert_eq!(
+            vm.preview_local_action_core_bounded(0, 6).unwrap(),
+            Some(ScriptValue::Int(37))
+        );
+    }
+
+    #[test]
+    fn detached_ce_local_action_frame_aborts_unhandled_native_without_writes() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x801A); // POP setupCall marker
+        opcode(&mut first, 0x80FC); // forbidden game-native opcode
+        opcode(&mut first, 0x8021); // unreachable successful return
+        let vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        let before = vm.runtime_procedures().to_vec();
+        assert!(vm
+            .preview_local_action_frame_with_host_bounded(0, 3, &mut |_, _| {
+                Err(super::invalid("CE native host not installed"))
+            })
+            .is_err());
+        assert_eq!(vm.runtime_procedures(), before);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(vm.pc(), 0);
     }
 
     #[test]
