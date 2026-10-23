@@ -42,7 +42,10 @@ fn inspect_original_game_global_defaults_and_missing_assets() {
     assert!(stdout.contains("GAME_GLOBAL_VARS defaults: 2"), "{stdout}");
     assert!(stdout.contains("index 1: -12"), "{stdout}");
     assert!(stdout.contains("status: present"), "{stdout}");
-    assert!(stdout.contains("no Fallout script has executed"), "{stdout}");
+    assert!(
+        stdout.contains("no Fallout script has executed"),
+        "{stdout}"
+    );
 
     let invalid = Command::new(env!("CARGO_BIN_EXE_rust-age"))
         .arg("--inspect-game-global")
