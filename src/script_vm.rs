@@ -737,7 +737,7 @@ impl ScriptVm {
                 if probe.pc != 20
                     || probe.halt_reason != Some(ScriptHaltReason::ReturnFromCall)
                     || !probe.halted
-                    || probe.modeled_program_low_flags() != flags as u16
+                    || probe.modeled_program_low_flags() != flags
                 {
                     return Err(invalid("CE local action restored an invalid caller frame"));
                 }
