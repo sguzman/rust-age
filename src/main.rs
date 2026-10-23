@@ -256,9 +256,7 @@ fn main() {
                 let scene = StaticScene::load(&mut assets, path)?
                     .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
                 let environment = scene.unstarted_script_environment(&mut assets)?;
-                let actions = environment
-                    .scripts
-                    .plan_map_lifecycle(phase, sid, flags)?;
+                let actions = environment.scripts.plan_map_lifecycle(phase, sid, flags)?;
                 Ok((environment, actions))
             })();
             match result {
