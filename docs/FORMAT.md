@@ -124,3 +124,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Serialized MAP variable tables
 
 `MapHeader::decode_variables` now reads the exact CE `map_load_file` order: big-endian 32-bit global values immediately after the 236-byte header, followed by local values, then static squares and scripts. Synthetic mixed-sign tests verify slot ordering, truncation detection and correct offset into script/object data. This is read-only metadata; fresh-map `.GAM` overrides and all quest/VM mutations are not implemented.
+
+## CE object sprite bounds (read-only)
+
+`src/object_bounds.rs` translates CE `obj_bound` into safe integer math: the hex tile's native 32×16 anchor, FRM directional x/y offsets, object's own x/y offsets, center-bottom sprite registration, optional 1-pixel outline expansion, and floating objects positioned by saved sx/sy. Tests verify original integer coordinates, bounding boxes and invalid rotation/frame/tile handling. This is geometric placement only; original lighting, object ordering, alpha effects and painting remain unimplemented.

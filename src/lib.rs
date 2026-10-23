@@ -13,6 +13,7 @@ pub mod lzss;
 pub mod map;
 pub mod map_preview;
 pub mod message;
+pub mod object_bounds;
 pub mod object_data;
 pub mod object_tables;
 pub mod palette;
