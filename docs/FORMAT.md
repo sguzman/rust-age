@@ -196,3 +196,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## Linux MAP-to-INT script binding inspector
 
 `rust-age --inspect-map-scripts <installation> maps/<file>.map` prints each serialized map script's category, ordinal, SID, positional `scripts.lst` row, resolved `.INT` basename, CE `map_init/map_exit` declarations and local-variable offsets/counts. No VM callbacks or map scripts run. A synthetic Linux CLI smoke test verifies the joined result without commercial game assets.
+
+## Mutable CE map collision state (pure runtime primitive)
+
+The CE-derived `CollisionIndex` now supports same-elevation object relocation by stable `ObjectKey` and updates of original hidden, `NO_BLOCK`, and `MULTIHEX` flags. Moving a blocker removes it from the old tile and inserts it in the new tile without changing nearby geometry or unrelated occupants; tests cover move/idempotence, invalid targets and dynamic multihex visibility. This *only* updates the collision index: the original `obj_move_to_tile` also updates object tables, lighting, roofs, seen tiles, script triggers and exits, none of which is claimed or implemented by this primitive.

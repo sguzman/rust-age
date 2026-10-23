@@ -8,6 +8,7 @@
 use crate::hex::HexViewport;
 use crate::object_tables::ObjectTables;
 use std::collections::BTreeMap;
+use std::io;
 
 const OBJECT_HIDDEN: i32 = 0x01;
 const OBJECT_NO_BLOCK: i32 = 0x10;
@@ -99,6 +100,65 @@ impl CollisionIndex {
             }
         }
         None
+    }
+
+    /// Move an existing object to a different hex on the same elevation.
+    ///
+    /// This adjusts only the collision index, not MAP object records,
+    /// lighting, triggers, roofing or save state. Movement may be blocked
+    /// separately by the caller using first_blocker before committing it.
+    pub fn relocate(&mut self, key: ObjectKey, to: i32) -> io::Result<()> {
+        if !(0..40_000).contains(&to) || key.elevation >= 3 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid CE collision destination"));
+        }
+        let Some((from_elevation, from_tile)) = self
+            .objects
+            .iter()
+            .find_map(|(&(elevation, tile), objects)| {
+                if elevation == key.elevation && objects.iter().any(|object| object.key == key) {
+                    Some((elevation, tile))
+                } else {
+                    None
+                }
+            })
+        else {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "CE collision object not found"));
+        };
+        if from_tile == to {
+            return Ok(());
+        }
+        let origin = (from_elevation, from_tile);
+        let Some(objects) = self.objects.get_mut(&origin) else {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "missing CE collision origin"));
+        };
+        let Some(position) = objects.iter().position(|object| object.key == key) else {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "missing CE collision identity"));
+        };
+        let mut moved = objects.remove(position);
+        let remove_empty = objects.is_empty();
+        if remove_empty {
+            self.objects.remove(&origin);
+        }
+        moved.tile = to;
+        let destination = self.objects.entry((key.elevation, to)).or_default();
+        let position = destination.partition_point(|object| object.key.ordinal < key.ordinal);
+        destination.insert(position, moved);
+        Ok(())
+    }
+
+    /// Change runtime visibility/NO_BLOCK/MULTIHEX flags without changing
+    /// original serialized MAP data.
+    pub fn set_flags(&mut self, key: ObjectKey, flags: i32) -> io::Result<()> {
+        for (&(elevation, _), objects) in &mut self.objects {
+            if elevation != key.elevation {
+                continue;
+            }
+            if let Some(object) = objects.iter_mut().find(|object| object.key == key) {
+                object.flags = flags;
+                return Ok(());
+            }
+        }
+        Err(io::Error::new(io::ErrorKind::NotFound, "CE collision object not found"))
     }
 
     pub fn is_passable(
@@ -204,6 +264,48 @@ mod tests {
             20098
         );
         assert!(huge.first_blocker(&view, -1, 0, None).is_none());
+    }
+
+    #[test]
+    fn moving_object_frees_original_hex_and_blocks_new_hex() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let key = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut index = index(vec![object(10, 20098, 2, 0)]);
+        assert!(!index.is_passable(&view, 20098, 0, None));
+        assert!(index.is_passable(&view, 20100, 0, None));
+        index.relocate(key, 20100).unwrap();
+        assert!(index.is_passable(&view, 20098, 0, None));
+        assert!(!index.is_passable(&view, 20100, 0, None));
+        assert_eq!(index.first_blocker(&view, 20100, 0, None).unwrap().tile, 20100);
+        index.relocate(key, 20100).unwrap(); // idempotent same-tile move
+        assert!(index.relocate(key, -1).is_err());
+        assert!(index.relocate(key, 40000).is_err());
+        assert!(index.relocate(ObjectKey { elevation: 1, ordinal: 0 }, 20098).is_err());
+        assert!(!index.is_passable(&view, 20100, 0, None));
+    }
+
+    #[test]
+    fn visibility_and_multihex_updates_change_collision_immediately() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let key = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut index = index(vec![object(15, 20098, 3, 0)]);
+        assert!(!index.is_passable(&view, 20098, 0, None));
+        assert!(index.is_passable(&view, 20099, 0, None));
+        index.set_flags(key, OBJECT_MULTIHEX).unwrap();
+        assert!(!index.is_passable(&view, 20099, 0, None));
+        index.set_flags(key, OBJECT_HIDDEN | OBJECT_MULTIHEX).unwrap();
+        assert!(index.is_passable(&view, 20098, 0, None));
+        assert!(index.is_passable(&view, 20099, 0, None));
+        index.set_flags(key, OBJECT_NO_BLOCK).unwrap();
+        assert!(index.is_passable(&view, 20098, 0, None));
+        index.set_flags(key, 0).unwrap();
+        assert!(!index.is_passable(&view, 20098, 0, None));
     }
 
     #[test]
