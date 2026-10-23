@@ -30,6 +30,7 @@ pub mod runtime_scene;
 pub mod scene;
 pub mod script_binding;
 pub mod script_clock;
+pub mod script_event_state;
 pub mod script_data;
 pub mod script_lifecycle;
 pub mod script_list;

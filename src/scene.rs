@@ -18,6 +18,7 @@ use crate::script_binding::{
 };
 use crate::script_data::ScriptTables;
 use crate::script_locals::MapScriptLocals;
+use crate::script_event_state::DetachedScriptEvent;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use std::io;
@@ -57,6 +58,13 @@ impl PreparedScriptEnvironment {
     pub fn owner_for_instance(&self, instance_id: u64) -> Option<ScriptOwnerResolution> {
         self.script_owners
             .resolution_for_instance(&self.scripts, instance_id)
+    }
+
+    /// Prepare event metadata for one actually installed INT instance.
+    /// No event callbacks or script procedures execute here.
+    pub fn detached_event_for_instance(&self, instance_id: u64) -> Option<DetachedScriptEvent> {
+        self.owner_for_instance(instance_id)
+            .map(DetachedScriptEvent::new)
     }
 }
 
