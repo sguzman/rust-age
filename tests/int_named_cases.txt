@@ -1,0 +1,8 @@
+basic main,start,foo StArT
+skip_main main,start main
+duplicate main,start,START START
+missing main,foo not_found
+single_main main MAIN
+mixed_case main,Map_Exit_P_Proc map_exit_p_proc
+no_procedures - start
+multi main,alpha,beta BETA
