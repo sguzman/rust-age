@@ -15,6 +15,7 @@ pub const SET_LOCAL_VAR_OPCODE: u16 = 0x80C2;
 pub const MAP_VAR_OPCODE: u16 = 0x80C3;
 pub const SET_MAP_VAR_OPCODE: u16 = 0x80C4;
 pub const SCRIPT_ACTION_OPCODE: u16 = 0x80C7;
+pub const SCRIPT_OVERRIDES_OPCODE: u16 = 0x80B9;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -116,6 +117,51 @@ pub fn run_variable_subset_bounded(
     })
 }
 
+/// Detached CE script.action / scriptOverrides for one known script SID.
+/// Original exec_script_proc resets overrides at the start of every action.
+/// These fields do not dispatch gameplay, execute real scripts, or
+/// suppress a game's default behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptInvocationState {
+    present: bool,
+    action: i32,
+    overrides: bool,
+}
+
+impl ScriptInvocationState {
+    pub fn installed() -> Self {
+        Self { present: true, action: 0, overrides: false }
+    }
+
+    pub fn missing() -> Self {
+        Self { present: false, action: 0, overrides: false }
+    }
+
+    /// CE exec_script_proc returns -1 when the SID cannot be found.
+    pub fn begin_action(&mut self, action: i32) -> bool {
+        if !self.present {
+            return false;
+        }
+        self.action = action;
+        self.overrides = false;
+        true
+    }
+
+    pub fn action(&self) -> i32 {
+        self.action
+    }
+
+    pub fn overrides(&self) -> bool {
+        self.overrides
+    }
+
+    fn mark_overrides(&mut self) {
+        if self.present {
+            self.overrides = true;
+        }
+    }
+}
+
 /// Gated CE op_script_action: original scr_find_sid_from_program lookup
 /// produces zero when no matching script can be found. Real script action
 /// state has not yet been linked; the caller supplies its current value.
@@ -149,6 +195,32 @@ pub fn run_with_script_action_bounded(
         game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
         SCRIPT_ACTION_OPCODE => push_script_action(stack, current_action),
         _ => Err(invalid("unrecognized CE native script-state opcode")),
+    })
+}
+
+/// Run explicitly supported CE script-state native instructions using
+/// a caller-owned invocation context. SCRIPT_OVERRIDES (0x80B9) changes only
+/// the local context flag, and SCRIPT_ACTION (0x80C7) reads its action.
+/// Normal ScriptVm::step() remains unable to execute these opcodes.
+pub fn run_invocation_subset_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    invocation: &mut ScriptInvocationState,
+    max_steps: usize,
+) -> io::Result<usize> {
+    vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
+        LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
+            apply_map_variable_opcode(locals, instance_id, opcode, stack)
+        }
+        game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
+        SCRIPT_ACTION_OPCODE => push_script_action(stack, Some(invocation.action())),
+        SCRIPT_OVERRIDES_OPCODE => {
+            invocation.mark_overrides();
+            Ok(())
+        }
+        _ => Err(invalid("unrecognized CE invocation opcode")),
     })
 }
 
