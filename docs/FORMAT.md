@@ -204,3 +204,7 @@ The CE-derived `CollisionIndex` now supports same-elevation object relocation by
 ## CE-style runtime actor route stepping (pure simulation)
 
 `src/actor_route.rs` connects the original hex-neighbor order, bounded CE path search and mutable collision index. The actor is located through its stable `ObjectKey`, excluded from its own blocker tests, and moved one rotation at a time only after rechecking current occupancy. A changed blocker yields `Blocked` without consuming the next step; external relocations invalidate stale routes. Synthetic tests verify blocked/retried routes and occupancy consistency. The simulation does not mutate original MAP records or provide time-stepped animation, doors, light/roof updates, script triggers or a playable main loop.
+
+## Mutable runtime scene: map table and collision consistency
+
+`src/runtime_scene.rs` adds a minimal owner for CE MAP object state. It starts from an already-decoded `StaticScene`, plans a route using the CE pathfinder, and applies one checked actor hex rotation at a time to **both** the original MAP object's tile/rotation fields and the live collision index. Visibility/NO_BLOCK flag changes similarly affect both representations. Synthetic tests check route completion, object-table synchronization and updated blocking state. This does not claim full `obj_move_to_tile` parity: CE roofing, lighting, scripts, exits, saved-state serialization and animation timing remain pending.

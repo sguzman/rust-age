@@ -55,6 +55,10 @@ impl ActorRoute {
         )
     }
 
+    pub fn actor_key(&self) -> ObjectKey {
+        self.key
+    }
+
     pub fn current_tile(&self) -> i32 {
         self.current_tile
     }

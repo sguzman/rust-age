@@ -24,6 +24,7 @@ pub mod pathfinding;
 pub mod prototype;
 pub mod prototype_list;
 pub mod scene;
+pub mod runtime_scene;
 pub mod script_binding;
 pub mod script_data;
 pub mod script_list;
