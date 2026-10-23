@@ -131,7 +131,7 @@ impl ObjectRecord {
                 }
                 let n = match kind {
                     ObjectKind::Item => match subtype {
-                        Some(3) => 2,         // weapon ammunition count and type
+                        Some(3) => 2,     // weapon ammunition count and type
                         Some(4..=6) => 1, // ammo, misc charges, key
                         Some(0..=2) => 0,
                         _ => return Err(invalid("item prototype subtype required")),

@@ -308,7 +308,10 @@ mod tests {
         let mut bytes = header(2 | 4 | 8, 0, 0);
         bytes.extend_from_slice(&[0_u8; 20]); // five empty script counts
         bytes.extend_from_slice(&[0_u8; 16]); // total and three empty object counts
-        let square = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let square = MapHeader::decode(&bytes)
+            .unwrap()
+            .decode_squares(&bytes)
+            .unwrap();
         let (scripts, objects, end) = square.decode_objects_with(&bytes, |_| Ok(None)).unwrap();
         assert_eq!(scripts.script_count(), 0);
         assert_eq!(objects.total_objects, 0);

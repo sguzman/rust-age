@@ -136,9 +136,9 @@ fn main() {
         [_, flag, directory, path] if flag == "--inspect-map" => {
             let result: std::io::Result<_> = (|| {
                 let mut assets = GameAssets::open(Path::new(directory))?;
-                let bytes = assets.read(Bank::Master, path)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })?;
+                let bytes = assets
+                    .read(Bank::Master, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
                 let header = MapHeader::decode(&bytes)?;
                 let squares = header.decode_squares(&bytes)?;
                 let (scripts, objects, object_end) =
