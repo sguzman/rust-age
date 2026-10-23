@@ -136,3 +136,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Composed static scene snapshot
 
 `src/scene.rs` assembles the original MAP loading format into one immutable `StaticScene`: header, global/local variable arrays, floor/roof square layers, serialized script metadata, per-elevation objects and nested inventories, and derived CE collision. It resolves variable-width object updates through original PID-to-PRO lookups, leveraging cached asset lists. The `route` method applies the CE pathfinder against static object occupancy. This is a **read-only parsed scene**, not a gameplay world; no mutable player, clock, combat, scripts or map transitions.
+
+## Shared static scene in CLI diagnostics
+
+`--inspect-map` and `--inspect-map-route` now use the same `StaticScene::load` assembly, preventing divergent MAP variable/script/object decoding paths in their diagnostics. The route command still only reports a list of CE rotations; actor movement is not yet implemented.

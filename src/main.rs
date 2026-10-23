@@ -1,14 +1,12 @@
 use rust_age::assets::{Bank, GameAssets};
-use rust_age::collision::CollisionIndex;
 use rust_age::dat::DatArchive;
 use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
 use rust_age::hex::HexViewport;
-use rust_age::map::MapHeader;
 use rust_age::map_preview::FloorPreview;
 use rust_age::palette::Palette;
-use rust_age::pathfinding::make_path;
-use rust_age::prototype::{Prototype, PrototypeBody};
+use rust_age::prototype::Prototype;
+use rust_age::scene::StaticScene;
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -138,53 +136,39 @@ fn main() {
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map" => {
-            let result: std::io::Result<_> = (|| {
-                let mut assets = GameAssets::open(Path::new(directory))?;
-                let bytes = assets
-                    .read(Bank::Master, path)?
-                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-                let header = MapHeader::decode(&bytes)?;
-                let squares = header.decode_squares(&bytes)?;
-                let (scripts, objects, object_end) =
-                    squares.decode_objects_with(&bytes, |pid| {
-                        let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::NotFound,
-                                format!("missing original prototype {pid:#010X}"),
-                            )
-                        })?;
-                        Ok(match proto.body {
-                            PrototypeBody::Item { item_type, .. } => Some(item_type),
-                            PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
-                            _ => None,
-                        })
-                    })?;
-                Ok((header, squares, scripts, objects, object_end))
-            })();
+            let result = GameAssets::open(Path::new(directory)).and_then(|mut assets| {
+                StaticScene::load(&mut assets, path)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
+                })
+            });
             match result {
-                Ok((header, squares, scripts, objects, object_end)) => {
+                Ok(scene) => {
                     println!(
                         "Fallout 1 map: {}",
-                        String::from_utf8_lossy(header.name_bytes())
+                        String::from_utf8_lossy(scene.header.name_bytes())
                     );
-                    println!("Entering tile: {}", header.entering_tile);
-                    println!("Entering elevation: {}", header.entering_elevation);
+                    println!("Entering tile: {}", scene.header.entering_tile);
+                    println!("Entering elevation: {}", scene.header.entering_elevation);
                     println!(
                         "Available square layers: {}",
-                        squares
+                        scene
+                            .squares
                             .elevations
                             .iter()
                             .filter(|layer| layer.is_some())
                             .count()
                     );
-                    println!("Original scripts begin at byte {}", squares.scripts_offset);
+                    println!(
+                        "Original scripts begin at byte {}",
+                        scene.squares.scripts_offset
+                    );
                     println!(
                         "Map variable slots: {} global, {} local",
-                        header.global_variable_count, header.local_variable_count
+                        scene.variables.globals.len(), scene.variables.locals.len()
                     );
-                    println!("Serialized script records: {}", scripts.script_count());
-                    println!("Serialized top-level objects: {}", objects.total_objects);
-                    println!("Original object data ends at byte {object_end}");
+                    println!("Serialized script records: {}", scene.scripts.script_count());
+                    println!("Serialized top-level objects: {}", scene.objects.total_objects);
+                    println!("Original object data ends at byte {}", scene.bytes_consumed);
                     println!("No scripts executed or gameplay objects instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
@@ -199,32 +183,14 @@ fn main() {
                 .unwrap_or_else(|_| fail("Invalid destination hex tile"));
             let result: std::io::Result<_> = (|| {
                 let mut assets = GameAssets::open(Path::new(directory))?;
-                let bytes = assets
-                    .read(Bank::Master, path)?
-                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-                let header = MapHeader::decode(&bytes)?;
-                let squares = header.decode_squares(&bytes)?;
-                let (_, objects, _) = squares.decode_objects_with(&bytes, |pid| {
-                    let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
-                        std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            format!("missing original prototype {pid:#010X}"),
-                        )
-                    })?;
-                    Ok(match proto.body {
-                        PrototypeBody::Item { item_type, .. } => Some(item_type),
-                        PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
-                        _ => None,
-                    })
+                let scene = StaticScene::load(&mut assets, path)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
                 })?;
-                let view = HexViewport::new(200, 200, 640, 380, header.entering_tile)
+                let view = HexViewport::new(200, 200, 640, 380, scene.header.entering_tile)
                     .ok_or_else(|| std::io::Error::other("invalid map viewport"))?;
-                let collision = CollisionIndex::from_map(&objects);
-                let elevation = usize::try_from(header.entering_elevation)
+                let elevation = usize::try_from(scene.header.entering_elevation)
                     .map_err(|_| std::io::Error::other("invalid map elevation"))?;
-                Ok(make_path(&view, from, to, true, true, |tile| {
-                    collision.is_passable(&view, tile, elevation, None)
-                }))
+                Ok(scene.route(&view, from, to, elevation, None, true))
             })();
             match result {
                 Ok(Some(rotations)) => {
