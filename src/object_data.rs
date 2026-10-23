@@ -102,8 +102,10 @@ impl ObjectRecord {
         let inventory_length = word(input)?;
         let inventory_capacity = word(input)?;
         let _legacy_inventory_pointer = word(input)?;
-        if inventory_length < 0 || inventory_length > 10_000
-            || inventory_capacity < inventory_length || inventory_capacity > 100_000
+        if inventory_length < 0
+            || inventory_length > 10_000
+            || inventory_capacity < inventory_length
+            || inventory_capacity > 100_000
         {
             return Err(invalid("invalid object inventory dimensions"));
         }
@@ -130,14 +132,14 @@ impl ObjectRecord {
                 }
                 let n = match kind {
                     ObjectKind::Item => match subtype {
-                        Some(3) => 2, // weapon ammunition count and type
+                        Some(3) => 2,         // weapon ammunition count and type
                         Some(4 | 5 | 6) => 1, // ammo, misc charges, key
                         Some(0..=2) => 0,
                         _ => return Err(invalid("item prototype subtype required")),
                     },
                     ObjectKind::Scenery => match subtype {
                         Some(0 | 3 | 4) => 1, // door/ladder
-                        Some(1 | 2) => 2, // stairs/elevator
+                        Some(1 | 2) => 2,     // stairs/elevator
                         Some(5) => 0,
                         _ => return Err(invalid("scenery prototype subtype required")),
                     },
@@ -169,13 +171,32 @@ mod tests {
     use std::io::{Cursor, Read};
 
     fn encode(values: &[i32]) -> Vec<u8> {
-        values.iter().flat_map(|value| value.to_be_bytes()).collect()
+        values
+            .iter()
+            .flat_map(|value| value.to_be_bytes())
+            .collect()
     }
 
     fn object_prefix(pid: i32) -> Vec<i32> {
         vec![
-            500, 20099, 10, 20, 30, 40, 2, 3, 0x0300_0002, 0, 0,
-            pid, -1, 4, 5, 0, -1, 0,
+            500,
+            20099,
+            10,
+            20,
+            30,
+            40,
+            2,
+            3,
+            0x0300_0002,
+            0,
+            0,
+            pid,
+            -1,
+            4,
+            5,
+            0,
+            -1,
+            0,
         ]
     }
 
@@ -192,10 +213,13 @@ mod tests {
         assert_eq!(parsed.header.frame, 2);
         assert_eq!(parsed.header.pid, 0x0400_0002);
         assert_eq!(parsed.inventory_length, 0);
-        assert_eq!(parsed.update, ObjectUpdate::Generic {
-            flags: 0,
-            subtype_fields: vec![],
-        });
+        assert_eq!(
+            parsed.update,
+            ObjectUpdate::Generic {
+                flags: 0,
+                subtype_fields: vec![],
+            }
+        );
         let mut trailing = [0; 4];
         reader.read_exact(&mut trailing).unwrap();
         assert_eq!(trailing, [11, 22, 33, 44]);
@@ -209,13 +233,16 @@ mod tests {
         values.extend([80, 1, 0]);
         let mut reader = Cursor::new(encode(&values));
         let record = ObjectRecord::read(&mut reader, None).unwrap();
-        assert_eq!(record.update, ObjectUpdate::Critter {
-            field_0: 9,
-            combat: [1, 2, 3, 4, 5, 6, 7],
-            hit_points: 80,
-            radiation: 1,
-            poison: 0,
-        });
+        assert_eq!(
+            record.update,
+            ObjectUpdate::Critter {
+                field_0: 9,
+                combat: [1, 2, 3, 4, 5, 6, 7],
+                hit_points: 80,
+                radiation: 1,
+                poison: 0,
+            }
+        );
         assert_eq!(reader.position() as usize, values.len() * 4);
     }
 
@@ -225,16 +252,22 @@ mod tests {
         values.extend([0, 0, 0, 1, 55, 66]); // flags and stairs destination
         assert!(ObjectRecord::read(&mut Cursor::new(encode(&values)), None).is_err());
         let record = ObjectRecord::read(&mut Cursor::new(encode(&values)), Some(1)).unwrap();
-        assert_eq!(record.update, ObjectUpdate::Generic {
-            flags: 1,
-            subtype_fields: vec![55, 66],
-        });
+        assert_eq!(
+            record.update,
+            ObjectUpdate::Generic {
+                flags: 1,
+                subtype_fields: vec![55, 66],
+            }
+        );
         let mut weapon = object_prefix(0x0000_0001);
         weapon.extend([0, 0, 0, 0, 15, 0x0000_0010]);
         let record = ObjectRecord::read(&mut Cursor::new(encode(&weapon)), Some(3)).unwrap();
-        assert_eq!(record.update, ObjectUpdate::Generic {
-            flags: 0,
-            subtype_fields: vec![15, 0x0000_0010],
-        });
+        assert_eq!(
+            record.update,
+            ObjectUpdate::Generic {
+                flags: 0,
+                subtype_fields: vec![15, 0x0000_0010],
+            }
+        );
     }
 }
