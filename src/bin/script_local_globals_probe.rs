@@ -67,7 +67,9 @@ fn probe(parts: &[&str]) -> Result<i32, Box<dyn Error>> {
     let vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
     let invocation = ScriptInvocationState::installed();
     let result = vm.preview_local_action_with_host_bounded(0, 8, &mut |op, stack| {
-        apply_readonly_event_native_with_vars(snapshot, &invocation, &map, Some(&game), op, stack)
+        apply_readonly_event_native_with_vars(
+            snapshot, &invocation, &map, Some(&game), 0, op, stack,
+        )
     })?;
     if vm.pc() != 0 || !vm.stack().is_empty() || !vm.return_stack().is_empty() {
         return Err("original CE VM changed during cloned variable query".into());

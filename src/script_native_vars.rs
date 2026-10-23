@@ -516,24 +516,29 @@ pub fn apply_readonly_event_native_with_vars(
     invocation: &ScriptInvocationState,
     map: &MapScriptLocals,
     game: Option<&GameGlobalState>,
+    instance_id: u64,
     opcode: u16,
     stack: &mut Vec<ScriptValue>,
 ) -> io::Result<()> {
     match opcode {
-        MAP_VAR_OPCODE | crate::game_globals::GLOBAL_VAR_OPCODE => {
+        LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | crate::game_globals::GLOBAL_VAR_OPCODE => {
             let Some(ScriptValue::Int(index)) = stack.last().copied() else {
                 return Err(invalid("CE read-only variable index must be integer"));
             };
             if stack.len() > MAX_STACK_VALUES {
                 return Err(invalid("CE read-only variable stack exceeds bound"));
             }
-            let value = if opcode == MAP_VAR_OPCODE {
-                map.read_global_typed(index).unwrap_or(ScriptValue::Int(-1))
-            } else {
-                ScriptValue::Int(
+            let value = match opcode {
+                LOCAL_VAR_OPCODE => map
+                    .peek_saved_typed(instance_id, index)?
+                    .unwrap_or(ScriptValue::Int(-1)),
+                MAP_VAR_OPCODE => map
+                    .read_global_typed(index)
+                    .unwrap_or(ScriptValue::Int(-1)),
+                _ => ScriptValue::Int(
                     game.ok_or_else(|| invalid("CE game globals not supplied"))?
                         .read(index),
-                )
+                ),
             };
             *stack
                 .last_mut()

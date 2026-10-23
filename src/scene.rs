@@ -155,6 +155,7 @@ impl PreparedScriptEnvironment {
                         event.invocation(),
                         &self.map_locals,
                         self.game_globals.as_ref(),
+                        planned.instance_id,
                         opcode,
                         stack,
                     )
@@ -223,6 +224,7 @@ impl PreparedScriptEnvironment {
                         event.invocation(),
                         &self.map_locals,
                         self.game_globals.as_ref(),
+                        planned.instance_id,
                         opcode,
                         stack,
                     )
