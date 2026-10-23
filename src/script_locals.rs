@@ -1,4 +1,4 @@
-//! Bounded CE MAP script-local integer storage, without engine callbacks.
+//! Bounded CE MAP script-local value storage, without engine callbacks.
 //! Pinned reference: game/scripts.cc scr_get_local_var/scr_set_local_var
 //! and game/map.cc map_malloc_local_var/map_get_local_var/map_set_local_var.
 //! Pointer values are opaque i32 handles, not dereferenced native pointers.

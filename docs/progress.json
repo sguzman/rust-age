@@ -282,8 +282,8 @@
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 19,
-              "evidence": "CI passes adapted C++/Rust synthetic numeric, string/pointer, name, scheduling, interrupt and program-order comparisons plus 11 MAP lifecycle and 15 MAP-local integer cases. No original compiled CE executable or real-game golden tests yet."
+              "progress": 20,
+              "evidence": "Core CI passes adapted independent CE C++/Rust numeric, named/string/pointer comparisons, scheduled-event/interpreter calls, 11 lifecycle and 21 local integer/pointer storage synthetic comparisons. Upstream original CE executable and real-game/script golden verification are not yet available."
             }
           ]
         },
@@ -309,8 +309,8 @@
               "id": "T703",
               "emoji": "🧮",
               "name": "Port global/local state and quest flags",
-              "progress": 7,
-              "evidence": "CI-tested Rust-owned MAP-local integer array, original saved offsets and declared counts, lazy zero-filled allocation, per-instance bounds and unchanged MAP source; 15 adapted C++/Rust synthetic local cases. Pointer locals, global/quest flags, save state and native opcode integration pending."
+              "progress": 10,
+              "evidence": "CI-tested original MAP-owned script-local array with saved offsets, lazy zero-filled allocation, scripts.lst declarations, strict per-script bounds and immutable decoded MAP. Out-of-band pointer side storage now preserves non-null opaque i32 pointer tags and null pointer => integer zero; integer writes clear pointer tags. 21 adapted C++/Rust synthetic local cases and StaticScene unstarted_script_state assembly tested. No real pointer dereference, engine-native opcodes, quest flags, full globals or persistence."
             },
             {
               "id": "T704",
