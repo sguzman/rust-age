@@ -112,7 +112,9 @@ mod tests {
         globals.apply_opcode(GLOBAL_VAR_OPCODE, &mut stack).unwrap();
         assert_eq!(stack, [ScriptValue::Int(-17)]);
         stack = vec![ScriptValue::Int(1), ScriptValue::Int(50)];
-        globals.apply_opcode(SET_GLOBAL_VAR_OPCODE, &mut stack).unwrap();
+        globals
+            .apply_opcode(SET_GLOBAL_VAR_OPCODE, &mut stack)
+            .unwrap();
         assert!(stack.is_empty());
         assert_eq!(globals.values(), [12, 50, 0]);
         assert_eq!(initial, [12, -17, 0]);
@@ -130,7 +132,9 @@ mod tests {
         globals.apply_opcode(GLOBAL_VAR_OPCODE, &mut stack).unwrap();
         assert_eq!(stack, [ScriptValue::Int(-1)]);
         stack = vec![ScriptValue::Int(0), ScriptValue::Int(40)];
-        globals.apply_opcode(SET_GLOBAL_VAR_OPCODE, &mut stack).unwrap();
+        globals
+            .apply_opcode(SET_GLOBAL_VAR_OPCODE, &mut stack)
+            .unwrap();
         assert!(stack.is_empty());
         assert!(globals.values().is_empty());
     }
