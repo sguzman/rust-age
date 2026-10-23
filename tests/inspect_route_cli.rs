@@ -22,10 +22,8 @@ fn cli_reads_an_original_format_map_and_reports_path_without_moving_actor() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "rust-age-route-cli-{}-{stamp}",
-        std::process::id()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("rust-age-route-cli-{}-{stamp}", std::process::id()));
     fs::create_dir_all(root.join("data").join("maps")).unwrap();
     fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
     fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
