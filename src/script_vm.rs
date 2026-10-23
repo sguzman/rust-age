@@ -678,12 +678,8 @@ impl ScriptVm {
         max_steps: usize,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<Option<ScriptValue>> {
-        self.preview_local_action_frame_with_host_bounded(
-            procedure_index,
-            max_steps,
-            native,
-        )
-        .map(|frame| frame.returned)
+        self.preview_local_action_frame_with_host_bounded(procedure_index, max_steps, native)
+            .map(|frame| frame.returned)
     }
 
     /// Inspect the full candidate state after a source-derived local
@@ -718,7 +714,9 @@ impl ScriptVm {
         probe.push_return(ScriptValue::Int(20))?;
         let flags = probe.modeled_program_low_flags();
         if flags & !0x80 != 0 {
-            return Err(invalid("CE local action has unsupported saved program flags"));
+            return Err(invalid(
+                "CE local action has unsupported saved program flags",
+            ));
         }
         probe.push(ScriptValue::Int(i32::from(flags)))?;
         probe.push(ScriptValue::Pointer(0))?;
