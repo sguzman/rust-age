@@ -871,8 +871,20 @@ impl ScriptVm {
         let opcode = self.program.word_at(self.pc)?;
         if !matches!(
             opcode,
-            0x80B4 | 0x80B5 | 0x80B9 | 0x80D4 | 0x80EA | 0x80EB | 0x80EC | 0x80F0 | 0x80F1
-                | 0x80F2 | 0x80F6 | 0x80F7 | 0x8100 | 0x8149
+            0x80B4
+                | 0x80B5
+                | 0x80B9
+                | 0x80D4
+                | 0x80EA
+                | 0x80EB
+                | 0x80EC
+                | 0x80F0
+                | 0x80F1
+                | 0x80F2
+                | 0x80F6
+                | 0x80F7
+                | 0x8100
+                | 0x8149
         ) && !(0x80C1..=0x80C7).contains(&opcode)
             && !(0x8118..=0x8119).contains(&opcode)
             && opcode != 0x811B
