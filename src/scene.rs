@@ -19,6 +19,7 @@ use crate::script_binding::{
 use crate::script_data::ScriptTables;
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
+use crate::script_owner_binding::MapScriptOwners;
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -43,6 +44,8 @@ pub struct PreparedScriptEnvironment {
     pub game_globals: Option<GameGlobalState>,
     /// Inert decoded object-query values with snapshot-local handles.
     pub object_queries: MapObjectReadBindings,
+    /// Owner diagnostics from source-verified script SID and object SID joins.
+    pub script_owners: MapScriptOwners,
     /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
     /// Zero indicates no recorded visit; no gameplay time is advanced.
     pub map_last_visit_ticks: i32,
@@ -139,11 +142,14 @@ impl StaticScene {
     ) -> io::Result<PreparedScriptEnvironment> {
         let (scripts, map_locals) = self.unstarted_script_state(assets)?;
         let game_globals = assets.game_global_defaults()?;
+        let object_queries = self.object_query_snapshot()?;
+        let script_owners = MapScriptOwners::from_map(&self.scripts, &self.objects, &object_queries)?;
         Ok(PreparedScriptEnvironment {
             scripts,
             map_locals,
             game_globals,
-            object_queries: self.object_query_snapshot()?,
+            object_queries,
+            script_owners,
             map_last_visit_ticks: self.header.last_visit_time,
         })
     }
@@ -219,6 +225,7 @@ mod tests {
         let environment = scene.unstarted_script_environment(&mut assets).unwrap();
         assert!(environment.scripts.runtime.is_empty());
         assert!(environment.object_queries.snapshots().is_empty());
+        assert!(environment.script_owners.entries().is_empty());
         assert_eq!(environment.map_locals.globals(), [12, -8]);
         assert_eq!(environment.map_locals.locals(), [99]);
         assert_eq!(

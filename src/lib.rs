@@ -36,6 +36,7 @@ pub mod script_list;
 pub mod script_locals;
 pub mod script_native_vars;
 pub mod script_object_binding;
+pub mod script_owner_binding;
 pub mod script_object_read;
 pub mod script_procedures;
 pub mod script_program;
