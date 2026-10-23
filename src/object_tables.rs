@@ -61,8 +61,7 @@ impl ObjectTables {
         let mut input = Cursor::new(bytes);
         let expected = count(&mut input)?;
         let mut visited = 0_usize;
-        let mut elevations: [Vec<MapObject>; ELEVATION_COUNT] =
-            std::array::from_fn(|_| Vec::new());
+        let mut elevations: [Vec<MapObject>; ELEVATION_COUNT] = std::array::from_fn(|_| Vec::new());
         let mut total = 0_usize;
         for elevation in &mut elevations {
             let current = count(&mut input)?;
@@ -108,15 +107,19 @@ where
         .get_ref()
         .get(offset..offset + 4)
         .ok_or_else(|| invalid("truncated MAP object PID"))?;
-    let pid = u32::from_be_bytes(raw_pid.try_into().map_err(|_| invalid("short object PID"))?);
+    let pid = u32::from_be_bytes(
+        raw_pid
+            .try_into()
+            .map_err(|_| invalid("short object PID"))?,
+    );
     let subtype = match ObjectKind::from_pid(pid)? {
         ObjectKind::Item | ObjectKind::Scenery => subtype_for(pid)?,
         _ => None,
     };
 
     let record = ObjectRecord::read(input, subtype)?;
-    let inventory_len = usize::try_from(record.inventory_length)
-        .map_err(|_| invalid("invalid inventory count"))?;
+    let inventory_len =
+        usize::try_from(record.inventory_length).map_err(|_| invalid("invalid inventory count"))?;
     let mut inventory = Vec::with_capacity(inventory_len);
     for _ in 0..inventory_len {
         let quantity = word(input)?;
@@ -143,8 +146,24 @@ mod tests {
     fn object(bytes: &mut Vec<u8>, pid: i32, count: i32, capacity: i32, update: &[i32]) {
         // The 18 CE obj_read_obj header words, including PID at field 11.
         for field in [
-            45, 20099, 0, 0, 0, 0, 0, 2, 0x0400_0001, 0, 0,
-            pid, -1, 0, 0, 0, -1, -1,
+            45,
+            20099,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0x0400_0001,
+            0,
+            0,
+            pid,
+            -1,
+            0,
+            0,
+            0,
+            -1,
+            -1,
         ] {
             put(bytes, field);
         }
@@ -188,7 +207,11 @@ mod tests {
         assert_eq!(tables.elevations[0][0].inventory.len(), 1);
         assert_eq!(tables.elevations[0][0].inventory[0].quantity, 2);
         assert_eq!(
-            tables.elevations[0][0].inventory[0].object.record.header.pid,
+            tables.elevations[0][0].inventory[0]
+                .object
+                .record
+                .header
+                .pid,
             0x0000_0001
         );
         assert_eq!(tables.bytes_consumed, data.len() - 4);

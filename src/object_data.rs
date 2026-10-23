@@ -102,8 +102,7 @@ impl ObjectRecord {
         let inventory_length = word(input)?;
         let inventory_capacity = word(input)?;
         let _legacy_inventory_pointer = word(input)?;
-        if inventory_length < 0
-            || inventory_length > 10_000
+        if !(0..=10_000).contains(&inventory_length)
             || inventory_capacity < inventory_length
             || inventory_capacity > 100_000
         {
@@ -133,7 +132,7 @@ impl ObjectRecord {
                 let n = match kind {
                     ObjectKind::Item => match subtype {
                         Some(3) => 2,         // weapon ammunition count and type
-                        Some(4 | 5 | 6) => 1, // ammo, misc charges, key
+                        Some(4..=6) => 1, // ammo, misc charges, key
                         Some(0..=2) => 0,
                         _ => return Err(invalid("item prototype subtype required")),
                     },
