@@ -23,6 +23,7 @@ use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
+use crate::script_vm::ScriptValue;
 use std::collections::BTreeMap;
 use std::io;
 
@@ -95,6 +96,40 @@ impl PreparedScriptEnvironment {
             ));
         }
         Ok(frame)
+    }
+
+    /// Run only the supported local core opcodes on a CLONED installed VM,
+    /// after the MAP plan and original CE local frame have been checked.
+    /// A no-value local return is None; unsupported original opcodes error.
+    /// This diagnostic does not enter the game event loop, mutate script
+    /// locals/quest state or use the native/engine callback host.
+    pub fn preview_planned_local_core_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        max_steps: usize,
+    ) -> io::Result<Option<ScriptValue>> {
+        let frame = self.local_frame_for_planned(planned)?;
+        let preview = self
+            .scripts
+            .runtime
+            .preview_local_action_core_bounded(
+                planned.instance_id,
+                planned.action,
+                max_steps,
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE local action vanished between preflight and preview",
+                )
+            })?;
+        if preview.frame != frame {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE local action frame changed during read-only preview",
+            ));
+        }
+        Ok(preview.returned)
     }
 
     /// Compose an already-planned CE MAP lifecycle action with its exact
