@@ -268,22 +268,22 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 40,
-              "evidence": "CI-tested isolated CE typed ScriptVm and newest-program-first ScriptRuntime: numeric/static-string/pointer comparisons; stack/control/frame/local-call; named-procedure lookup; scheduling/cancellation, strict unsigned timed and conditional callback polling, bounded synthetic-only condition preview; owned program lifecycle and suspension. No engine script dispatch, imported/dynamic-string opcodes, full interpreter restoration, or verified real-game execution."
+              "progress": 42,
+              "evidence": "CI-tested native bounded CE VM with numeric/static-string/pointer, stack/control/frame ops and metadata schedules. Synthetic-only local interrupt procedure preview now translates CE setupCall stack shape and 0x8025 POP_FLAGS_RETURN_VAL_EXIT return, validates zero-argument local dispatch and rejects imported/bad/budget-exhausted scripts. Original VM remains unchanged. Dynamic strings, full flag/wait restoration, game callbacks and production script execution pending."
             },
             {
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 5,
-              "evidence": "CI-tested bounded Rust ScriptRuntime owns isolated .INT interpreters and traverses newest-first CE program list, per-procedure ascending index, suspension and instance removal. Synthetic-only take_due_preview now feeds supported bounded CE-style condition bytecode into multi-program polling; scheduler emits ready (instance ID, procedure index) only. Seven adapted C++ traversal parity cases and Rust tests pass. No production engine callbacks, native opcodes, saved script state or quest effects."
+              "progress": 7,
+              "evidence": "CI-tested Rust ScriptRuntime polls scheduled programs in CE newest-first order and resolves bounded synthetic condition bytecode, now also connecting ready procedure IDs to isolated local-interrupt return value previews. Preview transaction rollback avoids consuming events on errors (Rust safety rule, not CE semantics). No real engine callback dispatch, game native opcodes, persistence or quest effects."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 16,
-              "evidence": "Core CI passes adapted C++/Rust numeric VM, named procedure lookup, 15 string/numeric/pointer comparisons, 20 schedule/conditional polling cases and 7 multi-program traversal cases. Independent synthetic subset oracles only; no original CE executable/gameplay golden tests."
+              "progress": 17,
+              "evidence": "CI checks adapted independent C++/Rust decisions for numeric core bytecode, name lookups, 15 string/pointer cases, 20 scheduling/conditional cases, 7 program-list traversal cases and 8 local interrupt return-stack cases. Synthetic parity only; real compiled CE executable/golden-game tests remain absent."
             }
           ]
         },
