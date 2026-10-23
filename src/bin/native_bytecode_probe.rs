@@ -2,7 +2,7 @@
 use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
-use rust_age::script_native_vars::run_variable_subset_bounded;
+use rust_age::script_native_vars::{run_variable_subset_bounded, run_with_script_action_bounded};
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
@@ -65,6 +65,23 @@ fn scenario(name: &str) -> Vec<u8> {
             push(&mut c, 0, false);
             word(&mut c, 0x80C5);
         }
+        "action_default" | "action_missing" => word(&mut c, 0x80C7),
+        "action_enter" => {
+            word(&mut c, 0x80C7);
+            push(&mut c, 4, false);
+            word(&mut c, 0x8039);
+        }
+        "action_update" => {
+            word(&mut c, 0x80C7);
+            push(&mut c, 7, false);
+            word(&mut c, 0x8039);
+        }
+        "action_mixed_globals" => {
+            word(&mut c, 0x80C7);
+            push(&mut c, 0, false);
+            word(&mut c, 0x80C5);
+            word(&mut c, 0x8039);
+        }
         _ => {}
     }
     word(&mut c, 0x8011);
@@ -115,7 +132,17 @@ fn probe(name: &str) -> Result<String, Box<dyn Error>> {
     let mut map = test_state()?;
     let values: &[i32] = if name == "game_missing" { &[] } else { &[7, 8] };
     let mut game = GameGlobalState::from_initial_values(values)?;
-    let steps = run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 16)?;
+    let steps = if name.starts_with("action_") {
+        let current_action = match name {
+            "action_enter" | "action_mixed_globals" => Some(15),
+            "action_update" => Some(23),
+            "action_default" => Some(0),
+            _ => None,
+        };
+        run_with_script_action_bounded(&mut vm, 1, &mut map, &mut game, current_action, 16)?
+    } else {
+        run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 16)?
+    };
     let top = vm
         .stack()
         .last()

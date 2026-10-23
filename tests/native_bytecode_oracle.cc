@@ -47,6 +47,15 @@ std::vector<uint8_t> scenario(const std::string& name) {
         push(c, 1); word(c, 0x80C5); word(c, 0x8039);
     } else if (name == "game_missing") {
         push(c, 0); word(c, 0x80C5);
+    } else if (name == "action_default" || name == "action_missing") {
+        word(c, 0x80C7);
+    } else if (name == "action_enter") {
+        word(c, 0x80C7); push(c, 4); word(c, 0x8039);
+    } else if (name == "action_update") {
+        word(c, 0x80C7); push(c, 7); word(c, 0x8039);
+    } else if (name == "action_mixed_globals") {
+        word(c, 0x80C7); push(c, 0); word(c, 0x80C5);
+        word(c, 0x8039);
     }
     word(c, 0x8011);
     return c;
@@ -89,6 +98,10 @@ std::string result(const std::string& name) {
             const int32_t right = stack.back().raw; stack.pop_back();
             const int32_t left = stack.back().raw; stack.pop_back();
             stack.push_back({false, left + right});
+        } else if (opcode == 0x80C7) {
+            const int action = (name == "action_enter" || name == "action_mixed_globals") ? 15 :
+                name == "action_update" ? 23 : 0;
+            stack.push_back({false, action});
         } else if (opcode >= 0x80C1 && opcode <= 0x80C6) {
             const bool setter = (opcode & 1) == 0;
             Value value;

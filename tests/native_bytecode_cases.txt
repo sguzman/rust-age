@@ -5,3 +5,8 @@ map_invalid
 local_float
 mixed_add
 game_missing
+action_default
+action_missing
+action_enter
+action_update
+action_mixed_globals
