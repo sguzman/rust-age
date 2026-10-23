@@ -691,24 +691,26 @@ impl ScriptVm {
         for _ in 0..max_steps {
             let opcode = probe.program.word_at(probe.pc)?;
             if opcode == 0x8021 || opcode == 0x8025 {
-                let returned = if opcode == 0x8025 {
-                    Some(probe.pop()?)
-                } else {
-                    None
-                };
-                // setupCall's no-argument marker must have been consumed
-                // by the script before the return operation.
-                if probe.pop()? != ScriptValue::Int(0) || probe.pop()? != ScriptValue::Pointer(0) {
-                    return Err(invalid("CE local action host frame is not balanced"));
-                }
-                let _saved_flags = probe.pop_int()?;
-                if probe.pop_return_int()? != 20 {
-                    return Err(invalid("CE local action return marker mismatch"));
+                // Execute the actual bounded CE core return opcode. It
+                // preflights the null-host frame, restores modeled flags,
+                // consumes the source return marker and exits via 0x40.
+                // The previous preview duplicated that unwinding by hand.
+                probe.step_with_variable_host(native)?;
+                if probe.pc != 20
+                    || probe.halt_reason != Some(ScriptHaltReason::ReturnFromCall)
+                    || !probe.halted
+                    || probe.modeled_program_low_flags() != flags as u16
+                {
+                    return Err(invalid("CE local action restored an invalid caller frame"));
                 }
                 if probe.return_stack.last() != Some(&ScriptValue::Int(original_pc)) {
                     return Err(invalid("CE local action saved PC was modified"));
                 }
-                return Ok(returned);
+                return Ok(if opcode == 0x8025 {
+                    Some(probe.pop()?)
+                } else {
+                    None
+                });
             }
             probe.step_with_variable_host(native)?;
             if probe.halted {
@@ -775,21 +777,21 @@ impl ScriptVm {
         for _ in 0..max_steps {
             let instruction = probe.program.word_at(probe.pc)?;
             if instruction == 0x8025 {
-                // CE op_pop_flags_return_val_exit pops the return value,
-                // window ID, checkWait pointer, flags, and return PC in order.
-                let result = probe.pop()?;
-                if probe.pop()? != ScriptValue::Int(0) || probe.pop()? != ScriptValue::Pointer(0) {
-                    return Err(invalid("unsupported CE interrupt host frame"));
+                // Run the same bounded POP_FLAGS_RETURN_VAL_EXIT handler
+                // used by the CE core stepper. Only null-host call frames
+                // are representable; malformed frames fail closed.
+                probe.step_with_variable_host(native)?;
+                if probe.pc != 20
+                    || probe.halt_reason != Some(ScriptHaltReason::ReturnFromCall)
+                    || !probe.halted
+                    || probe.modeled_program_low_flags() != saved_flags as u16
+                {
+                    return Err(invalid("CE interrupt returned with invalid modeled flags"));
                 }
-                let flags = probe.pop_int()?;
-                if probe.pop_return_int()? != 20 {
-                    return Err(invalid("CE interrupt return address mismatch"));
+                if probe.return_stack.last() != Some(&ScriptValue::Int(old_pc)) {
+                    return Err(invalid("CE interrupt changed the saved original PC"));
                 }
-                probe.critical_section = flags & 0x80 != 0;
-                // The saved original PC remains on CE's return stack until
-                // the enclosing interpreter context handles it. Since this
-                // is an isolated preview, the original VM stays unchanged.
-                return Ok(result);
+                return probe.pop();
             }
             probe.step_with_variable_host(native)?;
             if probe.halted {
