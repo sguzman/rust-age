@@ -123,7 +123,10 @@ fn main() {
                     println!("PID: {:#010X}", proto.pid);
                     println!("Art FID: {:#010X}", proto.fid);
                     println!("Message ID: {}", proto.message_id);
-                    println!("Uninterpreted trailing bytes: {}", proto.remaining_bytes.len());
+                    println!(
+                        "Uninterpreted trailing bytes: {}",
+                        proto.remaining_bytes.len()
+                    );
                     println!("Prototype data inspection only; no gameplay object instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 prototype: {error}")),
