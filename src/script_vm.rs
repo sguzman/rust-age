@@ -54,7 +54,11 @@ pub enum Arithmetic {
     Divide,
 }
 
-fn numeric_binary(left: ScriptValue, right: ScriptValue, op: Arithmetic) -> io::Result<ScriptValue> {
+fn numeric_binary(
+    left: ScriptValue,
+    right: ScriptValue,
+    op: Arithmetic,
+) -> io::Result<ScriptValue> {
     if let (ScriptValue::Int(lhs), ScriptValue::Int(rhs)) = (left, right) {
         return match op {
             Arithmetic::Add => Ok(match lhs.checked_add(rhs) {
@@ -123,7 +127,9 @@ impl ScriptVm {
     }
 
     fn pop(&mut self) -> io::Result<ScriptValue> {
-        self.stack.pop().ok_or_else(|| invalid("CE VM operand stack underflow"))
+        self.stack
+            .pop()
+            .ok_or_else(|| invalid("CE VM operand stack underflow"))
     }
 
     fn pop_int(&mut self) -> io::Result<i32> {
@@ -157,8 +163,8 @@ impl ScriptVm {
             }
             0x04 => {
                 let dest = self.pop_int()?;
-                let dest = usize::try_from(dest)
-                    .map_err(|_| invalid("negative CE jump address"))?;
+                let dest =
+                    usize::try_from(dest).map_err(|_| invalid("negative CE jump address"))?;
                 if dest >= self.program.file_len() {
                     return Err(invalid("CE jump address outside program"));
                 }
