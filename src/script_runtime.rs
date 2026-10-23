@@ -15,6 +15,14 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 
+/// Bounded clone-only preview of one verified local built-in action.
+/// A void (0x8021) procedure has returned=None; 0x8025 supplies a value.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PreviewedLocalAction {
+    pub frame: PlannedLocalActionFrame,
+    pub returned: Option<ScriptValue>,
+}
+
 /// Source-derived, READ-ONLY local CE executeProc/setupCall frame
 /// preflight. It is neither a live stack frame nor executable bytecode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,6 +236,26 @@ impl ScriptRuntime {
         }))
     }
 
+    /// Compose an exact CE built-in action/frame lookup with its bounded,
+    /// cloned local procedure core preview. No gameplay natives or mutable
+    /// installed state are supplied. Absence is distinct from void return.
+    pub fn preview_local_action_core_bounded(
+        &self,
+        program_id: u64,
+        action: usize,
+        max_steps: usize,
+    ) -> io::Result<Option<PreviewedLocalAction>> {
+        let Some(frame) = self.inspect_local_action_frame(program_id, action)? else {
+            return Ok(None);
+        };
+        let vm = self
+            .vm(program_id)
+            .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
+        let returned =
+            vm.preview_local_action_core_bounded(frame.procedure_index, max_steps)?;
+        Ok(Some(PreviewedLocalAction { frame, returned }))
+    }
+
     /// Opt-in host dispatch of one resolved CE built-in action, independent
     /// of the timed/conditional event scheduler. A missing script action
     /// returns false; any callback is supplied explicitly by the caller.
@@ -412,6 +440,45 @@ mod tests {
             assert_eq!(runtime.vm(1).unwrap().pc(), 0);
             assert!(runtime.vm(1).unwrap().stack().is_empty());
         }
+    }
+
+    #[test]
+    fn composed_local_action_core_preview_keeps_source_vm_inert() {
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 20, 0],
+            [9_i32, 0, 0, 0, 20, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(3, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let preview = runtime
+            .preview_local_action_core_bounded(3, 1, 3)
+            .unwrap()
+            .unwrap();
+        assert_eq!(preview.frame.procedure_index, 1);
+        assert_eq!(preview.frame.return_marker, 20);
+        assert_eq!(preview.returned, None);
+        assert_eq!(runtime.vm(3).unwrap().pc(), 0);
+        assert!(runtime.vm(3).unwrap().stack().is_empty());
+        assert!(runtime.vm(3).unwrap().return_stack().is_empty());
+        assert!(!runtime.vm(3).unwrap().halted());
+        assert!(runtime.preview_local_action_core_bounded(3, 1, 1).is_err());
+        assert!(runtime
+            .preview_local_action_core_bounded(3, 23, 3)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
