@@ -84,7 +84,10 @@ mod tests {
         for (delta, expected) in [
             (0, vec![0]),
             (1, vec![1]),
-            (GAME_TIME_TICKS_PER_DAY - 1, vec![GAME_TIME_TICKS_PER_DAY - 1]),
+            (
+                GAME_TIME_TICKS_PER_DAY - 1,
+                vec![GAME_TIME_TICKS_PER_DAY - 1],
+            ),
             (GAME_TIME_TICKS_PER_DAY, vec![GAME_TIME_TICKS_PER_DAY, 0]),
             (
                 GAME_TIME_TICKS_PER_DAY * 2 + 7,
@@ -111,14 +114,18 @@ mod tests {
             2
         );
         assert!(TimeAdvancePlan::from_ticks(i32::MAX, 2).is_err());
-        assert_eq!(TimeAdvancePlan::from_ticks(i32::MIN, 1).unwrap().queue_polls(), 1);
+        assert_eq!(
+            TimeAdvancePlan::from_ticks(i32::MIN, 1)
+                .unwrap()
+                .queue_polls(),
+            1
+        );
     }
 
     #[test]
     fn native_stack_operand_is_consumed_only_on_success() {
         let mut stack = vec![ScriptValue::Pointer(7), ScriptValue::Int(864_001)];
-        let plan = plan_game_time_advance_opcode(GAME_TIME_ADVANCE_OPCODE, &mut stack, 2)
-            .unwrap();
+        let plan = plan_game_time_advance_opcode(GAME_TIME_ADVANCE_OPCODE, &mut stack, 2).unwrap();
         assert_eq!(plan.increments_before_queue_process(), [864_000, 1]);
         assert_eq!(stack, [ScriptValue::Pointer(7)]);
 
