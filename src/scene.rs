@@ -19,7 +19,7 @@ use crate::script_binding::{
 use crate::script_data::ScriptTables;
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
-use crate::script_owner_binding::MapScriptOwners;
+use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -49,6 +49,15 @@ pub struct PreparedScriptEnvironment {
     /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
     /// Zero indicates no recorded visit; no gameplay time is advanced.
     pub map_last_visit_ticks: i32,
+}
+
+impl PreparedScriptEnvironment {
+    /// Find the source-derived CE owner of an installed, unstarted Rust VM.
+    /// Returns None when no verified instance/record mapping is available.
+    pub fn owner_for_instance(&self, instance_id: u64) -> Option<ScriptOwnerResolution> {
+        self.script_owners
+            .resolution_for_instance(&self.scripts, instance_id)
+    }
 }
 
 impl StaticScene {
@@ -227,6 +236,7 @@ mod tests {
         assert!(environment.scripts.runtime.is_empty());
         assert!(environment.object_queries.snapshots().is_empty());
         assert!(environment.script_owners.entries().is_empty());
+        assert_eq!(environment.owner_for_instance(1), None);
         assert_eq!(environment.map_locals.globals(), [12, -8]);
         assert_eq!(environment.map_locals.locals(), [99]);
         assert_eq!(

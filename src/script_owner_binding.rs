@@ -5,6 +5,7 @@
 //! scr_find_obj_from_program synthesizes an owner for unowned spatial scripts.
 //! We never synthesize engine objects or dereference serialized addresses.
 use crate::collision::ObjectKey;
+use crate::script_binding::BoundScriptRuntime;
 use crate::object_tables::ObjectTables;
 use crate::script_data::ScriptTables;
 use crate::script_object_binding::MapObjectReadBindings;
@@ -130,6 +131,27 @@ impl MapScriptOwners {
             .find(|entry| entry.category == category && entry.ordinal == ordinal)
     }
 
+    /// Resolve the exact serialized record backing an installed Rust VM.
+    /// Instance IDs are Rust-local, never original CE script SIDs. Reject
+    /// duplicate runtime IDs, mismatched bindings and missing .INT programs.
+    pub fn resolution_for_instance(
+        &self,
+        runtime: &BoundScriptRuntime,
+        instance_id: u64,
+    ) -> Option<ScriptOwnerResolution> {
+        let mut matches = runtime
+            .entries
+            .iter()
+            .filter(|entry| entry.instance_id == Some(instance_id));
+        let bound = matches.next()?;
+        if matches.next().is_some() {
+            return None;
+        }
+        self.entry(bound.binding.category, bound.binding.ordinal)
+            .filter(|entry| entry.script_id == bound.binding.script_id)
+            .map(|entry| entry.resolution)
+    }
+
     /// Only source-verifiable owners produce pointer tokens. A non-spatial
     /// missing owner becomes the CE NULL pointer; ambiguous/spatial results
     /// remain unavailable instead of silently becoming NULL.
@@ -146,10 +168,12 @@ impl MapScriptOwners {
 mod tests {
     use super::{MapScriptOwners, ScriptOwnerResolution};
     use crate::collision::ObjectKey;
+    use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
     use crate::script_data::{ScriptRecord, ScriptTables};
     use crate::script_object_binding::MapObjectReadBindings;
+    use crate::script_runtime::ScriptRuntime;
 
     fn object(id: i32, sid: i32) -> MapObject {
         MapObject {
@@ -306,6 +330,66 @@ mod tests {
         );
         assert_eq!(bound.self_handle(3, 1), None);
         assert_eq!(bound.self_handle(4, 0), None);
+    }
+
+    #[test]
+    fn installed_vm_identity_maps_to_original_record_without_guessing_sid() {
+        let script_rows = scripts(&[(3, 0x0300_0001, 77), (4, 0x0400_0001, 88)]);
+        let objects = tables([
+            vec![object(77, 0x0300_0001), object(88, 0x0400_0001)],
+            vec![],
+            vec![],
+        ]);
+        let snapshots = MapObjectReadBindings::from_tables(&objects).unwrap();
+        let owners = MapScriptOwners::from_map(&script_rows, &objects, &snapshots).unwrap();
+        let mk = |category: usize, sid: i32, instance| InstalledScriptBinding {
+            binding: ScriptBinding {
+                category,
+                ordinal: 0,
+                script_id: sid,
+                script_index: 0,
+                owner_id: -1,
+                path: None,
+                run_info: None,
+                local_variable_offset: -1,
+                local_variable_count: 0,
+            },
+            instance_id: instance,
+        };
+        let bound = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![
+                mk(3, 0x0300_0001, Some(12)),
+                mk(4, 0x0400_0001, Some(19)),
+            ],
+        };
+        assert_eq!(
+            owners.resolution_for_instance(&bound, 12),
+            Some(owners.entry(3, 0).unwrap().resolution)
+        );
+        assert_eq!(
+            owners.resolution_for_instance(&bound, 19),
+            Some(owners.entry(4, 0).unwrap().resolution)
+        );
+        assert_eq!(owners.resolution_for_instance(&bound, 0), None);
+        let duplicate = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![
+                mk(3, 0x0300_0001, Some(12)),
+                mk(4, 0x0400_0001, Some(12)),
+            ],
+        };
+        assert_eq!(owners.resolution_for_instance(&duplicate, 12), None);
+        let wrong_sid = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![mk(3, 0x0300_0002, Some(12))],
+        };
+        assert_eq!(owners.resolution_for_instance(&wrong_sid, 12), None);
+        let missing_int = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![mk(3, 0x0300_0001, None)],
+        };
+        assert_eq!(owners.resolution_for_instance(&missing_int, 12), None);
     }
 
     #[test]
