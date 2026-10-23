@@ -26,6 +26,16 @@ fn synthetic_vm_with_body(body: &[u8]) -> ScriptVm {
 }
 
 fn synthetic_vm_with_condition(body: &[u8], condition: &[u8]) -> ScriptVm {
+    let flags = if condition.is_empty() { 0 } else { 0x02 };
+    synthetic_vm_with_scheduled_condition(body, condition, flags, 0)
+}
+
+fn synthetic_vm_with_scheduled_condition(
+    body: &[u8],
+    condition: &[u8],
+    first_flags: i32,
+    first_event_time: i32,
+) -> ScriptVm {
     assert!(body.len() <= 22);
     assert!(condition.len() <= 20);
     let names: [&[u8]; 2] = [b"main", b"map_enter_p_proc"];
@@ -36,12 +46,12 @@ fn synthetic_vm_with_condition(body: &[u8], condition: &[u8]) -> ScriptVm {
     let mut strings = Vec::new();
     for (index, name) in names.into_iter().enumerate() {
         let offset = 4 + strings.len() as i32;
-        let flags = if index == 0 && !condition.is_empty() {
-            0x02
+        let (flags, event_time) = if index == 0 {
+            (first_flags, first_event_time)
         } else {
-            0
+            (0, 0)
         };
-        for value in [offset, flags, 0, 0, 20, 0] {
+        for value in [offset, flags, event_time, 0, 20, 0] {
             bytes.extend_from_slice(&value.to_be_bytes());
         }
         strings.extend_from_slice(name);
@@ -610,6 +620,63 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
     assert!(environment
         .preview_planned_condition_reads_bounded(&stale, 0, clock, 5)
         .is_err());
+}
+
+#[test]
+fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
+    let mut environment = environment();
+    let body = [0x80, 0x1A, 0x80, 0x21];
+    let condition_false = [0xC0, 0x01, 0, 0, 0, 0, 0x80, 0x11];
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_scheduled_condition(&body, &condition_false, 0x03, 10);
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: None,
+    };
+    // Although the time has elapsed, CE prioritizes the conditional flag.
+    assert!(environment
+        .preview_planned_due_reads_bounded(&plan, clock, 11, 2)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        0x03
+    );
+
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_scheduled_condition(&body, &condition_false, 0x01, 10);
+    assert!(environment
+        .preview_planned_due_reads_bounded(&plan, clock, 10, 2)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        environment
+            .preview_planned_due_reads_bounded(&plan, clock, 11, 2)
+            .unwrap(),
+        vec![0]
+    );
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        0x01
+    );
+
+    let condition_true = [0xC0, 0x01, 0, 0, 0, 1, 0x80, 0x11];
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_scheduled_condition(&body, &condition_true, 0x03, 10);
+    assert_eq!(
+        environment
+            .preview_planned_due_reads_bounded(&plan, clock, 10, 2)
+            .unwrap(),
+        vec![0]
+    );
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        0x03
+    );
 }
 
 #[test]
