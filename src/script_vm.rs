@@ -1605,10 +1605,16 @@ mod tests {
         assert_eq!(poll.ready, [1]);
         assert_eq!(poll.condition_flag_restorations.len(), 2);
         assert_eq!(poll.condition_flag_restorations[0].1.saved_low_flags, 0);
-        assert_eq!(poll.condition_flag_restorations[0].1.evaluated_low_flags, 0x88);
+        assert_eq!(
+            poll.condition_flag_restorations[0].1.evaluated_low_flags,
+            0x88
+        );
         assert_eq!(poll.condition_flag_restorations[0].1.restored_low_flags, 0);
         assert_eq!(poll.condition_flag_restorations[1].1.saved_low_flags, 0);
-        assert_eq!(poll.condition_flag_restorations[1].1.evaluated_low_flags, 0x01);
+        assert_eq!(
+            poll.condition_flag_restorations[1].1.evaluated_low_flags,
+            0x01
+        );
         assert_eq!(poll.condition_flag_restorations[1].1.restored_low_flags, 0);
         assert_eq!(vm.modeled_program_low_flags(), 0);
         assert!(vm.stack().is_empty());
