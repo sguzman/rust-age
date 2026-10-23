@@ -153,12 +153,12 @@ fn main() {
                 .unwrap_or_else(|_| fail("Invalid nonnegative script index"));
             let result: std::io::Result<_> = (|| {
                 let mut assets = GameAssets::open(Path::new(directory))?;
-                let path = assets.script_path_by_index(index)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })?;
-                let program = assets.script_program_by_index(index)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })?;
+                let path = assets
+                    .script_path_by_index(index)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                let program = assets
+                    .script_program_by_index(index)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
                 Ok((path, program.procedures().len()))
             })();
             match result {
