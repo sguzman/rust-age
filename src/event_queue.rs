@@ -22,7 +22,6 @@ fn write_i32(output: &mut impl Write, value: i32) -> io::Result<()> {
     output.write_all(&value.to_be_bytes())
 }
 
-
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
@@ -175,7 +174,10 @@ impl EventQueue {
         mut owner_id: impl FnMut(ObjectKey) -> io::Result<i32>,
         mut write_payload: impl FnMut(EventType, &[u8], &mut W) -> io::Result<()>,
     ) -> io::Result<()> {
-        write_i32(output, i32::try_from(self.events.len()).map_err(|_| invalid("queue too large"))?)?;
+        write_i32(
+            output,
+            i32::try_from(self.events.len()).map_err(|_| invalid("queue too large"))?,
+        )?;
         for event in &self.events {
             write_i32(output, event.time)?;
             write_i32(output, event.kind as i32)?;
@@ -200,8 +202,8 @@ impl EventQueue {
         mut resolve_owner: impl FnMut(i32) -> io::Result<Option<ObjectKey>>,
         mut read_payload: impl FnMut(EventType, &mut R) -> io::Result<Vec<u8>>,
     ) -> io::Result<()> {
-        let count = usize::try_from(read_i32(input)?)
-            .map_err(|_| invalid("negative CE event count"))?;
+        let count =
+            usize::try_from(read_i32(input)?).map_err(|_| invalid("negative CE event count"))?;
         if count > MAX_QUEUED_EVENTS {
             return Err(invalid("CE event count exceeds safe maximum"));
         }
@@ -213,7 +215,12 @@ impl EventQueue {
             let id = read_i32(input)?;
             let owner = if id == -2 { None } else { resolve_owner(id)? };
             let payload = read_payload(kind, input)?;
-            parsed.push_back(QueueEvent { time, kind, owner, payload });
+            parsed.push_back(QueueEvent {
+                time,
+                kind,
+                owner,
+                payload,
+            });
         }
         self.events = parsed;
         Ok(())
@@ -341,23 +348,40 @@ mod tests {
     fn ce_queue_save_load_header_and_typed_payload_round_trip() {
         use std::io::{Cursor, Read, Write};
         let mut queue = EventQueue::new();
-        queue.add(100, -5, EventType::Script, actor(2), vec![1, 2, 3, 4]).unwrap();
+        queue
+            .add(100, -5, EventType::Script, actor(2), vec![1, 2, 3, 4])
+            .unwrap();
         queue.add(100, 2, EventType::Flare, None, vec![]).unwrap();
         let mut encoded = Vec::new();
-        queue.save_with(&mut encoded, |key| Ok(100 + key.ordinal as i32), |kind, payload, out| {
-            if kind == EventType::Script { out.write_all(payload)?; }
-            Ok(())
-        }).unwrap();
+        queue
+            .save_with(
+                &mut encoded,
+                |key| Ok(100 + key.ordinal as i32),
+                |kind, payload, out| {
+                    if kind == EventType::Script {
+                        out.write_all(payload)?;
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
         assert_eq!(&encoded[..4], &2_i32.to_be_bytes());
         let mut cursor = Cursor::new(&encoded);
         let mut read = EventQueue::new();
-        read.load_with(&mut cursor, |id| Ok(actor((id - 100) as usize)), |kind, input| {
-            if kind == EventType::Script {
-                let mut payload = vec![0_u8; 4];
-                input.read_exact(&mut payload)?;
-                Ok(payload)
-            } else { Ok(vec![]) }
-        }).unwrap();
+        read.load_with(
+            &mut cursor,
+            |id| Ok(actor((id - 100) as usize)),
+            |kind, input| {
+                if kind == EventType::Script {
+                    let mut payload = vec![0_u8; 4];
+                    input.read_exact(&mut payload)?;
+                    Ok(payload)
+                } else {
+                    Ok(vec![])
+                }
+            },
+        )
+        .unwrap();
         assert_eq!(read, queue);
         assert_eq!(cursor.position() as usize, encoded.len());
     }
@@ -365,10 +389,14 @@ mod tests {
     #[test]
     fn corrupt_event_save_is_rejected_atomically() {
         let mut queue = EventQueue::new();
-        queue.add(100, 5, EventType::Poison, actor(1), vec![]).unwrap();
+        queue
+            .add(100, 5, EventType::Poison, actor(1), vec![])
+            .unwrap();
         let original = queue.clone();
         let invalid = [0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 99, 255, 255, 255, 254];
-        assert!(queue.load_with(&mut invalid.as_slice(), |_| Ok(None), |_, _| Ok(vec![])).is_err());
+        assert!(queue
+            .load_with(&mut invalid.as_slice(), |_| Ok(None), |_, _| Ok(vec![]))
+            .is_err());
         assert_eq!(queue, original);
     }
 
