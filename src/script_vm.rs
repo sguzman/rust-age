@@ -188,9 +188,11 @@ impl ScriptVm {
     }
 
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
-        let index = usize::try_from(index)
-            .map_err(|_| invalid("negative CE procedure index"))?;
-        self.program.procedures().get(index).copied()
+        let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
+        self.program
+            .procedures()
+            .get(index)
+            .copied()
             .ok_or_else(|| invalid("CE procedure index outside table"))
     }
 
@@ -296,7 +298,9 @@ impl ScriptVm {
                 let index = self.pop_int()?;
                 let procedure = self.procedure_at(index)?;
                 if procedure.flags & 0x04 != 0 {
-                    return Err(invalid("CE imported/external procedure calls not implemented"));
+                    return Err(invalid(
+                        "CE imported/external procedure calls not implemented",
+                    ));
                 }
                 self.jump(procedure.body_offset)?;
                 if procedure.flags & 0x10 != 0 {
@@ -715,8 +719,12 @@ mod tests {
         assert!(vm.run_bounded(4).is_err());
     }
 
-
-    fn fixture_with_procedure(instructions: &[u8], body_offset: i32, flags: i32, args: i32) -> ScriptProgram {
+    fn fixture_with_procedure(
+        instructions: &[u8],
+        body_offset: i32,
+        flags: i32,
+        args: i32,
+    ) -> ScriptProgram {
         assert!(instructions.len() <= 42);
         let mut bytes = vec![0_u8; 42];
         bytes[..instructions.len()].copy_from_slice(instructions);
