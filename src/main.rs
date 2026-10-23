@@ -137,9 +137,8 @@ fn main() {
         }
         [_, flag, directory, path] if flag == "--inspect-map" => {
             let result = GameAssets::open(Path::new(directory)).and_then(|mut assets| {
-                StaticScene::load(&mut assets, path)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })
+                StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
             });
             match result {
                 Ok(scene) => {
@@ -164,10 +163,17 @@ fn main() {
                     );
                     println!(
                         "Map variable slots: {} global, {} local",
-                        scene.variables.globals.len(), scene.variables.locals.len()
+                        scene.variables.globals.len(),
+                        scene.variables.locals.len()
                     );
-                    println!("Serialized script records: {}", scene.scripts.script_count());
-                    println!("Serialized top-level objects: {}", scene.objects.total_objects);
+                    println!(
+                        "Serialized script records: {}",
+                        scene.scripts.script_count()
+                    );
+                    println!(
+                        "Serialized top-level objects: {}",
+                        scene.objects.total_objects
+                    );
                     println!("Original object data ends at byte {}", scene.bytes_consumed);
                     println!("No scripts executed or gameplay objects instantiated.");
                 }
@@ -183,9 +189,8 @@ fn main() {
                 .unwrap_or_else(|_| fail("Invalid destination hex tile"));
             let result: std::io::Result<_> = (|| {
                 let mut assets = GameAssets::open(Path::new(directory))?;
-                let scene = StaticScene::load(&mut assets, path)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })?;
+                let scene = StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
                 let view = HexViewport::new(200, 200, 640, 380, scene.header.entering_tile)
                     .ok_or_else(|| std::io::Error::other("invalid map viewport"))?;
                 let elevation = usize::try_from(scene.header.entering_elevation)
