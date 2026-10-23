@@ -14,6 +14,7 @@ pub const GAME_TICKS_OPCODE: u16 = 0x80F2;
 pub const GAME_TIME_HOUR_OPCODE: u16 = 0x80F6;
 pub const GET_MONTH_OPCODE: u16 = 0x8118;
 pub const GET_DAY_OPCODE: u16 = 0x8119;
+pub const DAYS_SINCE_VISITED_OPCODE: u16 = 0x811B;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -51,6 +52,56 @@ impl ScriptGameClock {
             }
         }
         (month as i32 + 1, day + 1, year)
+    }
+
+    /// CE op_days_since_visited: read the serialized MAP header's lastVisitTime
+    /// and compute truncated whole game-days since that visit. The original
+    /// scripts return -1 for zero (never visited). This pure helper is not a
+    /// timer, a map transition, or an event callback. Rust rejects the signed
+    /// subtraction overflow that would be undefined in the C++ reference.
+    pub fn days_since_visited(self, last_visit_ticks: i32) -> io::Result<i32> {
+        if last_visit_ticks == 0 {
+            return Ok(-1);
+        }
+        self.ticks
+            .checked_sub(last_visit_ticks)
+            .map(|elapsed| elapsed / 864_000)
+            .ok_or_else(|| invalid("CE days_since_visited signed tick difference overflow"))
+    }
+
+    /// A separate host input is required because CE op_days_since_visited
+    /// reads MAP state, not merely the current clock. It takes no operands.
+    pub fn apply_visit_opcode(
+        &self,
+        last_visit_ticks: i32,
+        opcode: u16,
+        stack: &mut Vec<ScriptValue>,
+    ) -> io::Result<()> {
+        if opcode != DAYS_SINCE_VISITED_OPCODE {
+            return Err(invalid("unsupported CE last-visit opcode"));
+        }
+        if stack.len() >= MAX_STACK_VALUES {
+            return Err(invalid("CE days_since_visited stack exceeds bound"));
+        }
+        stack.push(ScriptValue::Int(self.days_since_visited(last_visit_ticks)?));
+        Ok(())
+    }
+
+    /// Opt-in, bounded execution with an explicit serialized MAP last-visit
+    /// timestamp. Normal run_bounded excludes MAP-dependent opcodes.
+    pub fn run_with_visit_bounded(
+        &self,
+        vm: &mut ScriptVm,
+        last_visit_ticks: i32,
+        max_steps: usize,
+    ) -> io::Result<usize> {
+        vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| {
+            if opcode == DAYS_SINCE_VISITED_OPCODE {
+                self.apply_visit_opcode(last_visit_ticks, opcode, stack)
+            } else {
+                self.apply_opcode(opcode, stack)
+            }
+        })
     }
 
     /// Detached original CE native stack operation: time reads push a
@@ -110,7 +161,7 @@ impl ScriptGameClock {
 mod tests {
     use super::{
         ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-        GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
+        GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE, DAYS_SINCE_VISITED_OPCODE,
     };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};
@@ -169,6 +220,32 @@ mod tests {
             clock.apply_opcode(GET_DAY_OPCODE, &mut stack).unwrap();
             assert_eq!(stack, [ScriptValue::Int(date.0), ScriptValue::Int(date.1)]);
         }
+    }
+
+    #[test]
+    fn ce_map_last_visit_is_explicit_and_uses_truncated_whole_days() {
+        let clock = ScriptGameClock { ticks: 4 * 864_000 };
+        for (last_visit, expected) in [
+            (0, -1),
+            (864_000, 3),
+            (2 * 864_000, 2),
+            (3 * 864_000 + 1, 0),
+            (4 * 864_000, 0),
+            (4 * 864_000 + 1, 0),
+            (6 * 864_000, -2),
+        ] {
+            assert_eq!(clock.days_since_visited(last_visit).unwrap(), expected);
+            let mut stack = Vec::new();
+            clock
+                .apply_visit_opcode(last_visit, DAYS_SINCE_VISITED_OPCODE, &mut stack)
+                .unwrap();
+            assert_eq!(stack, [ScriptValue::Int(expected)]);
+        }
+        let mut stack = vec![ScriptValue::Int(7)];
+        assert!(ScriptGameClock { ticks: i32::MAX }
+            .apply_visit_opcode(i32::MIN, DAYS_SINCE_VISITED_OPCODE, &mut stack)
+            .is_err());
+        assert_eq!(stack, [ScriptValue::Int(7)]);
     }
 
     #[test]
