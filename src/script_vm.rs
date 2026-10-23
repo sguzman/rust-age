@@ -195,7 +195,6 @@ impl ScriptVm {
             .ok_or_else(|| invalid("CE VM operand stack underflow"))
     }
 
-
     fn push_return(&mut self, value: ScriptValue) -> io::Result<()> {
         if self.return_stack.len() >= MAX_STACK_VALUES {
             return Err(invalid("CE VM return stack exhausted"));
@@ -349,9 +348,11 @@ impl ScriptVm {
             }
             0x2E => {
                 let count = self.pop_int()?;
-                let count = usize::try_from(count)
-                    .map_err(|_| invalid("negative CE DUMP count"))?;
-                let remaining = self.stack.len()
+                let count =
+                    usize::try_from(count).map_err(|_| invalid("negative CE DUMP count"))?;
+                let remaining = self
+                    .stack
+                    .len()
                     .checked_sub(count)
                     .ok_or_else(|| invalid("CE DUMP stack underflow"))?;
                 self.stack.truncate(remaining);
@@ -586,7 +587,6 @@ mod tests {
         vm.run_bounded(12).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Int(123)]);
     }
-
 
     #[test]
     fn ce_return_stack_transfers_and_swapa_preserve_typed_values() {
