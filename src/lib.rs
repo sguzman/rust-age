@@ -11,6 +11,7 @@ pub mod event_queue;
 pub mod framebuffer;
 pub mod frm;
 pub mod hex;
+pub mod game_globals;
 pub mod int_opcode;
 pub mod lzss;
 pub mod map;
