@@ -3,8 +3,8 @@
 //! src/int/support/intextra.cc op_global_var/op_set_global_var.
 //!
 //! GAME_GLOBAL_VARS (data/vault13.gam) is a separate domain from MAP globals.
-//! This module takes caller-provided initial values; the asset loader,
-//! persistence, native VM opcode hooks and quest effects are not yet connected.
+//! Supports bounded parsing of CE's original GAME_GLOBAL_VARS: defaults.
+//! Persistence, native VM opcode hooks and quest effects remain disconnected.
 use crate::script_vm::ScriptValue;
 use std::io;
 
@@ -30,6 +30,89 @@ impl GameGlobalState {
         Ok(Self {
             values: values.to_vec(),
         })
+    }
+
+    /// Decode the original GAME_GLOBAL_VARS section in data/vault13.gam.
+    /// Mirrors game_load_info_vars: match the first 16 bytes of the section
+    /// marker, skip comment lines beginning // and empty LF lines, remove
+    /// semicolon comments, and parse the decimal prefix following '='.
+    /// Rows without '=' become zero and still consume an index. Parsing
+    /// continues until EOF, as in the pinned CE implementation.
+    ///
+    /// This safely rejects oversized lines/counts and i32 overflow; an
+    /// invalid sscanf field becomes zero rather than uninitialized memory.
+    /// No game assets are embedded or executed by this decoder.
+    pub fn decode_vault13_defaults(bytes: &[u8]) -> io::Result<Self> {
+        let mut found_section = false;
+        let mut values = Vec::new();
+        for raw_line in bytes.split_inclusive(|&ch| ch == b'\n') {
+            if raw_line.len() > 258 {
+                return Err(invalid("oversized CE vault13.gam variable line"));
+            }
+            // CE's fgets null-terminates C strings. Embedded NUL bytes
+            // therefore end the visible part of a line.
+            let line = raw_line
+                .split(|&ch| ch == 0)
+                .next()
+                .unwrap_or_default();
+            if !found_section {
+                if line.starts_with(b"GAME_GLOBAL_VARS") {
+                    found_section = true;
+                }
+                continue;
+            }
+            if line.is_empty() || line[0] == b'\n' || line.starts_with(b"//") {
+                continue;
+            }
+            if values.len() == MAX_GAME_GLOBALS {
+                return Err(invalid("CE game globals exceed Rust allocation bound"));
+            }
+            let uncommented = line
+                .split(|&ch| ch == b';')
+                .next()
+                .unwrap_or_default();
+            let value = match uncommented.iter().position(|&ch| ch == b'=') {
+                Some(at) => Self::parse_decimal_prefix(&uncommented[at + 1..])?,
+                None => 0,
+            };
+            values.push(value);
+        }
+        Ok(Self { values })
+    }
+
+    fn parse_decimal_prefix(bytes: &[u8]) -> io::Result<i32> {
+        let mut data = bytes;
+        while data.first().is_some_and(u8::is_ascii_whitespace) {
+            data = &data[1..];
+        }
+        let sign = match data.first() {
+            Some(b'-') => {
+                data = &data[1..];
+                -1_i64
+            }
+            Some(b'+') => {
+                data = &data[1..];
+                1_i64
+            }
+            _ => 1_i64,
+        };
+        let mut number = 0_i64;
+        let mut digits = 0;
+        for &byte in data {
+            if !byte.is_ascii_digit() {
+                break;
+            }
+            number = number
+                .checked_mul(10)
+                .and_then(|n| n.checked_add(i64::from(byte - b'0')))
+                .ok_or_else(|| invalid("overflowed CE game global decimal"))?;
+            digits += 1;
+        }
+        if digits == 0 {
+            return Ok(0);
+        }
+        i32::try_from(sign * number)
+            .map_err(|_| invalid("overflowed CE game global i32"))
     }
 
     pub fn values(&self) -> &[i32] {
@@ -103,6 +186,32 @@ impl GameGlobalState {
 mod tests {
     use super::{GameGlobalState, GLOBAL_VAR_OPCODE, SET_GLOBAL_VAR_OPCODE};
     use crate::script_vm::ScriptValue;
+
+    #[test]
+    fn parses_original_vault13_global_indices_and_decimal_prefixes() {
+        let data = b"PREVIOUS:\nA=777\nGAME_GLOBAL_VARS:\n// comment\n\nGVAR_ONE = 15 ; trailing comment\nGVAR_TWO=-3suffix\nNO_EQUALS\nGVAR_EMPTY=+\nGVAR_BIG= 2147483647\nGVAR_SMALL=-2147483648\n";
+        let globals = GameGlobalState::decode_vault13_defaults(data).unwrap();
+        assert_eq!(globals.values(), [15, -3, 0, 0, i32::MAX, i32::MIN]);
+        assert_eq!(globals.read(1), -3);
+        let absent = GameGlobalState::decode_vault13_defaults(b"OTHER:\nX=1\n").unwrap();
+        assert!(absent.values().is_empty());
+        assert_eq!(absent.read(0), -1);
+    }
+
+    #[test]
+    fn malformed_vault13_defaults_fail_bounded_without_panic() {
+        assert!(GameGlobalState::decode_vault13_defaults(
+            b"GAME_GLOBAL_VARS:\nX=2147483648\n",
+        )
+        .is_err());
+        assert!(GameGlobalState::decode_vault13_defaults(
+            b"GAME_GLOBAL_VARS:\nX=-2147483649\n",
+        )
+        .is_err());
+        let mut data = b"GAME_GLOBAL_VARS:\nX=".to_vec();
+        data.extend(std::iter::repeat_n(b'1', 260));
+        assert!(GameGlobalState::decode_vault13_defaults(&data).is_err());
+    }
 
     #[test]
     fn ce_game_global_reads_and_writes_are_distinct_from_map_globals() {
