@@ -11,3 +11,4 @@ pub mod map;
 pub mod map_preview;
 pub mod message;
 pub mod palette;
+pub mod prototype;

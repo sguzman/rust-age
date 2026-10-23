@@ -58,3 +58,9 @@ The asset resolver now reads `fallout.cfg` if present, merges its `[system]` ent
 Synthetic tests exercise map version validation, optional elevation sections, variable-section offsets, truncation rejection and roof-flag normalization. Real Fallout 1 map files are not redistributed or yet tested against CE.
 
 The read-only diagnostic `rust-age --inspect-map /path/to/Fallout maps/example.map` resolves the actual map via the user's master DAT/patch directory and prints map metadata and static layer availability. Substitute an existing game map path; it cannot start the map or interpret its scripts.
+
+## Fallout 1 .PRO prototype prefix and subtypes
+
+`src/prototype.rs` reads the big-endian common 12-byte PID/message/FID prefix and original per-object fields using the pinned CE `proto_read_protoSubNode` layout. It recognizes items, critters, scenery, walls, tiles and misc, including the original type-specific item/scenery field lengths. Weapon sound codes use the original trailing byte. Critter stats are **not decoded** and are retained as raw trailing bytes; remaining data is not evidence of fully parsed gameplay objects.
+
+This is strictly a read-only, synthetic-test-backed reader. It does not instantiate entities, infer AI, interpret scripting or provide prototype behavior.
