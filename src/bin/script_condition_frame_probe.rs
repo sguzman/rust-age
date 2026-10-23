@@ -1,7 +1,7 @@
 //! Adapted synthetic CE doEvents condition-state comparison probe.
 //! No compiled original engine or commercial Fallout assets are loaded.
 use rust_age::script_program::ScriptProgram;
-use rust_age::script_vm::{ScriptVm, ScriptValue};
+use rust_age::script_vm::{ScriptValue, ScriptVm};
 use std::error::Error;
 
 fn push_int(code: &mut Vec<u8>, value: i32) {
