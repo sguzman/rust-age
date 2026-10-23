@@ -399,8 +399,8 @@
               "id": "T1001",
               "emoji": "⏰",
               "name": "Port time, rest and random encounters",
-              "progress": 9,
-              "evidence": "Pure src/event_queue.rs port of all 13 CE queue event indices, ascending signed game-time ordering and FIFO ties, owner/type removal and handler nonzero stop; synthetic core CI passed. No game clock, event callback side effects, encounters or save support."
+              "progress": 10,
+              "evidence": "Pure src/event_queue.rs port of all 13 CE queue event indices, ascending signed game-time ordering and FIFO ties, owner/type removal and handler nonzero stop; synthetic core CI passed. No game clock, event callback side effects, encounters or save support. Bounded src/script_time_advance.rs preserves CE 0x80FC daily increments and final queue poll without executing callbacks. Eighteen synthetic C++/Rust parity cases passed core CI 39997405124. No live game-time mutation, encounters or script dispatch."
             },
             {
               "id": "T1002",
