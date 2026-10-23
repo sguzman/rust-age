@@ -157,8 +157,7 @@ pub fn apply_timer_native_opcode(
         return Err(invalid("CE timer event object must be an opaque pointer"));
     };
     let (delay, parameter) = if opcode == ADD_TIMER_EVENT_OPCODE {
-        let (ScriptValue::Int(delay), ScriptValue::Int(parameter)) =
-            (stack[at + 1], stack[at + 2])
+        let (ScriptValue::Int(delay), ScriptValue::Int(parameter)) = (stack[at + 1], stack[at + 2])
         else {
             return Err(invalid("CE timer delay and parameter must be integers"));
         };
@@ -177,7 +176,12 @@ pub fn apply_timer_native_opcode(
         if opcode == ADD_TIMER_EVENT_OPCODE {
             // Original native ignores the return from script_q_add.
             let _ = scripts.queue_script_timer(
-                queue, now_ticks, delay, binding.owner, binding.sid, parameter,
+                queue,
+                now_ticks,
+                delay,
+                binding.owner,
+                binding.sid,
+                parameter,
             )?;
         } else {
             // Original queue_remove removes ALL event types owned by object.
@@ -337,7 +341,12 @@ mod tests {
             ScriptValue::Int(-3),
         ];
         apply_timer_native_opcode(
-            &bound, &mut queue, 100, &[], ADD_TIMER_EVENT_OPCODE, &mut null,
+            &bound,
+            &mut queue,
+            100,
+            &[],
+            ADD_TIMER_EVENT_OPCODE,
+            &mut null,
         )
         .unwrap();
         assert!(null.is_empty());
@@ -345,13 +354,29 @@ mod tests {
         let original = vec![ScriptValue::Pointer(99)];
         let mut unknown = original.clone();
         assert!(apply_timer_native_opcode(
-            &bound, &mut queue, 100, &[], REMOVE_TIMER_EVENT_OPCODE, &mut unknown,
-        ).is_err());
+            &bound,
+            &mut queue,
+            100,
+            &[],
+            REMOVE_TIMER_EVENT_OPCODE,
+            &mut unknown,
+        )
+        .is_err());
         assert_eq!(unknown, original);
-        let mut wrong = vec![ScriptValue::Int(1), ScriptValue::Int(2), ScriptValue::Int(3)];
+        let mut wrong = vec![
+            ScriptValue::Int(1),
+            ScriptValue::Int(2),
+            ScriptValue::Int(3),
+        ];
         assert!(apply_timer_native_opcode(
-            &bound, &mut queue, 100, &[], ADD_TIMER_EVENT_OPCODE, &mut wrong,
-        ).is_err());
+            &bound,
+            &mut queue,
+            100,
+            &[],
+            ADD_TIMER_EVENT_OPCODE,
+            &mut wrong,
+        )
+        .is_err());
         assert_eq!(wrong.len(), 3);
     }
 
