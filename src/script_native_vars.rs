@@ -7,6 +7,7 @@
 //! host pathway. Ordinary ScriptVm::step and normal MAP loading remain inert.
 
 use crate::game_globals::GameGlobalState;
+use crate::script_clock::{ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE};
 use crate::script_locals::MapScriptLocals;
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
@@ -252,15 +253,48 @@ pub fn run_invocation_subset_bounded(
     })
 }
 
+
+/// Explicitly run a caller-owned CE script invocation against isolated MAP
+/// locals, game globals, and a fixed game-clock snapshot. This cannot start
+/// engine events, advance time, dereference object pointers, or execute
+/// unsupported game opcodes. The ordinary ScriptVm::step stays ungated.
+pub fn run_invocation_with_clock_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    invocation: &mut ScriptInvocationState,
+    clock: ScriptGameClock,
+    max_steps: usize,
+) -> io::Result<usize> {
+    vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
+        LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
+            apply_map_variable_opcode(locals, instance_id, opcode, stack)
+        }
+        game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
+        SCRIPT_ACTION_OPCODE => push_script_action(stack, Some(invocation.action())),
+        FIXED_PARAM_OPCODE => push_script_action(stack, Some(invocation.fixed_parameter())),
+        SCRIPT_OVERRIDES_OPCODE => {
+            invocation.mark_overrides();
+            Ok(())
+        }
+        GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TICKS_OPCODE
+        | GAME_TIME_HOUR_OPCODE => clock.apply_opcode(opcode, stack),
+        _ => Err(invalid("unrecognized CE script-state or game-clock opcode")),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_map_variable_opcode, run_invocation_subset_bounded, run_variable_subset_bounded,
+        apply_map_variable_opcode, run_invocation_subset_bounded,
+        run_invocation_with_clock_bounded, run_variable_subset_bounded,
         run_with_script_action_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
         LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
         SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
+    use crate::script_clock::{ScriptGameClock, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE};
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_list::ScriptRunInfo;
@@ -402,6 +436,50 @@ mod tests {
         assert!(vm.step_with_variable_host(&mut rejected).is_err());
         assert_eq!(vm.pc(), saved_pc);
         assert_eq!(vm.stack(), saved_stack);
+    }
+
+    #[test]
+    fn synthetic_invocation_combines_clock_action_fixed_param_and_game_globals() {
+        let mut code = Vec::new();
+        op(&mut code, GAME_TIME_HOUR_OPCODE);
+        op(&mut code, SCRIPT_ACTION_OPCODE);
+        op(&mut code, 0x8039);
+        op(&mut code, FIXED_PARAM_OPCODE);
+        op(&mut code, 0x8039);
+        op(&mut code, GAME_TIME_IN_SECONDS_OPCODE);
+        op(&mut code, 0x8039);
+        int(&mut code, 0);
+        op(&mut code, 0x80C6);
+        op(&mut code, SCRIPT_OVERRIDES_OPCODE);
+        int(&mut code, 0);
+        op(&mut code, 0x80C5);
+        op(&mut code, 0x8011);
+        let mut vm = program(&code);
+        let mut map = fixture();
+        let mut game = GameGlobalState::from_initial_values(&[7, 8]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        assert!(invocation.set_fixed_parameter(1));
+        assert!(invocation.begin_action(15));
+        // Original CE: 15:30 = 1530; 558000 ticks = 55800 seconds.
+        assert_eq!(
+            run_invocation_with_clock_bounded(
+                &mut vm,
+                1,
+                &mut map,
+                &mut game,
+                &mut invocation,
+                ScriptGameClock { ticks: 558_000 },
+                16,
+            )
+            .unwrap(),
+            13
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(57_346)]);
+        assert_eq!(game.values(), [57_346, 8]);
+        assert!(invocation.overrides());
+        assert_eq!(map.globals(), [12, -9]);
+        let mut forbidden = program(&code);
+        assert!(forbidden.step().is_err());
     }
 
     #[test]
