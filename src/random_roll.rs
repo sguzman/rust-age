@@ -198,8 +198,9 @@ mod tests {
                 .check_critical(-15, 0, GAME_TIME_TICKS_PER_DAY)
                 .is_ok()
         );
-        // CE's critical check consumes an extra roll after day one.
-        assert_ne!(before_day, after_day);
+        // After a day has passed the critical check consumes exactly the
+        // draw made explicitly in the pre-day case, leaving equal RNG state.
+        assert_eq!(before_day, after_day);
     }
 
     #[test]
