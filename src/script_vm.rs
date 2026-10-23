@@ -4,8 +4,9 @@
 //! op_pop, op_dup, op_swap, op_add, op_sub, op_mul, op_div,
 //! op_negate, op_floor, op_jmp, op_stop_prog and op_exit_prog.
 //!
-//! The interpreter is intentionally NOT connected to map scripts, callbacks,
-//! native opcodes, persistent state, or player input. Unknown opcodes error.
+//! The default interpreter is disconnected from gameplay, callbacks and player
+//! input. A separate opt-in, bounded host path executes a limited native
+//! variable/action subset with caller-supplied synthetic state. Other opcodes error.
 //! A narrow numeric, static-string, scheduling and stack/control subset is supported.
 use crate::script_program::ScriptProgram;
 use std::cmp::Ordering;

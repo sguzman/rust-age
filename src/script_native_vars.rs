@@ -1,6 +1,7 @@
 //! Explicit-host, bounded adapter for CE native script-state opcodes.
 //! Pinned CE src/int/support/intextra.cc op_{local,map,global}_var,
-//! op_set_{local,map,global}_var, op_script_action and initIntExtra.
+//! op_set_{local,map,global}_var, op_script_action, op_script_overrides,
+//! op_fixed_param and initIntExtra, plus scripts.cc exec_script_proc.
 //!
 //! An isolated Rust ScriptVm can run this subset only through the explicit
 //! host pathway. Ordinary ScriptVm::step and normal MAP loading remain inert.
