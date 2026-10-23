@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn decodes_item_container_subtype_with_two_words() {
         let mut bytes = encode(&[
-            0x0000_0010, 7, 4, 2, 3, 4, 5, -1, 1, 10, 20, 30, 40,
+            0x0000_0010, 7, 4, 2, 3, 4, 5, -1, 1, 10, 20, 30, 40, 45,
         ]);
         bytes.push(0);
         bytes.extend_from_slice(&encode(&[50, 60]));
@@ -309,7 +309,7 @@ mod tests {
     fn rejects_bad_pid_and_truncated_item_data() {
         assert!(Prototype::decode(&encode(&[0x0600_0001, 0, 0])).is_err());
         let mut bytes = encode(&[
-            0x0000_0010, 7, 4, 2, 3, 4, 5, -1, 1, 10, 20, 30, 40,
+            0x0000_0010, 7, 4, 2, 3, 4, 5, -1, 1, 10, 20, 30, 40, 45,
         ]);
         bytes.push(0);
         bytes.extend_from_slice(&encode(&[50]));
