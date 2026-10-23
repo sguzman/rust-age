@@ -128,3 +128,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE object sprite bounds (read-only)
 
 `src/object_bounds.rs` translates CE `obj_bound` into safe integer math: the hex tile's native 32×16 anchor, FRM directional x/y offsets, object's own x/y offsets, center-bottom sprite registration, optional 1-pixel outline expansion, and floating objects positioned by saved sx/sy. Tests verify original integer coordinates, bounding boxes and invalid rotation/frame/tile handling. This is geometric placement only; original lighting, object ordering, alpha effects and painting remain unimplemented.
+
+## CE-style asset lookup cache
+
+`GameAssets` now keeps category `art/*.lst` bytes/parsed rows, `proto/*.lst` one-based indices and PID-decoded `.PRO` records in a per-installation in-memory cache. This avoids repeated DAT seeks/list scans per object or sprite, closer to original CE's art/prototype cache lifecycle. `clear_lookup_cache` explicitly refreshes these lookup caches after changing loose patches. Direct `read` remains uncached. Synthetic tests verify cached identity, invalidation and post-invalidation list changes. This is not a frame/image LRU and has no persistent storage.

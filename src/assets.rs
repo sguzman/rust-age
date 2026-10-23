@@ -11,11 +11,12 @@ use crate::dat::DatArchive;
 use crate::message::Catalog;
 use crate::prototype::Prototype;
 use crate::prototype_list::PrototypeList;
+use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Bank {
     Master,
     Critter,
@@ -28,6 +29,12 @@ pub struct GameAssets {
     critter: DatArchive<File>,
     master_patches: String,
     critter_patches: String,
+    /// CE caches art category lists rather than rereading them for each FID.
+    art_lists: BTreeMap<(Bank, String), (ArtList, Vec<u8>)>,
+    /// Loaded one-based prototype list indices, grouped by CE directory.
+    prototype_lists: BTreeMap<String, PrototypeList>,
+    /// Previously decoded original PRO records, indexed by stable PID.
+    prototypes: BTreeMap<u32, Prototype>,
 }
 
 /// Resolve a relative path case-insensitively, as CE does on Linux.
@@ -117,7 +124,19 @@ impl GameAssets {
                 .get("system", "critter_patches")
                 .unwrap_or("data")
                 .to_owned(),
+            art_lists: BTreeMap::new(),
+            prototype_lists: BTreeMap::new(),
+            prototypes: BTreeMap::new(),
         })
+    }
+
+    /// Refresh cached directory lists and decoded prototypes after patch
+    /// files change. Reads through `read` remain uncached and immediately
+    /// observe disk changes. CE normally treats installed art as immutable.
+    pub fn clear_lookup_cache(&mut self) {
+        self.art_lists.clear();
+        self.prototype_lists.clear();
+        self.prototypes.clear();
     }
 
     /// Read the original localized MSG catalog under text/<language>/,
@@ -142,11 +161,18 @@ impl GameAssets {
         } else {
             Bank::Master
         };
-        let list_path = format!("art/{directory}/{directory}.lst");
-        let Some(data) = self.read(bank, &list_path)? else {
+        let key = (bank, directory.to_string());
+        if !self.art_lists.contains_key(&key) {
+            let list_path = format!("art/{directory}/{directory}.lst");
+            let Some(data) = self.read(bank, &list_path)? else {
+                return Ok(None);
+            };
+            self.art_lists
+                .insert(key.clone(), (ArtList::parse(&data), data));
+        }
+        let Some((names, data)) = self.art_lists.get(&key) else {
             return Ok(None);
         };
-        let names = ArtList::parse(&data);
         let mut index = fid.index();
         if fid.needs_critter_alias() {
             let line = data
@@ -193,6 +219,9 @@ impl GameAssets {
     /// Resolve original CE's one-based prototype list by PID type and ID.
     /// Read-only lookup: does not instantiate gameplay objects.
     pub fn prototype_by_pid(&mut self, pid: u32) -> io::Result<Option<Prototype>> {
+        if let Some(existing) = self.prototypes.get(&pid) {
+            return Ok(Some(existing.clone()));
+        }
         let directory = match pid >> 24 {
             0 => "items",
             1 => "critters",
@@ -214,13 +243,20 @@ impl GameAssets {
                 "prototype PID index is zero",
             ));
         }
-        let list_path = format!("proto/{directory}/{directory}.lst");
-        let Some(list_bytes) = self.read(Bank::Master, &list_path)? else {
-            return Ok(None);
-        };
-        let list = PrototypeList::parse(&list_bytes);
-        let Some(file_name) = list.get(index)? else {
-            return Ok(None);
+        if !self.prototype_lists.contains_key(directory) {
+            let list_path = format!("proto/{directory}/{directory}.lst");
+            let Some(bytes) = self.read(Bank::Master, &list_path)? else {
+                return Ok(None);
+            };
+            self.prototype_lists
+                .insert(directory.to_owned(), PrototypeList::parse(&bytes));
+        }
+        let file_name = match self.prototype_lists.get(directory) {
+            Some(list) => match list.get(index)? {
+                Some(name) => name.to_owned(),
+                None => return Ok(None),
+            },
+            None => return Ok(None),
         };
         let path = format!("proto/{directory}/{file_name}");
         let Some(data) = self.read(Bank::Master, &path)? else {
@@ -233,6 +269,7 @@ impl GameAssets {
                 "prototype PID differs from requested list ID",
             ));
         }
+        self.prototypes.insert(pid, proto.clone());
         Ok(Some(proto))
     }
 
@@ -437,9 +474,29 @@ mod tests {
         .unwrap();
         let proto = assets.prototype_by_pid(0x0400_0002).unwrap().unwrap();
         assert_eq!(proto.message_id, 99);
+        assert_eq!(assets.prototype_by_pid(0x0400_0002).unwrap(), Some(proto.clone()));
         assert_eq!(proto.fid, 55);
         assert!(assets.prototype_by_pid(0x0400_0001).unwrap().is_none());
         assert!(assets.prototype_by_pid(0x0400_0000).is_err());
+        fs::write(
+            root.join("Master_Patches")
+                .join("Art")
+                .join("Tiles")
+                .join("Tiles.LST"),
+            b"NEWGRID.FRM\nNEWOTHER.FRM\n",
+        )
+        .unwrap();
+        // Original lookup lists are treated as immutable until explicitly
+        // invalidated, just like CE's art/list caches.
+        assert_eq!(
+            assets.direct_art_path(0x0400_0001).unwrap().as_deref(),
+            Some("art/tiles/other.frm")
+        );
+        assets.clear_lookup_cache();
+        assert_eq!(
+            assets.direct_art_path(0x0400_0001).unwrap().as_deref(),
+            Some("art/tiles/NEWOTHER.FRM")
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }
