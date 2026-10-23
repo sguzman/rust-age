@@ -18,6 +18,7 @@ use crate::script_binding::{
 };
 use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
+use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
@@ -65,6 +66,56 @@ impl PreparedScriptEnvironment {
     pub fn detached_event_for_instance(&self, instance_id: u64) -> Option<DetachedScriptEvent> {
         self.owner_for_instance(instance_id)
             .map(DetachedScriptEvent::new)
+    }
+
+    /// Compose an already-planned CE MAP lifecycle action with its exact
+    /// installed Rust VM record and source-derived owner. A stale or altered
+    /// plan is rejected before allocating detached action metadata.
+    /// No INT bytecode or native game callback runs.
+    pub fn detached_event_for_planned(
+        &self,
+        planned: &PlannedMapAction,
+    ) -> io::Result<DetachedScriptEvent> {
+        let mut candidates = self
+            .scripts
+            .entries
+            .iter()
+            .filter(|entry| entry.instance_id == Some(planned.instance_id));
+        let entry = candidates.next().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE planned script instance missing")
+        })?;
+        if candidates.next().is_some()
+            || entry.binding.script_id != planned.script_id
+            || entry.binding.category != planned.category
+            || entry.binding.ordinal != planned.ordinal
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE planned script record identity mismatch",
+            ));
+        }
+        let procedure = self
+            .scripts
+            .runtime
+            .resolve_action(planned.instance_id, planned.action)?;
+        if procedure.is_none_or(|procedure| {
+            procedure.procedure_index != planned.procedure_index
+        }) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE planned script procedure mismatch",
+            ));
+        }
+        let owner = self.owner_for_instance(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE planned script owner unresolved")
+        })?;
+        let mut event = DetachedScriptEvent::new(owner);
+        event.begin_action(
+            planned.action,
+            planned.external_parameter,
+            &self.object_queries,
+        )?;
+        Ok(event)
     }
 }
 
