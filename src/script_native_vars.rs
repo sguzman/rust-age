@@ -12,11 +12,11 @@ use crate::script_clock::{
     GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
 };
 use crate::script_locals::MapScriptLocals;
-use crate::script_owner_binding::ScriptOwnerResolution;
 use crate::script_object_read::{
     apply_object_read_opcode, apply_tile_contains_obj_pid, ScriptObjectSnapshot, ELEVATION_OPCODE,
     OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE, TILE_CONTAINS_OBJ_PID_OPCODE, TILE_NUM_OPCODE,
 };
+use crate::script_owner_binding::ScriptOwnerResolution;
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
 
@@ -402,7 +402,11 @@ pub fn run_invocation_with_owner_snapshot_bounded(
                         .objects
                         .ok_or_else(|| invalid("CE self_obj object snapshots not provided"))?;
                     if handle == 0
-                        || objects.iter().filter(|object| object.handle == handle).count() != 1
+                        || objects
+                            .iter()
+                            .filter(|object| object.handle == handle)
+                            .count()
+                            != 1
                     {
                         return Err(invalid("CE self_obj handle missing or ambiguous"));
                     }
@@ -459,12 +463,12 @@ mod tests {
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
         run_invocation_with_native_snapshot_bounded, run_invocation_with_owner_snapshot_bounded,
-        run_variable_subset_bounded,
-        run_with_script_action_bounded, ScriptClockContext, ScriptInvocationState,
-        ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, SELF_OBJ_OPCODE, FIXED_PARAM_OPCODE,
-        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
-        SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
+        ScriptInvocationState, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, FIXED_PARAM_OPCODE,
+        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
+        SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
+    use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
@@ -473,7 +477,6 @@ mod tests {
         GAME_TIME_IN_SECONDS_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_list::ScriptRunInfo;
-    use crate::collision::ObjectKey;
     use crate::script_object_read::{ScriptObjectSnapshot, TILE_NUM_OPCODE};
     use crate::script_owner_binding::ScriptOwnerResolution;
     use crate::script_program::ScriptProgram;
