@@ -182,7 +182,10 @@ impl PreparedScriptEnvironment {
     ) -> io::Result<Option<ScriptValue>> {
         let frame = self.local_frame_for_planned(planned)?;
         let event = sessions.get(planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE active event session missing")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active event session missing",
+            )
         })?;
         let action = i32::try_from(planned.action).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "CE planned action exceeds i32")

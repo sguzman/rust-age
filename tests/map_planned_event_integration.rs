@@ -326,12 +326,7 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
     );
     assert_eq!(sessions.get(1).unwrap().source_handle(), 2);
     assert!(environment
-        .preview_active_event_reads_bounded(
-            &DetachedMapEventSessions::new(),
-            &plan,
-            clock,
-            5,
-        )
+        .preview_active_event_reads_bounded(&DetachedMapEventSessions::new(), &plan, clock, 5)
         .is_err());
     sessions.finish(1).unwrap();
     assert!(environment
