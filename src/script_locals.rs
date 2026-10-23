@@ -403,9 +403,7 @@ mod tests {
         assert!(state.peek_saved_typed(1, 2).is_err());
         assert!(state.peek_saved_typed(999, 0).is_err());
 
-        state
-            .write_typed(2, 0, ScriptValue::Pointer(-34))
-            .unwrap();
+        state.write_typed(2, 0, ScriptValue::Pointer(-34)).unwrap();
         assert_eq!(
             state.peek_saved_typed(2, 0).unwrap(),
             Some(ScriptValue::Pointer(-34))
