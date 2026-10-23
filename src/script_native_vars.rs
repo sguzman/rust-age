@@ -16,6 +16,7 @@ pub const MAP_VAR_OPCODE: u16 = 0x80C3;
 pub const SET_MAP_VAR_OPCODE: u16 = 0x80C4;
 pub const SCRIPT_ACTION_OPCODE: u16 = 0x80C7;
 pub const SCRIPT_OVERRIDES_OPCODE: u16 = 0x80B9;
+pub const FIXED_PARAM_OPCODE: u16 = 0x80F7;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -126,6 +127,7 @@ pub struct ScriptInvocationState {
     present: bool,
     action: i32,
     overrides: bool,
+    fixed_parameter: i32,
 }
 
 impl ScriptInvocationState {
@@ -134,6 +136,7 @@ impl ScriptInvocationState {
             present: true,
             action: 0,
             overrides: false,
+            fixed_parameter: 0,
         }
     }
 
@@ -142,6 +145,7 @@ impl ScriptInvocationState {
             present: false,
             action: 0,
             overrides: false,
+            fixed_parameter: 0,
         }
     }
 
@@ -161,6 +165,20 @@ impl ScriptInvocationState {
 
     pub fn overrides(&self) -> bool {
         self.overrides
+    }
+
+    /// CE script->fixedParam is set by the surrounding event, not cleared
+    /// by exec_script_proc. A missing script cannot receive this value.
+    pub fn set_fixed_parameter(&mut self, value: i32) -> bool {
+        if !self.present {
+            return false;
+        }
+        self.fixed_parameter = value;
+        true
+    }
+
+    pub fn fixed_parameter(&self) -> i32 {
+        self.fixed_parameter
     }
 
     fn mark_overrides(&mut self) {
@@ -224,6 +242,7 @@ pub fn run_invocation_subset_bounded(
         }
         game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
         SCRIPT_ACTION_OPCODE => push_script_action(stack, Some(invocation.action())),
+        FIXED_PARAM_OPCODE => push_script_action(stack, Some(invocation.fixed_parameter())),
         SCRIPT_OVERRIDES_OPCODE => {
             invocation.mark_overrides();
             Ok(())
