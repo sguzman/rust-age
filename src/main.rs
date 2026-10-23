@@ -27,6 +27,7 @@ fn usage() {
     println!("       rust-age --inspect-map-script-owners /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-procedures /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-lifecycle /path/to/Fallout maps/v13.map enter MAP_SID MAP_FLAGS");
+    println!("       rust-age --inspect-map-lifecycle-frames /path/to/Fallout maps/v13.map enter MAP_SID MAP_FLAGS");
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
@@ -232,6 +233,62 @@ fn main() {
                     println!("Prototype data inspection only; no gameplay object instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 prototype: {error}")),
+            }
+        }
+        [_, flag, directory, path, phase_name, map_sid, map_flags]
+            if flag == "--inspect-map-lifecycle-frames" =>
+        {
+            let phase = match phase_name.as_str() {
+                "start" => MapLifecyclePhase::Start,
+                "enter" => MapLifecyclePhase::Enter,
+                "update" => MapLifecyclePhase::Update,
+                "exit" => MapLifecyclePhase::Exit,
+                _ => fail("MAP lifecycle must be start, enter, update, or exit"),
+            };
+            let sid = map_sid
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("MAP script SID must be a decimal i32"));
+            let flags = map_flags
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("MAP flags must be a decimal i32"));
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let scene = StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                let environment = scene.unstarted_script_environment(&mut assets)?;
+                let actions = environment
+                    .scripts
+                    .plan_map_lifecycle(phase, sid, flags)?;
+                Ok((environment, actions))
+            })();
+            match result {
+                Ok((environment, actions)) => {
+                    println!(
+                        "CE MAP local executeProc frame diagnostics ({phase_name}): {} planned actions",
+                        actions.len()
+                    );
+                    for action in actions {
+                        print!(
+                            "  [{}:{}] SID {:#010X}, action {} proc {}: ",
+                            action.category,
+                            action.ordinal,
+                            action.script_id as u32,
+                            action.action,
+                            action.procedure_index
+                        );
+                        match environment.local_frame_for_planned(&action) {
+                            Ok(frame) => println!(
+                                "local frame ready, body={}, return={}, critical={}",
+                                frame.body_offset, frame.return_marker, frame.critical
+                            ),
+                            Err(error) => println!("blocked: {error}"),
+                        }
+                    }
+                    println!(
+                        "Read-only procedure metadata; no CE procedure, event or native game callback executed."
+                    );
+                }
+                Err(error) => fail(format!("Cannot inspect MAP local action frames: {error}")),
             }
         }
         [_, flag, directory, path, phase_name, map_sid, map_flags]

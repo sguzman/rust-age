@@ -27,6 +27,7 @@ cargo run -- --inspect-map-procedures /path/to/Fallout maps/example.map
 cargo run -- --inspect-map-lifecycle /path/to/Fallout maps/example.map enter MAP_SID MAP_FLAGS # read-only
 cargo run -- --inspect-map-scripts /path/to/Fallout maps/example.map
 cargo run -- --inspect-map-script-owners /path/to/Fallout maps/example.map # read-only SID/object ownership diagnostics
+cargo run -- --inspect-map-lifecycle-frames /path/to/Fallout maps/example.map enter MAP_SID MAP_FLAGS # read-only local procedure readiness
 cargo run -- --inspect-int /path/to/Fallout scripts/example.int
 cargo run -- --inspect-script-index /path/to/Fallout 0 # prints escaped procedure names, metadata and CE action bindings
 cargo run -- --inspect-game-global /path/to/Fallout 123 # read-only original quest defaults
