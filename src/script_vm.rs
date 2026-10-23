@@ -308,6 +308,49 @@ impl ScriptVm {
         numeric_comparison(left, right, op)
     }
 
+    /// Isolated diagnostic for invented CE condition bytecode that uses
+    /// only the currently supported VM opcodes and ends in STOP/EXIT.
+    /// The final stack value must be an integer, exactly as doEvents reads
+    /// the condition result. No shared stacks or world state are mutated.
+    /// This deliberately does NOT model CE interpreter flag restoration,
+    /// external opcodes, or the side effects of real game conditions.
+    pub fn preview_condition_bounded(
+        &self,
+        condition_offset: i32,
+        max_steps: usize,
+    ) -> io::Result<bool> {
+        let offset = usize::try_from(condition_offset)
+            .map_err(|_| invalid("negative CE condition bytecode offset"))?;
+        self.program.word_at(offset)?;
+        let mut probe = self.clone();
+        probe.pc = offset;
+        probe.stack.clear();
+        probe.return_stack.clear();
+        probe.frame_pointer = -1;
+        probe.base_pointer = -1;
+        probe.critical_section = false;
+        probe.halted = false;
+        probe.run_bounded(max_steps)?;
+        Ok(probe.pop_int()? != 0)
+    }
+
+    /// Synthetic-only end-to-end binding of the bounded condition preview
+    /// to the original CE doEvents precedence. Each condition is evaluated
+    /// independently from the same pre-poll VM snapshot, so this is not yet
+    /// the complete mutable CE interpreter/event callback lifecycle.
+    pub fn take_due_procedures_preview(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        let snapshot = self.clone();
+        self.take_due_procedures_with(now_millis, |_, condition_offset| {
+            snapshot
+                .preview_condition_bounded(condition_offset, max_steps_per_condition)
+                .map(Some)
+        })
+    }
+
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
         let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
         self.runtime_procedures
@@ -1310,6 +1353,53 @@ mod tests {
             [0, 1]
         );
         assert!(vm.runtime_procedures.iter().all(|entry| entry.flags == 0));
+    }
+
+    fn condition_fixture(result: i32) -> ScriptProgram {
+        let mut code = vec![0x80, 0x11]; // STOP in unrelated main code
+        code.resize(20, 0); // bytecode condition entry at absolute offset 20
+        push_int(&mut code, result);
+        opcode(&mut code, 0x8011);
+        fixture_with_procedure(&code, 0, 0, 0)
+    }
+
+    #[test]
+    fn ce_bounded_condition_preview_polls_true_and_false_without_mutating_vm() {
+        for (value, expected) in [(0, false), (7, true), (-3, true)] {
+            let mut vm = ScriptVm::new(condition_fixture(value));
+            vm.runtime_procedures[0].flags = 0x03;
+            vm.runtime_procedures[0].condition_offset = 20;
+            vm.runtime_procedures[0].event_time = 5;
+            assert_eq!(vm.preview_condition_bounded(20, 3).unwrap(), expected);
+            assert_eq!(vm.pc(), 0);
+            assert!(!vm.halted());
+            assert!(vm.stack().is_empty());
+            let result = vm.take_due_procedures_preview(100, 3).unwrap();
+            assert_eq!(result, if expected { vec![0] } else { vec![] });
+            assert_eq!(vm.runtime_procedures[0].flags, if expected { 0 } else { 3 });
+            assert_eq!(vm.program.procedures()[0].flags, 0);
+        }
+    }
+
+    #[test]
+    fn ce_condition_preview_rejects_bad_offset_unknown_op_and_exhausted_budget() {
+        let mut vm = ScriptVm::new(condition_fixture(1));
+        vm.runtime_procedures[0].flags = 0x02;
+        vm.runtime_procedures[0].condition_offset = -1;
+        assert!(vm.take_due_procedures_preview(100, 8).is_err());
+        assert_eq!(vm.runtime_procedures[0].flags, 0x02);
+        vm.runtime_procedures[0].condition_offset = 20;
+        assert!(vm.take_due_procedures_preview(100, 1).is_err());
+        assert_eq!(vm.runtime_procedures[0].flags, 0x02);
+
+        let mut code = vec![0x80, 0x11];
+        code.resize(20, 0);
+        opcode(&mut code, 0x804C); // unsupported opcode, not an engine callback
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 0, 0, 0));
+        vm.runtime_procedures[0].flags = 0x02;
+        vm.runtime_procedures[0].condition_offset = 20;
+        assert!(vm.take_due_procedures_preview(100, 4).is_err());
+        assert_eq!(vm.runtime_procedures[0].flags, 0x02);
     }
 
     #[test]
