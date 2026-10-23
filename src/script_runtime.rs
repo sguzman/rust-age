@@ -641,6 +641,17 @@ mod tests {
         assert_eq!(polls[0].candidate.procedures[0].flags, 0x02);
         assert_eq!(polls[1].candidate.procedures[0].flags, 0);
         assert_eq!(polls[2].candidate.procedures[0].flags, 0);
+        assert_eq!(polls[0].candidate.condition_flag_restorations.len(), 1);
+        assert!(polls[1].candidate.condition_flag_restorations.is_empty());
+        assert_eq!(polls[2].candidate.condition_flag_restorations.len(), 1);
+        for index in [0, 2] {
+            let trace = polls[index].candidate.condition_flag_restorations[0].1;
+            assert_eq!(trace.saved_low_flags, 0);
+            assert_eq!(trace.evaluated_low_flags, 0x08);
+            assert_eq!(trace.restored_low_flags, 0);
+            assert_eq!(trace.saved_pc, 0);
+            assert_eq!(trace.restored_pc, 0);
+        }
         assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0x02);
         assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0x01);
         assert_eq!(runtime.vm(3).unwrap().runtime_procedures()[0].flags, 0x02);
