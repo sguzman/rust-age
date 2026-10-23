@@ -10,7 +10,7 @@ fn main() {
                 return Err("invalid test hex".into());
             }
             let mut bytes = Vec::new();
-            for part in hex.as_bytes().chunks_exact(2) {
+            for part in hex.as_bytes().as_chunks::<2>().0 {
                 bytes.push(u8::from_str_radix(std::str::from_utf8(part)?, 16)?);
             }
             if bytes.len() > 42 {
