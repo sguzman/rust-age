@@ -29,6 +29,7 @@ pub const SCRIPT_OVERRIDES_OPCODE: u16 = 0x80B9;
 pub const SELF_OBJ_OPCODE: u16 = 0x80BC;
 pub const SOURCE_OBJ_OPCODE: u16 = 0x80BD;
 pub const TARGET_OBJ_OPCODE: u16 = 0x80BE;
+pub const OBJ_BEING_USED_WITH_OPCODE: u16 = 0x80C0;
 pub const FIXED_PARAM_OPCODE: u16 = 0x80F7;
 const MAX_STACK_VALUES: usize = 0x800;
 
@@ -491,7 +492,7 @@ pub fn run_invocation_with_event_snapshot_bounded(
         SOURCE_OBJ_OPCODE => {
             push_event_object(stack, snapshot.owner.native.objects, snapshot.source)
         }
-        TARGET_OBJ_OPCODE => {
+        TARGET_OBJ_OPCODE | OBJ_BEING_USED_WITH_OPCODE => {
             push_event_object(stack, snapshot.owner.native.objects, snapshot.target)
         }
         GAME_TIME_OPCODE
@@ -549,7 +550,7 @@ mod tests {
         ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot,
         FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
         SCRIPT_OVERRIDES_OPCODE, SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
-        SOURCE_OBJ_OPCODE, TARGET_OBJ_OPCODE,
+        SOURCE_OBJ_OPCODE, TARGET_OBJ_OPCODE, OBJ_BEING_USED_WITH_OPCODE,
     };
     use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
@@ -1247,6 +1248,66 @@ mod tests {
         .is_err());
         assert_eq!(bad.pc(), 0);
         assert!(bad.stack().is_empty());
+    }
+
+    #[test]
+    fn obj_being_used_with_reuses_ce_target_obj_context() {
+        let mut code = Vec::new();
+        op(&mut code, OBJ_BEING_USED_WITH_OPCODE);
+        op(&mut code, OBJ_PID_OPCODE);
+        op(&mut code, 0x8011);
+        let object = [ScriptObjectSnapshot {
+            handle: 42,
+            tile: 20099,
+            elevation: 0,
+            table_elevation: 0,
+            pid: 0x0300_0011,
+            fid: 0,
+        }];
+        let native = ScriptNativeOwnerSnapshot {
+            native: ScriptNativeSnapshot {
+                clock: ScriptClockContext {
+                    clock: ScriptGameClock { ticks: 0 },
+                    last_visit_ticks: None,
+                },
+                objects: Some(&object),
+            },
+            resolution: None,
+        };
+        let mut locals = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        let mut vm = program(&code);
+        assert_eq!(
+            run_invocation_with_event_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                &mut invocation,
+                ScriptNativeEventSnapshot {
+                    owner: native,
+                    source: None,
+                    target: Some(42),
+                },
+                5,
+            )
+            .unwrap(),
+            3
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(0x0300_0011)]);
+        let mut denied = program(&code);
+        assert!(run_invocation_with_owner_snapshot_bounded(
+            &mut denied,
+            1,
+            &mut locals,
+            &mut globals,
+            &mut invocation,
+            native,
+            5,
+        )
+        .is_err());
+        assert_eq!(denied.pc(), 0);
     }
 
     #[test]
