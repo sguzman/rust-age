@@ -190,15 +190,33 @@ mod tests {
             elevation: 0,
             ordinal: 0,
         };
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
-        assert_eq!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Moved {
-            tile: 20098,
-            rotation: 1,
-        });
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20098);
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.rotation, 1);
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            world.advance_actor(&view, &mut route).unwrap(),
+            ActorStep::Moved {
+                tile: 20098,
+                rotation: 1,
+            }
+        );
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0].record.header.tile,
+            20098
+        );
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0]
+                .record
+                .header
+                .rotation,
+            1
+        );
         assert_eq!(world.snapshot().collision.tile_of(actor), Some(20098));
-        assert_eq!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Finished);
+        assert_eq!(
+            world.advance_actor(&view, &mut route).unwrap(),
+            ActorStep::Finished
+        );
     }
 
     #[test]
@@ -209,10 +227,30 @@ mod tests {
             elevation: 0,
             ordinal: 1,
         };
-        assert!(!world.snapshot().collision.is_passable(&view, 20100, 0, None));
+        assert!(!world
+            .snapshot()
+            .collision
+            .is_passable(&view, 20100, 0, None));
         world.set_object_flags(wall, 0x01).unwrap(); // CE HIDDEN
-        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 0x01);
-        assert!(world.snapshot().collision.is_passable(&view, 20100, 0, None));
-        assert!(world.set_object_flags(ObjectKey { elevation: 0, ordinal: 99 }, 0).is_err());
+        assert_eq!(
+            world.snapshot().objects.elevations[0][1]
+                .record
+                .header
+                .flags,
+            0x01
+        );
+        assert!(world
+            .snapshot()
+            .collision
+            .is_passable(&view, 20100, 0, None));
+        assert!(world
+            .set_object_flags(
+                ObjectKey {
+                    elevation: 0,
+                    ordinal: 99
+                },
+                0
+            )
+            .is_err());
     }
 }
