@@ -39,6 +39,16 @@ cargo run -- --export-map-floor-preview /path/to/Fallout maps/example.map floor.
 
 Replace `maps/example.map` with a real map path from the original game installation. No extracted game assets belong in the repository.
 
+### Optional native SDL2 floor MAP window
+
+This is a **static, read-only floor preview**, not a playable game. It uses the original map's entering tile, the local MAP + LST + FRM content pipeline, and the original VGA palette. It has no object/roof compositing, scripts or lighting; no original game data is included in the build.
+
+```sh
+cargo run --features native-window --bin rust-age-map-view -- /path/to/Fallout maps/example.map
+```
+
+Escape closes the window; resizing scales the original 640×380 framebuffer. Replace the example path with a map actually present in your installation.
+
 ### Optional native SDL2 sprite window
 
 On EndeavourOS, install the standard `sdl2` development package if it is not already installed. The read-only SDL2 viewer is an **optional feature**; basic diagnostics do not require SDL2:
