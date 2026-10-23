@@ -326,12 +326,22 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
         Some(ScriptValue::Int(20100))
     );
     assert_eq!(sessions.get(1).unwrap().source_handle(), 2);
+    let sandbox = environment
+        .preview_active_sandbox_bounded(&sessions, &plan, clock, 5)
+        .unwrap();
+    assert_eq!(sandbox.returned, Some(ScriptValue::Int(20100)));
+    assert_eq!(sandbox.discard().unwrap().map.map_globals_changed, 0);
+    assert_eq!(sessions.get(1).unwrap().source_handle(), 2);
+    assert_eq!(sessions.get(1).unwrap().target_handle(), 1);
     assert!(environment
         .preview_active_event_reads_bounded(&DetachedMapEventSessions::new(), &plan, clock, 5)
         .is_err());
     sessions.finish(1).unwrap();
     assert!(environment
         .preview_active_event_reads_bounded(&sessions, &plan, clock, 5)
+        .is_err());
+    assert!(environment
+        .preview_active_sandbox_bounded(&sessions, &plan, clock, 5)
         .is_err());
     let resumed = sessions
         .begin_planned(
@@ -628,4 +638,60 @@ fn failed_sandbox_after_speculative_writes_and_overrides_rolls_back_entire_actio
         assert!(!event.invocation().overrides());
         assert!(event.is_active());
     }
+}
+
+#[test]
+fn active_sandbox_overrides_and_variable_writes_never_mutate_real_session() {
+    let mut environment = environment();
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![12],
+            locals: vec![],
+        })
+        .unwrap();
+    environment.game_globals = Some(GameGlobalState::from_initial_values(&[3]).unwrap());
+    let mut code = vec![0x80, 0x1A, 0xC0, 0x01];
+    code.extend_from_slice(&0_i32.to_be_bytes());
+    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&19_i32.to_be_bytes());
+    code.extend_from_slice(&[0x80, 0xC4, 0x80, 0xB9, 0x80, 0x21]);
+    let mut runtime = ScriptRuntime::new();
+    runtime.register(1, synthetic_vm_with_body(&code)).unwrap();
+    environment.scripts.runtime = runtime;
+    let planned = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    let mut sessions = DetachedMapEventSessions::new();
+    sessions.begin_planned(&environment, &planned).unwrap();
+    assert!(!sessions.get(1).unwrap().invocation().overrides());
+    let result = environment
+        .preview_active_sandbox_bounded(&sessions, &planned, clock, 8)
+        .unwrap();
+    assert_eq!(result.map_locals.globals(), [19]);
+    let summary = result.discard().unwrap();
+    assert_eq!(summary.map.map_globals_changed, 1);
+    assert!(summary.overrides);
+    assert_eq!(environment.map_locals.globals(), [12]);
+    assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
+    assert!(!sessions.get(1).unwrap().invocation().overrides());
+    assert!(sessions.get(1).unwrap().is_active());
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+    let mismatch = rust_age::script_lifecycle::PlannedMapAction {
+        external_parameter: Some(123),
+        ..planned
+    };
+    assert!(environment
+        .preview_active_sandbox_bounded(&sessions, &mismatch, clock, 8)
+        .is_err());
+    assert_eq!(environment.map_locals.globals(), [12]);
+    sessions.finish(1).unwrap();
+    assert!(environment
+        .preview_active_sandbox_bounded(&sessions, &planned, clock, 8)
+        .is_err());
 }
