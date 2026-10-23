@@ -293,6 +293,51 @@ mod tests {
     }
 
     #[test]
+    fn weapon_preserves_sixteen_ce_fields_and_sound_code() {
+        let mut bytes = encode(&[0x0000_0002, 11, 12, 1, 2, 3, 4, -1, 3, 6, 7, 8, 9, 10]);
+        bytes.push(0);
+        let details: Vec<i32> = (0..16).collect();
+        bytes.extend_from_slice(&encode(&details));
+        bytes.push(0xDF);
+        let proto = Prototype::decode(&bytes).unwrap();
+        assert!(proto.remaining_bytes.is_empty());
+        match proto.body {
+            PrototypeBody::Item {
+                item_type,
+                details,
+                weapon_sound_code,
+                ..
+            } => {
+                assert_eq!(item_type, 3);
+                assert_eq!(details, (0..16).collect::<Vec<i32>>());
+                assert_eq!(weapon_sound_code, Some(0xDF));
+            }
+            _ => panic!("expected weapon"),
+        }
+    }
+
+    #[test]
+    fn scenery_door_carries_two_big_endian_words() {
+        let mut bytes = encode(&[0x0200_0001, 11, 12, 1, 2, 3, 4, -1, 0, 6]);
+        bytes.push(0);
+        bytes.extend_from_slice(&encode(&[-123, 0x1234]));
+        let proto = Prototype::decode(&bytes).unwrap();
+        assert_eq!(proto.kind, ObjectKind::Scenery);
+        assert!(proto.remaining_bytes.is_empty());
+        match proto.body {
+            PrototypeBody::Scenery {
+                scenery_type,
+                details,
+                ..
+            } => {
+                assert_eq!(scenery_type, 0);
+                assert_eq!(details, vec![-123, 0x1234]);
+            }
+            _ => panic!("expected door"),
+        }
+    }
+
+    #[test]
     fn critter_extra_data_remains_uninterpreted() {
         let mut bytes = encode(&[0x0100_0010, 2, 3, 4, 5, 6, 7, -1, 8, 9, 10]);
         bytes.extend_from_slice(&[1, 2, 3, 4]);
