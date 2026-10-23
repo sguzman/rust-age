@@ -368,14 +368,16 @@ pub fn run_invocation_with_native_snapshot_bounded(
             opcode,
             stack,
         ),
-        object_opcode
-            @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE | OBJ_ART_FID_OPCODE) => {
+        object_opcode @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE
+        | OBJ_ART_FID_OPCODE) => {
             let objects = snapshot
                 .objects
                 .ok_or_else(|| invalid("CE object snapshots not provided"))?;
             apply_object_read_opcode(objects, object_opcode, stack)
         }
-        _ => Err(invalid("unrecognized CE script-state, clock or object opcode")),
+        _ => Err(invalid(
+            "unrecognized CE script-state, clock or object opcode",
+        )),
     })
 }
 
@@ -384,9 +386,9 @@ mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
-        run_invocation_with_native_snapshot_bounded, ScriptNativeSnapshot,
-        run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
-        ScriptInvocationState, FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
+        run_invocation_with_native_snapshot_bounded, run_variable_subset_bounded,
+        run_with_script_action_bounded, ScriptClockContext, ScriptInvocationState,
+        ScriptNativeSnapshot, FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
         SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
