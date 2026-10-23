@@ -71,11 +71,14 @@ impl BoundScriptRuntime {
                 None
             };
             if instances
-                .insert(id, ScriptLocalRange {
-                    declared,
-                    offset,
-                    is_system: binding.category == 0,
-                })
+                .insert(
+                    id,
+                    ScriptLocalRange {
+                        declared,
+                        offset,
+                        is_system: binding.category == 0,
+                    },
+                )
                 .is_some()
             {
                 return Err(invalid("duplicate CE Rust script instance local state"));
@@ -103,7 +106,9 @@ impl MapScriptLocals {
     }
 
     fn slot(&mut self, instance: u64, variable: i32) -> io::Result<Option<usize>> {
-        let local = self.instances.get_mut(&instance)
+        let local = self
+            .instances
+            .get_mut(&instance)
             .ok_or_else(|| invalid("CE script local references unknown instance"))?;
         if local.is_system {
             return Err(invalid("CE system/map script local access is unsupported"));
@@ -111,14 +116,15 @@ impl MapScriptLocals {
         if local.declared == 0 {
             return Ok(None); // CE get returns success without assigning a value.
         }
-        let index = usize::try_from(variable)
-            .map_err(|_| invalid("negative CE script local index"))?;
+        let index =
+            usize::try_from(variable).map_err(|_| invalid("negative CE script local index"))?;
         if index >= local.declared {
             return Err(invalid("CE script local index exceeds declared count"));
         }
         if local.offset.is_none() {
             let start = self.locals.len();
-            let end = start.checked_add(local.declared)
+            let end = start
+                .checked_add(local.declared)
                 .ok_or_else(|| invalid("CE lazy local allocation overflow"))?;
             if end > MAX_LOCAL_SLOTS {
                 return Err(invalid("CE lazy local allocation exceeds Rust bound"));
@@ -140,7 +146,8 @@ impl MapScriptLocals {
 
     /// CE script-local integer write. Unlike get, no declaration is an error.
     pub fn write(&mut self, instance: u64, index: i32, value: i32) -> io::Result<()> {
-        let slot = self.slot(instance, index)?
+        let slot = self
+            .slot(instance, index)?
             .ok_or_else(|| invalid("CE script local set without declaration"))?;
         self.locals[slot] = value;
         Ok(())
@@ -157,9 +164,13 @@ mod tests {
     use crate::script_runtime::ScriptRuntime;
     use crate::script_vm::ScriptVm;
 
-    fn record(category: usize, id: u64, offset: i32, count: i32, declared: Option<i32>)
-        -> InstalledScriptBinding
-    {
+    fn record(
+        category: usize,
+        id: u64,
+        offset: i32,
+        count: i32,
+        declared: Option<i32>,
+    ) -> InstalledScriptBinding {
         InstalledScriptBinding {
             binding: ScriptBinding {
                 category,
@@ -184,7 +195,9 @@ mod tests {
         let program = ScriptProgram::decode(&bytes).unwrap();
         let mut runtime = ScriptRuntime::new();
         for id in 1..=4 {
-            runtime.register(id, ScriptVm::new(program.clone())).unwrap();
+            runtime
+                .register(id, ScriptVm::new(program.clone()))
+                .unwrap();
         }
         BoundScriptRuntime {
             runtime,
@@ -200,7 +213,10 @@ mod tests {
     #[test]
     fn ce_saved_and_lazy_script_locals_share_map_storage_without_aliasing() {
         let bound = fixture();
-        let original = MapVariables { globals: vec![99], locals: vec![10, 11] };
+        let original = MapVariables {
+            globals: vec![99],
+            locals: vec![10, 11],
+        };
         let mut state = bound.script_local_state(&original).unwrap();
         assert_eq!(state.globals(), [99]);
         assert_eq!(state.read(1, 0).unwrap(), Some(10));
@@ -220,7 +236,10 @@ mod tests {
     #[test]
     fn ce_locals_reject_out_of_range_missing_system_and_undeclared_slots() {
         let bound = fixture();
-        let original = MapVariables { globals: vec![], locals: vec![1, 2] };
+        let original = MapVariables {
+            globals: vec![],
+            locals: vec![1, 2],
+        };
         let mut state = bound.script_local_state(&original).unwrap();
         assert!(state.read(1, -1).is_err());
         assert!(state.read(1, 2).is_err());
@@ -229,7 +248,10 @@ mod tests {
         assert!(state.write(4, 0, 1).is_err());
         assert!(state.read(999, 0).is_err());
         assert_eq!(state.locals(), [1, 2]);
-        let broken = MapVariables { globals: vec![], locals: vec![0] };
+        let broken = MapVariables {
+            globals: vec![],
+            locals: vec![0],
+        };
         assert!(bound.script_local_state(&broken).is_err());
         let mut invalid_bound = fixture();
         invalid_bound.entries[1].binding.local_variable_count = -1;
