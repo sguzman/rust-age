@@ -17,8 +17,8 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
-use crate::script_locals::MapScriptLocals;
 use crate::script_event_state::DetachedScriptEvent;
+use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use std::io;

@@ -44,6 +44,15 @@ impl DetachedScriptEvent {
         &self.invocation
     }
 
+    /// Mutable CE action/overrides state, available only during an explicit
+    /// detached invocation. The bounded native host may update overrides.
+    pub fn active_invocation_mut(&mut self) -> io::Result<&mut ScriptInvocationState> {
+        if !self.active {
+            return Err(invalid("CE event has no active script action"));
+        }
+        Ok(&mut self.invocation)
+    }
+
     pub fn source_handle(&self) -> i32 {
         self.source
     }
@@ -255,6 +264,7 @@ mod tests {
         let objects = keys();
         let mut event = DetachedScriptEvent::new(owner());
         assert!(event.snapshot(&objects, clock()).is_err());
+        assert!(event.active_invocation_mut().is_err());
         event.set_objs(&objects, Some(key(1)), None).unwrap();
         event.begin_action(6, Some(19), &objects).unwrap();
         let snapshot = event.snapshot(&objects, clock()).unwrap();
@@ -262,6 +272,7 @@ mod tests {
         assert_eq!(snapshot.target, Some(1)); // target inherited from self
         assert_eq!(event.invocation().action(), 6);
         assert_eq!(event.invocation().fixed_parameter(), 19);
+        assert!(!event.active_invocation_mut().unwrap().overrides());
         assert!(event.begin_action(8, None, &objects).is_err());
         event.finish_action().unwrap();
         assert_eq!(event.source_handle(), 0);
@@ -276,9 +287,7 @@ mod tests {
     #[test]
     fn explicit_target_survives_missing_owner_with_target_not_guessed() {
         let objects = keys();
-        let mut event = DetachedScriptEvent::new(
-            ScriptOwnerResolution::SpatialOwnerRequiresEngine,
-        );
+        let mut event = DetachedScriptEvent::new(ScriptOwnerResolution::SpatialOwnerRequiresEngine);
         event.set_objs(&objects, None, Some(key(1))).unwrap();
         event.begin_action(15, None, &objects).unwrap();
         assert_eq!(event.snapshot(&objects, clock()).unwrap().target, Some(2));
