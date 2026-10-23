@@ -275,15 +275,15 @@
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 13,
-              "evidence": "Core CI tests CE 24-action lookup and opt-in source-order host dispatch; read-only MAP lifecycle plans START, ENTER, UPDATE and EXIT from real installed INT metadata, without running game procedures. Map flags and first-visit parameter preserved in plans. Native game opcodes/world updates absent."
+              "progress": 16,
+              "evidence": "CI-tested original CE 24-action lookup and host dispatch order; detached synthetic CE game native variable instruction adapters cover 0x80C1-0x80C6 with correct stack order, errors and type/union conversions. 31 MAP/local and 16 game-global adapted C++/Rust differential cases pass. No ScriptVm native opcode registration, real engine callbacks, quest effects or persistent scripts."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 20,
-              "evidence": "Core CI passes adapted independent CE C++/Rust numeric, named/string/pointer comparisons, scheduled-event/interpreter calls, 11 lifecycle and 21 local integer/pointer storage synthetic comparisons. Upstream original CE executable and real-game/script golden verification are not yet available."
+              "progress": 23,
+              "evidence": "Core CI covers adapted independent C++/Rust CE numeric, strings/pointers, schedule/event ordering, local interrupts and named lookups; 11 MAP lifecycle, 21 MAP local/global typed slots, 31 native MAP/local instruction and 16 game-global native instruction cases, all invented. Real original compiled CE/gameplay golden fixtures remain unverified."
             }
           ]
         },
@@ -309,8 +309,8 @@
               "id": "T703",
               "emoji": "🧮",
               "name": "Port global/local state and quest flags",
-              "progress": 10,
-              "evidence": "CI-tested original MAP-owned script-local array with saved offsets, lazy zero-filled allocation, scripts.lst declarations, strict per-script bounds and immutable decoded MAP. Out-of-band pointer side storage now preserves non-null opaque i32 pointer tags and null pointer => integer zero; integer writes clear pointer tags. 21 adapted C++/Rust synthetic local cases and StaticScene unstarted_script_state assembly tested. No real pointer dereference, engine-native opcodes, quest flags, full globals or persistence."
+              "progress": 16,
+              "evidence": "CI-tested bounded Rust MAP script-local and MAP-global typed integer/opaque pointer state, original saved/local_vars offsets, zeroed lazy allocation, null pointer behavior and isolated source MAP; detached native variable opcode adapters with CE fallbacks. GameGlobalState now parses original installed data/vault13.gam GAME_GLOBAL_VARS defaults and supports game-global 0x80C5/0x80C6 synthetic adapter; Linux --inspect-game-global tested. No save/load persistence, actual VM bytecode dispatch or live quest logic."
             },
             {
               "id": "T704",
