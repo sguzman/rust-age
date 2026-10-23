@@ -136,6 +136,10 @@ fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> 
 #[derive(Debug, Clone)]
 pub struct ScriptVm {
     pub program: ScriptProgram,
+    // CE modifies procedure flag/time/condition fields at runtime.
+    // Retain the decoded source table unchanged for read-only inspection.
+    runtime_procedures: Vec<crate::script_program::ProcedureEntry>,
+    clock_millis: i32,
     pc: usize,
     stack: Vec<ScriptValue>,
     return_stack: Vec<ScriptValue>,
@@ -147,8 +151,11 @@ pub struct ScriptVm {
 
 impl ScriptVm {
     pub fn new(program: ScriptProgram) -> Self {
+        let runtime_procedures = program.procedures().to_vec();
         Self {
             program,
+            runtime_procedures,
+            clock_millis: 0,
             pc: 0,
             stack: Vec::new(),
             return_stack: Vec::new(),
@@ -187,10 +194,20 @@ impl ScriptVm {
         self.critical_section
     }
 
+    /// Deterministic CE timer snapshot in milliseconds; no wall clock used.
+    pub fn set_clock_millis(&mut self, now: i32) {
+        self.clock_millis = now;
+    }
+
+    /// Mutable interpreter view of CE procedure flags and scheduling fields.
+    /// Reading this does not dispatch or run callbacks.
+    pub fn runtime_procedures(&self) -> &[crate::script_program::ProcedureEntry] {
+        &self.runtime_procedures
+    }
+
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
         let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
-        self.program
-            .procedures()
+        self.runtime_procedures
             .get(index)
             .copied()
             .ok_or_else(|| invalid("CE procedure index outside table"))
@@ -306,6 +323,29 @@ impl ScriptVm {
                 if procedure.flags & 0x10 != 0 {
                     self.critical_section = true;
                 }
+            }
+            0x06 => {
+                // CALL_AT: top of stack is procedure index, beneath it the
+                // delay in seconds. Original CE stores clock + 1000*delay.
+                let index = self.pop_int()?;
+                let seconds = self.pop_int()?;
+                let index = usize::try_from(index)
+                    .map_err(|_| invalid("negative CE scheduled procedure index"))?;
+                let procedure = self.runtime_procedures.get_mut(index)
+                    .ok_or_else(|| invalid("CE scheduled procedure index out of bounds"))?;
+                procedure.event_time = self.clock_millis.wrapping_add(seconds.wrapping_mul(1000));
+                procedure.flags |= 0x01; // PROCEDURE_FLAG_TIMED
+            }
+            0x07 => {
+                // CALL_WHEN: condition bytecode offset is stored verbatim.
+                let index = self.pop_int()?;
+                let condition = self.pop_int()?;
+                let index = usize::try_from(index)
+                    .map_err(|_| invalid("negative CE conditional procedure index"))?;
+                let procedure = self.runtime_procedures.get_mut(index)
+                    .ok_or_else(|| invalid("CE conditional procedure index out of bounds"))?;
+                procedure.flags |= 0x02; // PROCEDURE_FLAG_CONDITIONAL
+                procedure.condition_offset = condition;
             }
             0x0C => {
                 let value = self.pop_return()?;
@@ -519,6 +559,24 @@ impl ScriptVm {
                     ScriptValue::Int(value) => ScriptValue::Int(value),
                     _ => return Err(invalid("non-numeric CE FLOOR operand")),
                 })?;
+            }
+            0x48 => {
+                let index = self.pop_int()?;
+                let index = usize::try_from(index)
+                    .map_err(|_| invalid("negative CE cancel procedure index"))?;
+                let procedure = self.runtime_procedures.get_mut(index)
+                    .ok_or_else(|| invalid("CE cancel procedure index out of bounds"))?;
+                procedure.flags = 0;
+                procedure.event_time = 0;
+                procedure.condition_offset = 0;
+            }
+            0x49 => {
+                // CE CANCEL_ALL resets *all* flags, even import/export flags.
+                for procedure in &mut self.runtime_procedures {
+                    procedure.flags = 0;
+                    procedure.event_time = 0;
+                    procedure.condition_offset = 0;
+                }
             }
             0x46 => {
                 let value = self.pop()?;
@@ -878,6 +936,73 @@ mod tests {
         opcode(&mut code, 0x8028);
         let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"start"));
         assert!(vm.run_bounded(4).is_err());
+    }
+
+    #[test]
+    fn ce_call_at_and_call_when_mutate_only_runtime_procedure_metadata() {
+        let mut timed = Vec::new();
+        push_int(&mut timed, 2); // CE seconds of delay
+        push_int(&mut timed, 0); // CE procedure index is popped first
+        opcode(&mut timed, 0x8006);
+        opcode(&mut timed, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&timed, 18, 0x08, 0));
+        vm.set_clock_millis(750);
+        vm.run_bounded(8).unwrap();
+        let original = vm.program.procedures()[0];
+        assert_eq!(original.flags, 0x08);
+        assert_eq!(original.event_time, 0);
+        let pending = vm.runtime_procedures()[0];
+        assert_eq!(pending.flags, 0x09);
+        assert_eq!(pending.event_time, 2750);
+        assert_eq!(pending.condition_offset, 0);
+
+        let mut conditional = Vec::new();
+        push_int(&mut conditional, 123); // condition bytecode offset
+        push_int(&mut conditional, 0);
+        opcode(&mut conditional, 0x8007);
+        opcode(&mut conditional, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&conditional, 18, 0x10, 0));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x12);
+        assert_eq!(vm.runtime_procedures()[0].condition_offset, 123);
+        assert_eq!(vm.program.procedures()[0].flags, 0x10);
+    }
+
+    #[test]
+    fn ce_cancel_and_cancel_all_clear_flags_time_and_condition() {
+        let mut code = Vec::new();
+        push_int(&mut code, 10);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8006);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8048);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0x08, 0));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.runtime_procedures()[0].flags, 0);
+        assert_eq!(vm.runtime_procedures()[0].event_time, 0);
+        assert_eq!(vm.runtime_procedures()[0].condition_offset, 0);
+        assert_eq!(vm.program.procedures()[0].flags, 0x08);
+
+        let mut vm = ScriptVm::new(fixture_with_procedure(&[0x80, 0x49, 0x80, 0x11], 18, 0x04, 0));
+        vm.run_bounded(4).unwrap();
+        assert_eq!(vm.runtime_procedures()[0].flags, 0);
+        assert_eq!(vm.program.procedures()[0].flags, 0x04);
+    }
+
+    #[test]
+    fn ce_procedure_scheduling_rejects_invalid_indices_and_operand_types() {
+        for opcode_id in [0x8006, 0x8007, 0x8048] {
+            let mut code = Vec::new();
+            if opcode_id != 0x8048 {
+                push_int(&mut code, 3);
+            }
+            push_int(&mut code, -1);
+            opcode(&mut code, opcode_id);
+            let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0, 0));
+            assert!(vm.run_bounded(8).is_err());
+            assert_eq!(vm.runtime_procedures()[0].flags, 0);
+        }
     }
 
     #[test]
