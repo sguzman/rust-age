@@ -149,7 +149,10 @@ mod tests {
         bytes.extend_from_slice(&[0_u8; 12]);
         let program = ScriptProgram::decode(&bytes).unwrap();
         let mut vm = ScriptVm::new(program.clone());
-        assert_eq!(run_object_read_subset_bounded(&[OBJECT], &mut vm, 8).unwrap(), 3);
+        assert_eq!(
+            run_object_read_subset_bounded(&[OBJECT], &mut vm, 8).unwrap(),
+            3
+        );
         assert_eq!(vm.stack(), [ScriptValue::Int(OBJECT.pid)]);
         assert!(vm.halted());
         let mut ungated = ScriptVm::new(program);
