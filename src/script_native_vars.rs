@@ -329,8 +329,9 @@ mod tests {
         assert!(
             run_variable_subset_bounded(&mut not_authorized, 1, &mut map, &mut game, 7).is_err()
         );
+        assert_eq!(not_authorized.pc(), 0); // explicit host failure is rollback-safe.
         assert!(not_authorized.step().is_err());
-        assert_eq!(not_authorized.pc(), 0);
+        assert_eq!(not_authorized.pc(), 2); // ordinary core step already decoded opcode.
     }
 
     #[test]
