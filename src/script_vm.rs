@@ -145,6 +145,10 @@ pub enum ScriptHaltReason {
     Exit,
     ExitProgram,
     StopProgram,
+    /// CE POP_EXIT: return address from rstack, transient 0x40 flag.
+    /// interpret clears 0x40 before returning; this does not purge
+    /// the .INT program or set EXITED/STOPPED.
+    ReturnFromCall,
 }
 
 impl ScriptHaltReason {
@@ -152,6 +156,7 @@ impl ScriptHaltReason {
         match self {
             Self::Exit | Self::ExitProgram => 0x01,
             Self::StopProgram => 0x08,
+            Self::ReturnFromCall => 0x40,
         }
     }
 }
@@ -264,7 +269,11 @@ impl ScriptVm {
     pub fn modeled_program_low_flags(&self) -> u16 {
         let mut flags = if self.critical_section { 0x80 } else { 0 };
         if let Some(reason) = self.halt_reason {
-            flags |= reason.ce_terminal_flag();
+            // Original interpret clears PROGRAM_FLAG_0x40 after a
+            // POP_EXIT return before the caller observes program flags.
+            if reason != ScriptHaltReason::ReturnFromCall {
+                flags |= reason.ce_terminal_flag();
+            }
         }
         flags
     }
@@ -990,6 +999,16 @@ impl ScriptVm {
                 let address = self.pop_return_int()?;
                 self.jump(address)?;
             }
+            0x1D => {
+                // Pinned CE op_pop_exit pops the return address, sets PC,
+                // and raises transient PROGRAM_FLAG_0x40. interpret breaks
+                // and clears the bit before returning to its caller. The
+                // bounded runner models this as a distinct halt reason.
+                let address = self.pop_return_int()?;
+                self.jump(address)?;
+                self.halt_reason = Some(ScriptHaltReason::ReturnFromCall);
+                self.halted = true;
+            }
             0x1E => {
                 self.pop_return()?;
             }
@@ -1619,6 +1638,63 @@ mod tests {
         assert_eq!(vm.modeled_program_low_flags(), 0);
         assert!(vm.stack().is_empty());
         assert!(vm.return_stack().is_empty());
+    }
+
+    #[test]
+    fn ce_pop_exit_restores_saved_pc_and_clears_transient_interpret_flag() {
+        use super::ScriptHaltReason;
+        let mut code = Vec::new();
+        push_int(&mut code, 24); // address on the return stack
+        opcode(&mut code, 0x800D); // D_TO_A
+        push_int(&mut code, 73); // must survive the POP_EXIT
+        opcode(&mut code, 0x801D); // source CE POP_EXIT
+        let mut vm = ScriptVm::new(fixture(&code));
+        assert_eq!(vm.run_bounded(4).unwrap(), 4);
+        assert!(vm.halted());
+        assert_eq!(vm.pc(), 24);
+        assert_eq!(vm.stack(), [ScriptValue::Int(73)]);
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::ReturnFromCall));
+        assert_eq!(ScriptHaltReason::ReturnFromCall.ce_terminal_flag(), 0x40);
+        // 0x40 is set by the opcode, then cleared at interpret return.
+        assert_eq!(vm.modeled_program_low_flags(), 0);
+    }
+
+    #[test]
+    fn ce_pop_exit_condition_restore_is_detached_and_bad_return_address_fails() {
+        use super::ScriptHaltReason;
+        for (destination, valid) in [(30_i32, true), (-1, false), (99, false)] {
+            let mut code = Vec::new();
+            push_int(&mut code, destination);
+            opcode(&mut code, 0x800D); // D_TO_A
+            push_int(&mut code, 1); // the CE condition result
+            opcode(&mut code, 0x801D); // POP_EXIT
+            let vm = ScriptVm::new(fixture(&code));
+            let result = vm.preview_condition_frame_with_host_bounded(
+                0,
+                4,
+                &mut |_, _| Err(super::invalid("CE native host not configured")),
+            );
+            if valid {
+                let candidate = result.unwrap();
+                assert!(candidate.satisfied);
+                assert_eq!(candidate.termination, ScriptHaltReason::ReturnFromCall);
+                assert_eq!(candidate.flag_restore.saved_pc, 0);
+                assert_eq!(candidate.flag_restore.evaluated_pc, 30);
+                assert_eq!(candidate.flag_restore.restored_pc, 0);
+                assert_eq!(candidate.flag_restore.evaluated_low_flags, 0);
+                assert_eq!(candidate.flag_restore.restored_low_flags, 0);
+                assert!(candidate.data_stack.is_empty());
+                assert!(candidate.return_stack.is_empty());
+            } else {
+                assert!(result.is_err());
+            }
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.modeled_program_low_flags(), 0);
+            assert!(!vm.halted());
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+        }
     }
 
     #[test]
