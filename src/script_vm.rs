@@ -900,7 +900,9 @@ impl ScriptVm {
             return Err(invalid("CE local POP_FLAGS requires integer flags"));
         };
         if flags & !0x80 != 0 {
-            return Err(invalid("CE local POP_FLAGS contains unsupported program flags"));
+            return Err(invalid(
+                "CE local POP_FLAGS contains unsupported program flags",
+            ));
         }
         let target = if return_frame {
             let address = match self.return_stack.last() {
