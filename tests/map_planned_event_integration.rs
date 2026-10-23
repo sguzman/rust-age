@@ -617,7 +617,13 @@ fn failed_sandbox_after_speculative_writes_and_overrides_rolls_back_entire_actio
         assert_eq!(environment.map_locals.globals(), [12]);
         assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
         assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
-        assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+        assert!(environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .stack()
+            .is_empty());
         let event = environment.detached_event_for_planned(&plan).unwrap();
         assert!(!event.invocation().overrides());
         assert!(event.is_active());
