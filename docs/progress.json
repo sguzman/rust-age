@@ -268,22 +268,22 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 47,
-              "evidence": "CI-tested bounded CE VM with explicit caller-gated native state/time/timer instruction subsets and original core arithmetic/stack/procedure semantics. Twenty synthetic C++/Rust clock traces and eight mixed native bytecode traces include hhmm, action/fixedParam and game-global writes. Not a game-connected interpreter or complete VM."
+              "progress": 49,
+              "evidence": "Core CI verifies original CE .INT core and explicit-host state, timer and time-native subset. Guarded op_get_month 0x8118, op_get_day 0x8119 and op_days_since_visited 0x811B use an explicit fixed game-clock/MAP last-visit snapshot, with independent invented C++ parity. No normal gameplay execution or complete interpreter."
             },
             {
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 24,
-              "evidence": "Core CI verifies guarded CE native MAP/local/game-global variable opcodes; script_action, script_overrides and fixed_param; pure CE game_time/game_ticks/game_time_hour; detached timer add/remove 0x80F0/0x80F1 with caller-supplied opaque object handle map and owned event queue. No world callbacks, actual event dispatch or native object dereference."
+              "progress": 26,
+              "evidence": "CI-tested explicit host for CE MAP/local/game-global variable natives, script_action/overrides/fixed_param, game clock time/hour/get_month/get_day/days_since_visited and owned timer add/remove; source MAP lastVisitTime is caller-supplied, None rejected versus Some(0) never visited. No real event dispatcher, object callbacks or state persistence."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 29,
-              "evidence": "CI runs adapted independent C++/Rust source-derived synthetic comparisons including 20 CE tick/second/hhmm cases, eight combined script-clock/game-global bytecode traces, ten CE script_q payload/scheduling cases, twelve script invocation cases and prior interpreter/map/object cases. No compiled CE or original Fallout gameplay golden acceptance yet."
+              "progress": 32,
+              "evidence": "CI-tested original CE adapted C++/Rust synthetic parity: 48 clock/time/month/day/last-visit fixtures, eight combined script-clock/game-global bytecode cases, ten script_q timer cases, twelve script invocation cases and prior opcode/procedure/MAP comparisons. No full compiled upstream CE executable or original Fallout game goldens; never infer gameplay parity."
             }
           ]
         },
@@ -302,8 +302,8 @@
               "id": "T702",
               "emoji": "🚩",
               "name": "Port map scripts, spatial triggers and timers",
-              "progress": 23,
-              "evidence": "CI-tested source-ordered MAP script lifecycle planning, detached action/first-visit fixed parameters, and CE script_q timed-event payload/queue integration with FIFO, missing SIDs, absent timed procedure and owner removal. Ten C++/Rust timer oracle cases and isolated native add/remove timer ops pass. Real spatial triggers, timer callbacks and gameplay not implemented."
+              "progress": 24,
+              "evidence": "Read-only MAP->scripts.lst->INT lifecycle, detached first-visit and timed_event plans, original CE queue save payload/order and explicit timer natives pass synthetic CI. StaticScene carries serialized MAP lastVisitTime into unstarted Rust environment for gated days_since_visited reads; no actual spatial triggers, NPC/world events or timer callbacks."
             },
             {
               "id": "T703",

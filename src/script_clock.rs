@@ -32,7 +32,8 @@ impl ScriptGameClock {
     /// Original CE game_time_date arithmetic, including its fixed 365-day
     /// year and December origin. This deliberately does not substitute a
     /// real Gregorian calendar, leap years, or wall-clock timestamps.
-    /// The returned values are (month 1..12, day 1..31, year).
+    /// The returned values are (month, day, year); under negative tick
+    /// inputs, CE's signed remainder can yield a non-calendar day.
     pub fn date(self) -> (i32, i32, i32) {
         let elapsed_days = self.ticks / 864_000 + 4;
         let mut year = elapsed_days / 365 + 2161;
