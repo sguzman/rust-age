@@ -172,3 +172,7 @@ The isolated `ScriptVm` now also implements numeric comparisons (EQ, NE, LE, GE,
 ## Isolated CE interpreter frame and return-stack primitives
 
 `ScriptVm` now keeps separate bounded data/return stacks and signed CE frame/global base pointers (initial `-1`). The original `D_TO_A`, `A_TO_D`, `SWAPA`, `POP_ADDRESS`, `PUSH_BASE`, `POP_BASE`, `POP_TO_BASE`, `SET_GLOBAL`, `DUMP`, local `FETCH`/`STORE`, and global `FETCH_GLOBAL`/`STORE_GLOBAL` stack manipulations are implemented with range-checked indices. Synthetic tests check return ordering, frame restore, store/fetch and rejection of invalid pointers. Actual procedure invocation, dynamic strings, native opcodes, waiting and external calls remain unimplemented; this is not yet a full interpreter.
+
+## CE local procedure call and return skeleton (isolated)
+
+The bounded VM now resolves local `CALL` by original 24-byte procedure-table index and body offset, supports `FETCH_PROCEDURE_ADDRESS`, `CHECK_PROCEDURE_ARGUMENT_COUNT`, and `POP_RETURN` from the caller-populated typed return stack. Critical-section flags can be entered and left under an instruction budget. Local synthetic procedure calls and return targets are tested. Imported/external procedure flags are rejected, rather than falsely pretending CE’s native-game integration is available. This is not yet CE’s complete call setup, return-value flow, procedure scheduler or runtime dispatch.

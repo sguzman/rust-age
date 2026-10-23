@@ -141,6 +141,7 @@ pub struct ScriptVm {
     return_stack: Vec<ScriptValue>,
     frame_pointer: i32,
     base_pointer: i32,
+    critical_section: bool,
     halted: bool,
 }
 
@@ -153,6 +154,7 @@ impl ScriptVm {
             return_stack: Vec::new(),
             frame_pointer: -1,
             base_pointer: -1,
+            critical_section: false,
             halted: false,
         }
     }
@@ -179,6 +181,17 @@ impl ScriptVm {
 
     pub fn return_stack(&self) -> &[ScriptValue] {
         &self.return_stack
+    }
+
+    pub fn critical_section(&self) -> bool {
+        self.critical_section
+    }
+
+    fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
+        let index = usize::try_from(index)
+            .map_err(|_| invalid("negative CE procedure index"))?;
+        self.program.procedures().get(index).copied()
+            .ok_or_else(|| invalid("CE procedure index outside table"))
     }
 
     fn push(&mut self, value: ScriptValue) -> io::Result<()> {
@@ -269,9 +282,26 @@ impl ScriptVm {
                     .ok_or_else(|| invalid("CE program counter overflow"))?;
                 self.push(ScriptValue::from_push_opcode(opcode, immediate)?)?;
             }
+            0x02 | 0x4A => {
+                self.critical_section = true;
+            }
+            0x03 | 0x4B => {
+                self.critical_section = false;
+            }
             0x04 => {
                 let dest = self.pop_int()?;
                 self.jump(dest)?;
+            }
+            0x05 => {
+                let index = self.pop_int()?;
+                let procedure = self.procedure_at(index)?;
+                if procedure.flags & 0x04 != 0 {
+                    return Err(invalid("CE imported/external procedure calls not implemented"));
+                }
+                self.jump(procedure.body_offset)?;
+                if procedure.flags & 0x10 != 0 {
+                    self.critical_section = true;
+                }
             }
             0x0C => {
                 let value = self.pop_return()?;
@@ -317,8 +347,19 @@ impl ScriptVm {
                 self.push(value)?;
                 self.push(value)?;
             }
+            0x1C => {
+                let address = self.pop_return_int()?;
+                self.jump(address)?;
+            }
             0x1E => {
                 self.pop_return()?;
+            }
+            0x27 => {
+                let expected = self.pop_int()?;
+                let index = self.pop_int()?;
+                if self.procedure_at(index)?.argument_count != expected {
+                    return Err(invalid("CE procedure argument count mismatch"));
+                }
             }
             0x29 => {
                 self.frame_pointer = self.pop_return_int()?;
@@ -345,6 +386,11 @@ impl ScriptVm {
             0x2C => {
                 self.base_pointer = i32::try_from(self.stack.len())
                     .map_err(|_| invalid("CE global base pointer exceeds i32"))?;
+            }
+            0x2D => {
+                let index = self.pop_int()?;
+                let entry = self.procedure_at(index)?;
+                self.push(ScriptValue::Int(entry.body_offset))?;
             }
             0x2E => {
                 let count = self.pop_int()?;
@@ -667,6 +713,80 @@ mod tests {
         opcode(&mut code, 0x802B);
         let mut vm = ScriptVm::new(fixture(&code));
         assert!(vm.run_bounded(4).is_err());
+    }
+
+
+    fn fixture_with_procedure(instructions: &[u8], body_offset: i32, flags: i32, args: i32) -> ScriptProgram {
+        assert!(instructions.len() <= 42);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..instructions.len()].copy_from_slice(instructions);
+        bytes.extend_from_slice(&1_i32.to_be_bytes()); // one Procedure
+        for value in [4_i32, flags, 0, 0, body_offset, args] {
+            bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptProgram::decode(&bytes).unwrap()
+    }
+
+    #[test]
+    fn ce_local_call_jumps_to_procedure_body_and_uses_return_stack() {
+        let mut code = Vec::new();
+        push_int(&mut code, 16); // continuation after CALL
+        opcode(&mut code, 0x800D); // D_TO_A: save explicit return target
+        push_int(&mut code, 0); // procedure index
+        opcode(&mut code, 0x8005); // CALL
+        opcode(&mut code, 0x8011); // STOP when return reaches byte 16
+        push_int(&mut code, 9); // procedure body begins at byte 18
+        opcode(&mut code, 0x801C); // POP_RETURN -> jumps to 16
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0, 0));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(9)]);
+        assert!(vm.return_stack().is_empty());
+        assert!(vm.halted());
+    }
+
+    #[test]
+    fn ce_procedure_address_and_argument_count_use_original_table() {
+        let mut code = Vec::new();
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x802D); // FETCH_PROCEDURE_ADDRESS
+        push_int(&mut code, 0);
+        push_int(&mut code, 2);
+        opcode(&mut code, 0x8027); // CHECK_PROCEDURE_ARGUMENT_COUNT
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 38, 0, 2));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(38)]);
+
+        let mut bad = Vec::new();
+        push_int(&mut bad, 0);
+        push_int(&mut bad, 99);
+        opcode(&mut bad, 0x8027);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&bad, 18, 0, 2));
+        assert!(vm.run_bounded(5).is_err());
+    }
+
+    #[test]
+    fn critical_flags_are_recorded_and_imported_calls_are_rejected() {
+        let mut code = Vec::new();
+        opcode(&mut code, 0x8002);
+        opcode(&mut code, 0x8003);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.step().unwrap();
+        assert!(vm.critical_section());
+        vm.step().unwrap();
+        assert!(!vm.critical_section());
+        vm.step().unwrap();
+        assert!(vm.halted());
+
+        let mut code = Vec::new();
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8005);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 20, 0x04, 0));
+        assert!(vm.run_bounded(5).is_err());
     }
 
     #[test]
