@@ -4,6 +4,7 @@
 //! removeProgList and doEvents. Newly registered programs are visited first;
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
+use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::collections::VecDeque;
 use std::io;
@@ -142,6 +143,43 @@ impl ScriptRuntime {
             }
         }
         Ok(ready)
+    }
+
+    /// Resolve one of CE's fixed 24 built-in script action slots to the
+    /// original local procedure index. The matching rules are reused from
+    /// script_procedures; an unimplemented action returns None and never
+    /// invents script bytecode. A missing runtime instance is an error.
+    pub fn resolve_action(&self, program_id: u64, action: usize) -> io::Result<Option<DueProcedure>> {
+        if action >= SCRIPT_PROC_NAMES.len() {
+            return Err(invalid("CE script action index outside 24-slot table"));
+        }
+        let vm = self
+            .vm(program_id)
+            .ok_or_else(|| invalid("CE script instance is not registered"))?;
+        Ok(build_lookup_table(&vm.program)?[action].map(|procedure_index| DueProcedure {
+            program_id,
+            procedure_index,
+        }))
+    }
+
+    /// Opt-in host dispatch of one resolved CE built-in action, independent
+    /// of the timed/conditional event scheduler. A missing script action
+    /// returns false; any callback is supplied explicitly by the caller.
+    /// This is not an implementation of Fallout's native engine opcodes.
+    pub fn dispatch_action_with(
+        &mut self,
+        program_id: u64,
+        action: usize,
+        dispatch: impl FnOnce(DueProcedure, &mut ScriptVm) -> io::Result<()>,
+    ) -> io::Result<bool> {
+        let Some(procedure) = self.resolve_action(program_id, action)? else {
+            return Ok(false);
+        };
+        let vm = self
+            .vm_mut(program_id)
+            .ok_or_else(|| invalid("CE script instance disappeared during action"))?;
+        dispatch(procedure, vm)?;
+        Ok(true)
     }
 
     /// Host callback boundary for ready CE procedures. Unlike the existing
@@ -508,6 +546,53 @@ mod tests {
             )
             .unwrap();
         assert_eq!(visited_after, [1]);
+    }
+
+    fn named_action_vm() -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes.extend_from_slice(&3_i32.to_be_bytes());
+        let names: [&[u8]; 3] = [b"main", b"START", b"Map_Exit_P_Proc"];
+        let mut identifiers = Vec::new();
+        for name in names {
+            let offset = 4 + identifiers.len() as i32;
+            for field in [offset, 0, 0, 0, 0, 0] {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+            identifiers.extend_from_slice(name);
+            identifiers.push(0);
+        }
+        bytes.extend_from_slice(&(identifiers.len() as i32).to_be_bytes());
+        bytes.extend_from_slice(&identifiers);
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn original_ce_builtin_actions_resolve_case_insensitively_without_execution() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(19, named_action_vm()).unwrap();
+        assert_eq!(runtime.resolve_action(19, 1).unwrap(), Some(DueProcedure {
+            program_id: 19,
+            procedure_index: 1,
+        }));
+        assert_eq!(runtime.resolve_action(19, 16).unwrap(), Some(DueProcedure {
+            program_id: 19,
+            procedure_index: 2,
+        }));
+        assert_eq!(runtime.resolve_action(19, 11).unwrap(), None);
+        assert!(runtime.resolve_action(19, 24).is_err());
+        assert!(runtime.resolve_action(18, 1).is_err());
+        let mut called = Vec::new();
+        assert!(runtime.dispatch_action_with(19, 1, |proc, vm| {
+            called.push(proc);
+            assert!(vm.stack().is_empty());
+            Ok(())
+        }).unwrap());
+        assert_eq!(called[0].procedure_index, 1);
+        assert!(!runtime.dispatch_action_with(19, 11, |_, _| {
+            panic!("a missing original CE action must not dispatch")
+        }).unwrap());
+        assert_eq!(runtime.vm(19).unwrap().pc(), 0);
     }
 
     #[test]
