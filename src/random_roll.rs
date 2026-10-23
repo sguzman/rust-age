@@ -193,11 +193,9 @@ mod tests {
             RollOutcome::Failure
         );
         assert_eq!(before_day.between(1, 100).unwrap(), 1);
-        assert!(
-            after_day
-                .check_critical(-15, 0, GAME_TIME_TICKS_PER_DAY)
-                .is_ok()
-        );
+        assert!(after_day
+            .check_critical(-15, 0, GAME_TIME_TICKS_PER_DAY)
+            .is_ok());
         // After a day has passed the critical check consumes exactly the
         // draw made explicitly in the pre-day case, leaving equal RNG state.
         assert_eq!(before_day, after_day);
