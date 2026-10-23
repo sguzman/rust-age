@@ -359,6 +359,13 @@ impl ScriptVm {
     /// core-only preview above intentionally rejects them. This method does
     /// not install, consume or dispatch a pending CE procedure.
     ///
+    /// The cloned condition retains the installed data/return stacks and
+    /// frame/base pointers, as in pinned CE doEvents. Its saved program
+    /// counter and flags remain untouched; only the clone enters the
+    /// condition. This is not a full CE event lifecycle: a real CE condition
+    /// can leave interpreter-side stack effects behind after its result is
+    /// popped, whereas this diagnostic intentionally discards those effects.
+    ///
     /// Only the VM is cloned. Callers requiring a read-only preview MUST
     /// supply a pure, read-only native adapter: arbitrary host side effects
     /// cannot be rolled back by the interpreter. Unsupported opcodes, bad
@@ -375,12 +382,12 @@ impl ScriptVm {
         if first_opcode & 0x8000 == 0 {
             return Err(invalid("invalid CE condition opcode marker"));
         }
+        // Pinned CE doEvents temporarily changes instructionPointer and
+        // clears program flags, but it does NOT reset either stack or the
+        // frame/base pointers. Preserve that installed interpreter context
+        // inside a CLONE instead of inventing a fresh condition stack.
         let mut probe = self.clone();
         probe.pc = offset;
-        probe.stack.clear();
-        probe.return_stack.clear();
-        probe.frame_pointer = -1;
-        probe.base_pointer = -1;
         probe.critical_section = false;
         probe.halted = false;
         probe.run_variable_subset_bounded(max_steps, native)?;
@@ -1173,6 +1180,88 @@ mod tests {
             .is_err());
         assert_eq!(write_vm.pc(), 0);
         assert!(write_vm.stack().is_empty());
+    }
+
+    #[test]
+    fn ce_conditional_preview_preserves_existing_data_and_return_stacks() {
+        // A running CE script has already pushed a persistent operand and
+        // stopped. doEvents enters its condition without clearing that stack.
+        let mut bytes = vec![0_u8; 42];
+        let mut startup = Vec::new();
+        push_int(&mut startup, 99);
+        opcode(&mut startup, 0x8011); // STOP_PROGRAM
+        bytes[..startup.len()].copy_from_slice(&startup);
+        let mut matches = Vec::new();
+        push_int(&mut matches, 99);
+        opcode(&mut matches, 0x8033); // EQUAL with saved operand
+        opcode(&mut matches, 0x8011);
+        bytes[20..20 + matches.len()].copy_from_slice(&matches);
+        let mut differs = Vec::new();
+        push_int(&mut differs, 88);
+        opcode(&mut differs, 0x8033);
+        opcode(&mut differs, 0x8011);
+        bytes[32..32 + differs.len()].copy_from_slice(&differs);
+        let mut vm = ScriptVm::new(fixture(&bytes));
+        vm.run_bounded(2).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(99)]);
+        assert!(vm.halted());
+        assert!(vm.preview_condition_bounded(20, 3).unwrap());
+        assert!(!vm.preview_condition_bounded(32, 3).unwrap());
+        assert!(vm.preview_condition_bounded(20, 2).is_err());
+        assert_eq!(vm.stack(), [ScriptValue::Int(99)]);
+        assert_eq!(vm.pc(), 8);
+        assert!(vm.halted());
+
+        // CE's condition also inherits the return stack. A_TO_D consumes
+        // the return stack ONLY on the cloned preview, never in the VM.
+        let mut bytes = vec![0_u8; 42];
+        let mut startup = Vec::new();
+        push_int(&mut startup, 7);
+        opcode(&mut startup, 0x800D); // D_TO_A
+        opcode(&mut startup, 0x8011);
+        bytes[..startup.len()].copy_from_slice(&startup);
+        let mut condition = Vec::new();
+        opcode(&mut condition, 0x800C); // A_TO_D
+        push_int(&mut condition, 7);
+        opcode(&mut condition, 0x8033); // EQUAL
+        opcode(&mut condition, 0x8011);
+        bytes[20..20 + condition.len()].copy_from_slice(&condition);
+        let mut vm = ScriptVm::new(fixture(&bytes));
+        vm.run_bounded(3).unwrap();
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(7)]);
+        assert!(vm.preview_condition_bounded(20, 4).unwrap());
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(7)]);
+        assert!(vm.stack().is_empty());
+        assert_eq!(vm.pc(), 10);
+    }
+
+    #[test]
+    fn ce_conditional_preview_reuses_original_global_base_pointer() {
+        // CE doEvents preserves the persistent interpreter base pointer.
+        // FETCH_GLOBAL at relative index -1 reads the retained first slot.
+        let mut bytes = vec![0_u8; 42];
+        let mut startup = Vec::new();
+        push_int(&mut startup, 41);
+        opcode(&mut startup, 0x802C); // SET_GLOBAL: base pointer = 1
+        push_int(&mut startup, 5);
+        opcode(&mut startup, 0x8011);
+        bytes[..startup.len()].copy_from_slice(&startup);
+        let mut condition = Vec::new();
+        push_int(&mut condition, -1);
+        opcode(&mut condition, 0x8012); // FETCH_GLOBAL base - 1
+        push_int(&mut condition, 41);
+        opcode(&mut condition, 0x8033);
+        opcode(&mut condition, 0x8011);
+        bytes[20..20 + condition.len()].copy_from_slice(&condition);
+        let mut vm = ScriptVm::new(fixture(&bytes));
+        vm.run_bounded(4).unwrap();
+        assert_eq!(vm.base_pointer(), 1);
+        assert_eq!(vm.stack(), [ScriptValue::Int(41), ScriptValue::Int(5)]);
+        assert!(vm.preview_condition_bounded(20, 5).unwrap());
+        assert_eq!(vm.base_pointer(), 1);
+        assert_eq!(vm.stack(), [ScriptValue::Int(41), ScriptValue::Int(5)]);
+        assert_eq!(vm.pc(), 16);
+        assert!(vm.halted());
     }
 
     #[test]
