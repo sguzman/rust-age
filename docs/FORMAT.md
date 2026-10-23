@@ -140,3 +140,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Shared static scene in CLI diagnostics
 
 `--inspect-map` and `--inspect-map-route` now use the same `StaticScene::load` assembly, preventing divergent MAP variable/script/object decoding paths in their diagnostics. The route command still only reports a list of CE rotations; actor movement is not yet implemented.
+
+## Unlit top-level object-sprite diagnostic
+
+`src/object_preview.rs` uses decoded MAP top-level objects, CE art FID filename resolution, user-owned FRM pixels and CE `obj_bound` placement to paint static critter/item/scenery sprites on an indexed surface. It skips hidden objects, renders flat objects first, and caches each FID's decoded frames per pass. Synthetic integration asserts exact placed palette indices and transparent pixels. This is **not a finished CE scene renderer**: per-hex traversal order, lighting, egg masking, alpha effects, roof passes and animation are still unported.
