@@ -39,6 +39,7 @@ The map preview loads the original `MAP` floor IDs, resolves `art/tiles/tiles.ls
 ```sh
 cargo run -- --export-map-floor-preview /path/to/Fallout maps/example.map floor.ppm
 cargo run -- --export-map-roof-preview /path/to/Fallout maps/example.map roofs.ppm
+cargo run -- --export-map-object-preview /path/to/Fallout maps/example.map objects.ppm
 ```
 
 Replace `maps/example.map` with a real map path from the original game installation. No extracted game assets belong in the repository.

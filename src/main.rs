@@ -4,6 +4,7 @@ use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
 use rust_age::hex::HexViewport;
 use rust_age::map_preview::FloorPreview;
+use rust_age::object_preview::ObjectPreview;
 use rust_age::palette::Palette;
 use rust_age::prototype::Prototype;
 use rust_age::scene::StaticScene;
@@ -22,6 +23,7 @@ fn usage() {
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
+    println!("       rust-age --export-map-object-preview /path/to/Fallout maps/v13.map objects.ppm");
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
 }
@@ -216,7 +218,9 @@ fn main() {
             }
         }
         [_, flag, directory, path, destination]
-            if flag == "--export-map-floor-preview" || flag == "--export-map-roof-preview" =>
+            if flag == "--export-map-floor-preview"
+                || flag == "--export-map-roof-preview"
+                || flag == "--export-map-object-preview" =>
         {
             let mut assets = GameAssets::open(Path::new(directory))
                 .unwrap_or_else(|error| fail(format!("Cannot open installation: {error}")));
@@ -230,7 +234,7 @@ fn main() {
                 .read(Bank::Master, path)
                 .unwrap_or_else(|error| fail(format!("Cannot load original map: {error}")))
                 .unwrap_or_else(|| fail(format!("Map not found: {path}")));
-            let preview = FloorPreview::render_layers(
+            let mut preview = FloorPreview::render_layers(
                 &mut assets,
                 &map_bytes,
                 640,
@@ -238,6 +242,26 @@ fn main() {
                 flag == "--export-map-roof-preview",
             )
             .unwrap_or_else(|error| fail(format!("Cannot draw MAP preview: {error}")));
+            if flag == "--export-map-object-preview" {
+                let scene = StaticScene::decode(&mut assets, &map_bytes)
+                    .unwrap_or_else(|error| fail(format!("Cannot decode scene objects: {error}")));
+                let view = HexViewport::new(200, 200, 640, 380, scene.header.entering_tile)
+                    .unwrap_or_else(|| fail("Invalid map viewport"));
+                let elevation = usize::try_from(scene.header.entering_elevation)
+                    .unwrap_or_else(|_| fail("Invalid map elevation"));
+                let stats = ObjectPreview::draw(
+                    &mut assets,
+                    &scene.objects,
+                    &view,
+                    elevation,
+                    &mut preview.surface,
+                )
+                .unwrap_or_else(|error| fail(format!("Cannot draw scene objects: {error}")));
+                println!(
+                    "Static scene sprites: {} drawn, {} hidden, {} missing art",
+                    stats.rendered, stats.hidden, stats.missing_art
+                );
+            }
             let output = File::create(destination)
                 .unwrap_or_else(|error| fail(format!("Cannot create preview file: {error}")));
             preview
@@ -248,7 +272,11 @@ fn main() {
             println!("Candidate tiles: {}", preview.tile_count);
             println!("Unique tile art: {}", preview.unique_art);
             println!("Roof tiles: {}", preview.roof_count);
-            println!("No lighting, roofs, objects, combat or gameplay.");
+            if flag == "--export-map-object-preview" {
+                println!("Objects rendered diagnostically without original roof/lighting order.");
+            } else {
+                println!("Static tiles only; no object lighting, combat or gameplay.");
+            }
         }
         [_, flag, directory, bank, path, direction, frame_number, destination]
             if flag == "--export-frm-preview" =>
