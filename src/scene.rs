@@ -215,9 +215,11 @@ impl DetachedMapEventSessions {
         // A planning record alone is insufficient to authorize a detached
         // action: inspect its actual local CE executeProc body as well.
         let _ = environment.local_frame_for_planned(planned)?;
-        let owner = environment.owner_for_instance(planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE script event owner missing")
-        })?;
+        let owner = environment
+            .owner_for_instance(planned.instance_id)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE script event owner missing")
+            })?;
         let mut candidate = self
             .sessions
             .get(&planned.instance_id)
@@ -236,7 +238,10 @@ impl DetachedMapEventSessions {
         )?;
         self.sessions.insert(planned.instance_id, candidate);
         self.sessions.get_mut(&planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE script event session missing")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE script event session missing",
+            )
         })
     }
 
