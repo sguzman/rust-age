@@ -68,3 +68,7 @@ This is strictly a read-only, synthetic-test-backed reader. It does not instanti
 ## Optional native MAP roof pass
 
 `FloorPreview::render_layers(..., include_roofs=true)` runs a separate static roof pass after the floor, using the top 16-bit tile word, per-square CE roof projection (96 px above floor) and the original FRM transparency convention. The SDL2 MAP viewer switches the overlay using **R**. The preview deliberately omits CE roof egg masks, lighting and animated actor occlusion. This is for testing data alignment and geometry, not visual or gameplay parity.
+
+## FRM animation timeline
+
+`AnimationTimeline` selects looping FRM frame indices from **elapsed monotonic time**, independent of the SDL2 redraw loop. It uses the original `art_frame_fps` ten-FPS fallback for zero-rate assets and exact integer nanosecond arithmetic for frame boundaries. Negative header frame rates are currently rejected as invalid scheduling input. This is a pure timing primitive, not a gameplay event queue or automatic sprite animator.
