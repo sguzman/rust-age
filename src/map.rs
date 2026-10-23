@@ -108,7 +108,9 @@ impl MapHeader {
             || !(0..=MAX_VARIABLE_COUNT).contains(&global_variable_count)
             || !(0..=MAX_VARIABLE_COUNT).contains(&local_variable_count)
         {
-            return Err(invalid("invalid Fallout 1 MAP dimensions or variable counts"));
+            return Err(invalid(
+                "invalid Fallout 1 MAP dimensions or variable counts",
+            ));
         }
         Ok(Self {
             name,
@@ -144,8 +146,7 @@ impl MapHeader {
         if offset > bytes.len() {
             return Err(invalid("truncated MAP variables"));
         }
-        let mut elevations: [Option<Vec<u32>>; ELEVATION_COUNT] =
-            std::array::from_fn(|_| None);
+        let mut elevations: [Option<Vec<u32>>; ELEVATION_COUNT] = std::array::from_fn(|_| None);
         for (elevation, flag) in ELEVATION_FLAGS.iter().copied().enumerate() {
             if self.flags & flag != 0 {
                 continue;
@@ -158,8 +159,8 @@ impl MapHeader {
                 .get(offset..end)
                 .ok_or_else(|| invalid("truncated MAP square tiles"))?;
             let mut words = Vec::with_capacity(SQUARE_COUNT);
-            for chunk in data.chunks_exact(4) {
-                let word = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            for chunk in data.as_chunks::<4>().0 {
+                let word = u32::from_be_bytes(*chunk);
                 // CE square_load resets the low bit of each roof's flag nibble.
                 words.push(word & !0x1000_0000);
             }
@@ -223,7 +224,10 @@ mod tests {
         let mut bytes = header(4 | 8, 0, 0);
         bytes.extend_from_slice(&0x1005_0001_u32.to_be_bytes());
         bytes.extend(std::iter::repeat_n(0_u8, (SQUARE_COUNT - 1) * 4));
-        let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let squares = MapHeader::decode(&bytes)
+            .unwrap()
+            .decode_squares(&bytes)
+            .unwrap();
         assert_eq!(squares.elevations[0].as_ref().unwrap()[0], 0x0005_0001);
     }
 
@@ -232,7 +236,10 @@ mod tests {
         let mut bytes = header(4 | 8, 0, 0);
         bytes.extend_from_slice(&0x0005_0001_u32.to_be_bytes());
         bytes.extend(std::iter::repeat_n(0_u8, (SQUARE_COUNT - 1) * 4));
-        let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let squares = MapHeader::decode(&bytes)
+            .unwrap()
+            .decode_squares(&bytes)
+            .unwrap();
         assert_eq!(squares.floor_id(0, 0), Some(1));
         assert_eq!(squares.roof_id(0, 0), Some(5));
         assert_eq!(squares.floor_hidden(0, 0), Some(false));

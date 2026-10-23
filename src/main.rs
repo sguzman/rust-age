@@ -121,12 +121,19 @@ fn main() {
                 });
             match result {
                 Ok((header, squares)) => {
-                    println!("Fallout 1 map: {}", String::from_utf8_lossy(header.name_bytes()));
+                    println!(
+                        "Fallout 1 map: {}",
+                        String::from_utf8_lossy(header.name_bytes())
+                    );
                     println!("Entering tile: {}", header.entering_tile);
                     println!("Entering elevation: {}", header.entering_elevation);
                     println!(
                         "Available square layers: {}",
-                        squares.elevations.iter().filter(|layer| layer.is_some()).count()
+                        squares
+                            .elevations
+                            .iter()
+                            .filter(|layer| layer.is_some())
+                            .count()
                     );
                     println!("Original scripts begin at byte {}", squares.scripts_offset);
                     println!("Scripts/objects not yet decoded; game not playable.");

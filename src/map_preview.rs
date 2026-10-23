@@ -65,11 +65,11 @@ impl FloorPreview {
         // CE square_render_floor traverses square rows, then columns.
         // The crop bounds here are deliberately generous and diagnostic;
         // the final renderer must use CE's rectangle clipping and lighting.
-        for square in 0..SQUARE_COUNT {
-            if layer[square] & 0x1000 != 0 {
+        for (square, &word) in layer.iter().enumerate().take(SQUARE_COUNT) {
+            if word & 0x1000 != 0 {
                 continue;
             }
-            let id = (layer[square] & 0x0FFF) as u16;
+            let id = (word & 0x0FFF) as u16;
             // CE uses tile index 1 as its blank/empty square tile.
             if id == 1 {
                 continue;
