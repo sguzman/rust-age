@@ -51,10 +51,7 @@ impl GameGlobalState {
             }
             // CE's fgets null-terminates C strings. Embedded NUL bytes
             // therefore end the visible part of a line.
-            let line = raw_line
-                .split(|&ch| ch == 0)
-                .next()
-                .unwrap_or_default();
+            let line = raw_line.split(|&ch| ch == 0).next().unwrap_or_default();
             if !found_section {
                 if line.starts_with(b"GAME_GLOBAL_VARS") {
                     found_section = true;
@@ -67,10 +64,7 @@ impl GameGlobalState {
             if values.len() == MAX_GAME_GLOBALS {
                 return Err(invalid("CE game globals exceed Rust allocation bound"));
             }
-            let uncommented = line
-                .split(|&ch| ch == b';')
-                .next()
-                .unwrap_or_default();
+            let uncommented = line.split(|&ch| ch == b';').next().unwrap_or_default();
             let value = match uncommented.iter().position(|&ch| ch == b'=') {
                 Some(at) => Self::parse_decimal_prefix(&uncommented[at + 1..])?,
                 None => 0,
@@ -111,8 +105,7 @@ impl GameGlobalState {
         if digits == 0 {
             return Ok(0);
         }
-        i32::try_from(sign * number)
-            .map_err(|_| invalid("overflowed CE game global i32"))
+        i32::try_from(sign * number).map_err(|_| invalid("overflowed CE game global i32"))
     }
 
     pub fn values(&self) -> &[i32] {
@@ -200,14 +193,14 @@ mod tests {
 
     #[test]
     fn malformed_vault13_defaults_fail_bounded_without_panic() {
-        assert!(GameGlobalState::decode_vault13_defaults(
-            b"GAME_GLOBAL_VARS:\nX=2147483648\n",
-        )
-        .is_err());
-        assert!(GameGlobalState::decode_vault13_defaults(
-            b"GAME_GLOBAL_VARS:\nX=-2147483649\n",
-        )
-        .is_err());
+        assert!(
+            GameGlobalState::decode_vault13_defaults(b"GAME_GLOBAL_VARS:\nX=2147483648\n",)
+                .is_err()
+        );
+        assert!(
+            GameGlobalState::decode_vault13_defaults(b"GAME_GLOBAL_VARS:\nX=-2147483649\n",)
+                .is_err()
+        );
         let mut data = b"GAME_GLOBAL_VARS:\nX=".to_vec();
         data.extend(std::iter::repeat_n(b'1', 260));
         assert!(GameGlobalState::decode_vault13_defaults(&data).is_err());

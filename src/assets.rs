@@ -196,9 +196,9 @@ impl GameAssets {
                 ));
             }
             if loose.is_file() {
-                return crate::game_globals::GameGlobalState::decode_vault13_defaults(
-                    &fs::read(loose)?,
-                )
+                return crate::game_globals::GameGlobalState::decode_vault13_defaults(&fs::read(
+                    loose,
+                )?)
                 .map(Some);
             }
         }
