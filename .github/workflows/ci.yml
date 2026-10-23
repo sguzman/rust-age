@@ -62,6 +62,12 @@ jobs:
           /tmp/rust-age-ce-interrupt tests/int_interrupt_cases.txt > /tmp/rust-age-ce-interrupt.txt
           cargo run --quiet --bin int_interrupt_probe > /tmp/rust-age-rust-interrupt.txt
           diff -u /tmp/rust-age-ce-interrupt.txt /tmp/rust-age-rust-interrupt.txt
+      - name: Compare CE C++ and Rust MAP-global tagged values
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/map_global_oracle.cc -o /tmp/rust-age-ce-globals
+          /tmp/rust-age-ce-globals tests/map_global_cases.txt > /tmp/rust-age-ce-globals.txt
+          cargo run --quiet --bin map_global_probe > /tmp/rust-age-rust-globals.txt
+          diff -u /tmp/rust-age-ce-globals.txt /tmp/rust-age-rust-globals.txt
       - name: Compare CE C++ and Rust MAP local integer allocation
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/map_local_oracle.cc -o /tmp/rust-age-ce-locals
