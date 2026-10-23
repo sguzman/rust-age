@@ -96,7 +96,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/int/dialog.cc` | — | ⚪ Not ported |
 | `src/int/export.cc` | — | ⚪ Not ported |
 | `src/int/intlib.cc` | — | ⚪ Not ported |
-| `src/int/intrpret.cc` | `src/script_program.rs`, `src/int_opcode.rs`, `src/script_vm.rs`, `src/script_procedures.rs` | 🟡 Partial |
+| `src/int/intrpret.cc` | `src/script_program.rs`, `src/int_opcode.rs`, `src/script_vm.rs`, `src/script_procedures.rs`, `src/script_runtime.rs` | 🟡 Partial |
 | `src/int/memdbg.cc` | — | ⚪ Not ported |
 | `src/int/mousemgr.cc` | — | ⚪ Not ported |
 | `src/int/movie.cc` | — | ⚪ Not ported |

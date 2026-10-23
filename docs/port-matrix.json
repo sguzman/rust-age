@@ -435,7 +435,8 @@
         "src/script_program.rs",
         "src/int_opcode.rs",
         "src/script_vm.rs",
-        "src/script_procedures.rs"
+        "src/script_procedures.rs",
+        "src/script_runtime.rs"
       ],
       "status": "partial"
     },
