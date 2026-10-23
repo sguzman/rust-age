@@ -156,6 +156,25 @@ impl ScriptHaltReason {
     }
 }
 
+/// The modeled low CE flags and saved/restored program counters around one
+/// successful doEvents conditional evaluation. Pinned CE saves flags/PC,
+/// zeros flags and enters the condition, then restores saved flags/PC after
+/// popping the condition result (unless PROGRAM_FLAG_0x04 interrupted it).
+///
+/// Only EXITED, STOPPED and CRITICAL_SECTION are currently represented.
+/// Waiting, parent/child, interpreter error and upper opcode bits remain
+/// outside this bounded model. A failed condition returns an error rather
+/// than a misleading restoration trace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviewedConditionFlagRestore {
+    pub saved_pc: usize,
+    pub evaluated_pc: usize,
+    pub restored_pc: usize,
+    pub saved_low_flags: u16,
+    pub evaluated_low_flags: u16,
+    pub restored_low_flags: u16,
+}
+
 /// A discarded, candidate-only result of one bounded CE doEvents-style
 /// condition evaluation. The actual installed interpreter is never updated.
 /// Stack and procedure changes here are speculative and must not be applied
@@ -164,6 +183,7 @@ impl ScriptHaltReason {
 pub struct PreviewedConditionFrame {
     pub satisfied: bool,
     pub termination: ScriptHaltReason,
+    pub flag_restore: PreviewedConditionFlagRestore,
     pub data_stack: Vec<ScriptValue>,
     pub return_stack: Vec<ScriptValue>,
     pub frame_pointer: i32,
@@ -178,6 +198,7 @@ pub struct PreviewedConditionFrame {
 pub struct PreviewedDueProcedurePoll {
     pub ready: Vec<usize>,
     pub condition_terminations: Vec<(usize, ScriptHaltReason)>,
+    pub condition_flag_restorations: Vec<(usize, PreviewedConditionFlagRestore)>,
     pub data_stack: Vec<ScriptValue>,
     pub return_stack: Vec<ScriptValue>,
     pub frame_pointer: i32,
@@ -236,6 +257,16 @@ impl ScriptVm {
     /// Does not implement the original program's full flags lifecycle.
     pub fn halt_reason(&self) -> Option<ScriptHaltReason> {
         self.halt_reason
+    }
+
+    /// Only the CE program flag bits modeled by this detached interpreter.
+    /// This is NOT the full original Program::flags register.
+    pub fn modeled_program_low_flags(&self) -> u16 {
+        let mut flags = if self.critical_section { 0x80 } else { 0 };
+        if let Some(reason) = self.halt_reason {
+            flags |= reason.ce_terminal_flag();
+        }
+        flags
     }
 
     pub fn frame_pointer(&self) -> i32 {
@@ -458,6 +489,8 @@ impl ScriptVm {
         // clears program flags, but it does NOT reset either stack or the
         // frame/base pointers. Preserve that installed interpreter context
         // inside a CLONE instead of inventing a fresh condition stack.
+        let saved_pc = self.pc;
+        let saved_low_flags = self.modeled_program_low_flags();
         let mut probe = self.clone();
         probe.pc = offset;
         probe.critical_section = false;
@@ -468,9 +501,18 @@ impl ScriptVm {
         let termination = probe
             .halt_reason
             .ok_or_else(|| invalid("CE condition terminated without modeled halt reason"))?;
+        let flag_restore = PreviewedConditionFlagRestore {
+            saved_pc,
+            evaluated_pc: probe.pc,
+            restored_pc: saved_pc,
+            saved_low_flags,
+            evaluated_low_flags: probe.modeled_program_low_flags(),
+            restored_low_flags: saved_low_flags,
+        };
         Ok(PreviewedConditionFrame {
             satisfied,
             termination,
+            flag_restore,
             data_stack: probe.stack,
             return_stack: probe.return_stack,
             frame_pointer: probe.frame_pointer,
@@ -505,6 +547,7 @@ impl ScriptVm {
         scratch.clock_millis = now_millis as i32;
         let mut ready = Vec::new();
         let mut condition_terminations = Vec::new();
+        let mut condition_flag_restorations = Vec::new();
         for index in 0..scratch.runtime_procedures.len() {
             let procedure = scratch.runtime_procedures[index];
             if procedure.flags & 0x02 != 0 {
@@ -514,6 +557,7 @@ impl ScriptVm {
                     native,
                 )?;
                 condition_terminations.push((index, frame.termination));
+                condition_flag_restorations.push((index, frame.flag_restore));
                 scratch.stack = frame.data_stack;
                 scratch.return_stack = frame.return_stack;
                 scratch.frame_pointer = frame.frame_pointer;
@@ -531,6 +575,7 @@ impl ScriptVm {
         Ok(PreviewedDueProcedurePoll {
             ready,
             condition_terminations,
+            condition_flag_restorations,
             data_stack: scratch.stack,
             return_stack: scratch.return_stack,
             frame_pointer: scratch.frame_pointer,
@@ -1466,6 +1511,108 @@ mod tests {
         assert!(vm.return_stack().is_empty());
         assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
         assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+    }
+
+    #[test]
+    fn ce_conditional_flag_trace_restores_saved_program_state() {
+        use super::ScriptHaltReason;
+
+        for (condition_end, expected_during) in [
+            (0x800E_u16, 0x01_u16),
+            (0x8010_u16, 0x01_u16),
+            (0x8011_u16, 0x08_u16),
+        ] {
+            let mut bytes = vec![0_u8; 42];
+            let mut startup = Vec::new();
+            opcode(&mut startup, 0x804A); // START_CRITICAL
+            push_int(&mut startup, 51); // retained operand
+            opcode(&mut startup, 0x8011); // STOP_PROGRAM
+            bytes[..startup.len()].copy_from_slice(&startup);
+            let mut condition = Vec::new();
+            push_int(&mut condition, 1);
+            opcode(&mut condition, condition_end);
+            bytes[20..20 + condition.len()].copy_from_slice(&condition);
+            let mut vm = ScriptVm::new(fixture(&bytes));
+            vm.run_bounded(3).unwrap();
+            assert_eq!(vm.modeled_program_low_flags(), 0x88);
+            assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::StopProgram));
+            let flags = vm
+                .preview_condition_frame_with_host_bounded(20, 2, &mut |_, _| {
+                    Err(super::invalid("CE natives disabled"))
+                })
+                .unwrap();
+            assert!(flags.satisfied);
+            assert_eq!(flags.flag_restore.saved_pc, 10);
+            assert_eq!(flags.flag_restore.evaluated_pc, 28);
+            assert_eq!(flags.flag_restore.restored_pc, 10);
+            assert_eq!(flags.flag_restore.saved_low_flags, 0x88);
+            assert_eq!(flags.flag_restore.evaluated_low_flags, expected_during);
+            assert_eq!(flags.flag_restore.restored_low_flags, 0x88);
+            assert_eq!(flags.data_stack, [ScriptValue::Int(51)]);
+            assert_eq!(vm.modeled_program_low_flags(), 0x88);
+            assert!(vm.halted());
+            assert_eq!(vm.pc(), 10);
+            assert_eq!(vm.stack(), [ScriptValue::Int(51)]);
+        }
+    }
+
+    #[test]
+    fn ce_conditional_flag_trace_reports_critical_entered_only_during_evaluation() {
+        let mut bytes = vec![0_u8; 42];
+        let mut condition = Vec::new();
+        opcode(&mut condition, 0x804A); // START_CRITICAL
+        push_int(&mut condition, 0);
+        opcode(&mut condition, 0x8011); // STOP_PROGRAM
+        bytes[20..20 + condition.len()].copy_from_slice(&condition);
+        let vm = ScriptVm::new(fixture(&bytes));
+        let frame = vm
+            .preview_condition_frame_with_host_bounded(20, 3, &mut |_, _| {
+                Err(super::invalid("CE game native forbidden"))
+            })
+            .unwrap();
+        assert!(!frame.satisfied);
+        assert_eq!(frame.flag_restore.saved_low_flags, 0);
+        assert_eq!(frame.flag_restore.evaluated_low_flags, 0x88);
+        assert_eq!(frame.flag_restore.restored_low_flags, 0);
+        assert_eq!(frame.flag_restore.saved_pc, 0);
+        assert_eq!(frame.flag_restore.evaluated_pc, 30);
+        assert!(!vm.critical_section());
+        assert!(!vm.halted());
+        assert_eq!(vm.pc(), 0);
+        assert!(vm
+            .preview_condition_frame_with_host_bounded(20, 2, &mut |_, _| {
+                Err(super::invalid("CE native forbidden"))
+            })
+            .is_err());
+        assert_eq!(vm.modeled_program_low_flags(), 0);
+    }
+
+    #[test]
+    fn sequential_condition_flags_are_restored_between_two_cloned_evaluations() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x804A); // condition enters critical section
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8011);
+        let mut second = Vec::new();
+        push_int(&mut second, 1);
+        opcode(&mut second, 0x800E); // EXIT, not STOP
+        let vm = synthetic_due_vm(&first, &second, 0x02);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(100, 3, &mut |_, _| {
+                Err(super::invalid("CE natives forbidden"))
+            })
+            .unwrap();
+        assert_eq!(poll.ready, [1]);
+        assert_eq!(poll.condition_flag_restorations.len(), 2);
+        assert_eq!(poll.condition_flag_restorations[0].1.saved_low_flags, 0);
+        assert_eq!(poll.condition_flag_restorations[0].1.evaluated_low_flags, 0x88);
+        assert_eq!(poll.condition_flag_restorations[0].1.restored_low_flags, 0);
+        assert_eq!(poll.condition_flag_restorations[1].1.saved_low_flags, 0);
+        assert_eq!(poll.condition_flag_restorations[1].1.evaluated_low_flags, 0x01);
+        assert_eq!(poll.condition_flag_restorations[1].1.restored_low_flags, 0);
+        assert_eq!(vm.modeled_program_low_flags(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
     }
 
     #[test]
