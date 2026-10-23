@@ -4,6 +4,7 @@
 //! src/plib/db/db.cc and src/platform_compat.cc at pinned revision.
 //! The caller supplies a legitimately obtained Fallout 1 installation.
 
+use crate::art_fid::ArtFid;
 use crate::art_list::ArtList;
 use crate::config::Config;
 use crate::dat::DatArchive;
@@ -127,6 +128,25 @@ impl GameAssets {
             Some(bytes) => Catalog::decode(&bytes).map(Some),
             None => Ok(None),
         }
+    }
+
+    /// Resolve direct FID types through their own original art/<dir>/<dir>.lst.
+    /// Critters and heads have generated names and remain explicitly unported.
+    pub fn direct_art_path(&mut self, fid: u32) -> io::Result<Option<String>> {
+        let fid = ArtFid(fid);
+        let directory = fid.direct_category()?;
+        let list_path = format!("art/{directory}/{directory}.lst");
+        let Some(data) = self.read(Bank::Master, &list_path)? else {
+            return Ok(None);
+        };
+        let names = ArtList::parse(&data);
+        let Some(name) = names.file_name(fid.index())? else {
+            return Ok(None);
+        };
+        if name.is_empty() || name == "." {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "empty art filename"));
+        }
+        Ok(Some(format!("art/{directory}/{name}")))
     }
 
     /// Resolve CE's original tile art IDs to the filenames in tiles.lst.
@@ -323,6 +343,12 @@ mod tests {
         let tiles = assets.tile_art_list().unwrap();
         assert_eq!(tiles.file_name(0).unwrap(), Some("grid001.frm"));
         assert_eq!(tiles.file_name(1).unwrap(), Some("other.frm"));
+        assert_eq!(
+            assets.direct_art_path(0x0400_0001).unwrap(),
+            Some("art/tiles/other.frm".to_owned())
+        );
+        assert!(assets.direct_art_path(0x0400_0002).unwrap().is_none());
+        assert!(assets.direct_art_path(0x0100_0000).is_err());
         fs::create_dir_all(root.join("Master_Patches").join("Proto").join("Tiles")).unwrap();
         fs::write(
             root.join("Master_Patches")

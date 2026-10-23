@@ -100,3 +100,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Full static MAP read boundary
 
 `MapSquares::decode_objects_with` chains original 100×100 square layers, five script tables and per-elevation object/inventory records, returning the byte offset after the object section. It requires the caller to supply the correct item/scenery prototype subtype for variable-width updates. This is a read-only format boundary; script execution, actor placement, collision, rendering and save/restore are separate unfinished stages.
+
+## CE static art FID category resolution
+
+`ArtFid` separates the original FID's type (bits 24–27), 12-bit filename index, animation (16–23), weapon animation (12–15) and rotation (28–30). `GameAssets::direct_art_path` resolves static item/scenery/wall/tile/misc/interface/inventory/background/skilldex names via their own original `art/<dir>/<dir>.lst` file in the user's master bank. This mirrors the direct/default branch of pinned CE `art_get_name`. **Critter and head art are explicitly rejected** until CE's generated animation suffixes and alias handling are ported; this resolver must never silently invent those filenames.
