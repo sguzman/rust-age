@@ -104,8 +104,7 @@ impl MapScriptLocals {
     }
 
     fn global_slot(&self, index: i32) -> io::Result<usize> {
-        let index = usize::try_from(index)
-            .map_err(|_| invalid("negative CE MAP global index"))?;
+        let index = usize::try_from(index).map_err(|_| invalid("negative CE MAP global index"))?;
         if index >= self.globals.len() {
             return Err(invalid("CE MAP global index out of bounds"));
         }
@@ -147,7 +146,9 @@ impl MapScriptLocals {
     pub fn read_global(&self, index: i32) -> io::Result<i32> {
         match self.read_global_typed(index)? {
             ScriptValue::Int(value) => Ok(value),
-            _ => Err(invalid("CE global contains opaque pointer; typed access required")),
+            _ => Err(invalid(
+                "CE global contains opaque pointer; typed access required",
+            )),
         }
     }
 
@@ -340,18 +341,27 @@ mod tests {
         };
         let mut state = bound.script_local_state(&original).unwrap();
         assert_eq!(state.read_global(0).unwrap(), 12);
-        state.write_global_typed(1, ScriptValue::Pointer(-44)).unwrap();
+        state
+            .write_global_typed(1, ScriptValue::Pointer(-44))
+            .unwrap();
         assert_eq!(state.globals(), [12, 0]);
-        assert_eq!(state.read_global_typed(1).unwrap(), ScriptValue::Pointer(-44));
+        assert_eq!(
+            state.read_global_typed(1).unwrap(),
+            ScriptValue::Pointer(-44)
+        );
         assert!(state.read_global(1).is_err());
         assert_eq!(state.read_global(0).unwrap(), 12);
         state.write_global(1, 7).unwrap();
         assert_eq!(state.read_global_typed(1).unwrap(), ScriptValue::Int(7));
-        state.write_global_typed(0, ScriptValue::Pointer(0)).unwrap();
+        state
+            .write_global_typed(0, ScriptValue::Pointer(0))
+            .unwrap();
         assert_eq!(state.read_global_typed(0).unwrap(), ScriptValue::Int(0));
         assert!(state.read_global_typed(-1).is_err());
         assert!(state.write_global_typed(2, ScriptValue::Int(42)).is_err());
-        assert!(state.write_global_typed(0, ScriptValue::Float(1.5)).is_err());
+        assert!(state
+            .write_global_typed(0, ScriptValue::Float(1.5))
+            .is_err());
         assert_eq!(original.globals, [12, -9]);
         assert_eq!(original.locals, [10, 11]);
     }
