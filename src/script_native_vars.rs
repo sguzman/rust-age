@@ -434,6 +434,79 @@ pub fn run_invocation_with_owner_snapshot_bounded(
     )
 }
 
+/// Pure read-only CE native opcode adapter for cloned local procedure
+/// previews. Only source-derived event/owner/object/clock reads are allowed.
+/// MAP/global writes, local variable reads (stateful), overrides and all
+/// gameplay effects are rejected before modifying the operand stack.
+pub fn apply_readonly_event_native_opcode(
+    snapshot: ScriptNativeEventSnapshot<'_>,
+    invocation: &ScriptInvocationState,
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+) -> io::Result<()> {
+    match opcode {
+        SCRIPT_ACTION_OPCODE => push_script_action(stack, Some(invocation.action())),
+        FIXED_PARAM_OPCODE => push_script_action(stack, Some(invocation.fixed_parameter())),
+        SELF_OBJ_OPCODE => {
+            let owner = snapshot
+                .owner
+                .resolution
+                .ok_or_else(|| invalid("CE self_obj owner resolution not provided"))?;
+            let handle = match owner {
+                ScriptOwnerResolution::Bound { handle, .. } => handle,
+                ScriptOwnerResolution::NullOwner => 0,
+                _ => return Err(invalid("CE self_obj owner cannot be safely resolved")),
+            };
+            push_event_object(stack, snapshot.owner.native.objects, Some(handle))
+        }
+        SOURCE_OBJ_OPCODE => {
+            push_event_object(stack, snapshot.owner.native.objects, snapshot.source)
+        }
+        TARGET_OBJ_OPCODE | OBJ_BEING_USED_WITH_OPCODE => {
+            push_event_object(stack, snapshot.owner.native.objects, snapshot.target)
+        }
+        GAME_TIME_OPCODE
+        | GAME_TIME_IN_SECONDS_OPCODE
+        | GAME_TICKS_OPCODE
+        | GAME_TIME_HOUR_OPCODE
+        | GET_MONTH_OPCODE
+        | GET_DAY_OPCODE => snapshot
+            .owner
+            .native
+            .clock
+            .clock
+            .apply_opcode(opcode, stack),
+        DAYS_SINCE_VISITED_OPCODE => snapshot.owner.native.clock.clock.apply_visit_opcode(
+            snapshot
+                .owner
+                .native
+                .clock
+                .last_visit_ticks
+                .ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
+            opcode,
+            stack,
+        ),
+        TILE_CONTAINS_OBJ_PID_OPCODE => {
+            let objects = snapshot
+                .owner
+                .native
+                .objects
+                .ok_or_else(|| invalid("CE object snapshots not provided"))?;
+            apply_tile_contains_obj_pid(objects, opcode, stack)
+        }
+        object_opcode @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE
+        | OBJ_ART_FID_OPCODE) => {
+            let objects = snapshot
+                .owner
+                .native
+                .objects
+                .ok_or_else(|| invalid("CE object snapshots not provided"))?;
+            apply_object_read_opcode(objects, object_opcode, stack)
+        }
+        _ => Err(invalid("CE local procedure read-only native opcode denied")),
+    }
+}
+
 /// Execute the owner/clock/quest subset plus CE source_obj and target_obj
 /// through an explicit snapshot of one script event. The ordinary and
 /// owner-only hosts still refuse these opcodes.
@@ -1363,6 +1436,55 @@ mod tests {
         )
         .is_err());
         assert_eq!(denied.pc(), 0);
+    }
+
+    #[test]
+    fn readonly_local_event_adapter_denies_writes_and_handles_null_reads() {
+        let mut invocation = ScriptInvocationState::installed();
+        assert!(invocation.begin_action(15));
+        let snapshot = ScriptNativeEventSnapshot {
+            owner: ScriptNativeOwnerSnapshot {
+                native: ScriptNativeSnapshot {
+                    clock: ScriptClockContext {
+                        clock: ScriptGameClock { ticks: 0 },
+                        last_visit_ticks: None,
+                    },
+                    objects: None,
+                },
+                resolution: Some(ScriptOwnerResolution::NullOwner),
+            },
+            source: Some(0),
+            target: Some(0),
+        };
+        let mut stack = Vec::new();
+        super::apply_readonly_event_native_opcode(
+            snapshot,
+            &invocation,
+            SELF_OBJ_OPCODE,
+            &mut stack,
+        )
+        .unwrap();
+        assert_eq!(stack, [ScriptValue::Pointer(0)]);
+        super::apply_readonly_event_native_opcode(
+            snapshot,
+            &invocation,
+            SCRIPT_ACTION_OPCODE,
+            &mut stack,
+        )
+        .unwrap();
+        assert_eq!(stack, [ScriptValue::Pointer(0), ScriptValue::Int(15)]);
+
+        let previous = stack.clone();
+        for opcode in [SCRIPT_OVERRIDES_OPCODE, SET_MAP_VAR_OPCODE, LOCAL_VAR_OPCODE] {
+            assert!(super::apply_readonly_event_native_opcode(
+                snapshot,
+                &invocation,
+                opcode,
+                &mut stack,
+            )
+            .is_err());
+            assert_eq!(stack, previous);
+        }
     }
 
     #[test]
