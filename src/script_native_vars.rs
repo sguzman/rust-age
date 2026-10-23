@@ -13,9 +13,8 @@ use crate::script_clock::{
 };
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_read::{
-    apply_object_read_opcode, apply_tile_contains_obj_pid, ScriptObjectSnapshot,
-    ELEVATION_OPCODE, OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE, TILE_CONTAINS_OBJ_PID_OPCODE,
-    TILE_NUM_OPCODE,
+    apply_object_read_opcode, apply_tile_contains_obj_pid, ScriptObjectSnapshot, ELEVATION_OPCODE,
+    OBJ_ART_FID_OPCODE, OBJ_PID_OPCODE, TILE_CONTAINS_OBJ_PID_OPCODE, TILE_NUM_OPCODE,
 };
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;

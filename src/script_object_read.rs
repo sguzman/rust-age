@@ -98,9 +98,9 @@ pub fn apply_tile_contains_obj_pid(
         return Err(invalid("CE tile-contains operands must be integers"));
     };
     let found = usize::try_from(elevation).is_ok_and(|e| {
-        objects.iter().any(|object| {
-            object.table_elevation == e && object.tile == tile && object.pid == pid
-        })
+        objects
+            .iter()
+            .any(|object| object.table_elevation == e && object.tile == tile && object.pid == pid)
     });
     stack.truncate(at);
     stack.push(ScriptValue::Int(i32::from(found)));
@@ -180,14 +180,17 @@ mod tests {
 
     #[test]
     fn tile_contains_uses_object_table_elevation_not_serialized_field() {
-        let objects = [OBJECT, ScriptObjectSnapshot {
-            handle: 78,
-            tile: 20100,
-            elevation: 0,
-            table_elevation: 2,
-            pid: 0x1000_0123,
-            fid: 0,
-        }];
+        let objects = [
+            OBJECT,
+            ScriptObjectSnapshot {
+                handle: 78,
+                tile: 20100,
+                elevation: 0,
+                table_elevation: 2,
+                pid: 0x1000_0123,
+                fid: 0,
+            },
+        ];
         for (tile, elevation, pid, expected) in [
             (20100, 0, 0x1000_0123, 1),
             (20100, 2, 0x1000_0123, 1),
@@ -201,12 +204,8 @@ mod tests {
                 ScriptValue::Int(elevation),
                 ScriptValue::Int(pid),
             ];
-            apply_tile_contains_obj_pid(
-                &objects,
-                TILE_CONTAINS_OBJ_PID_OPCODE,
-                &mut stack,
-            )
-            .unwrap();
+            apply_tile_contains_obj_pid(&objects, TILE_CONTAINS_OBJ_PID_OPCODE, &mut stack)
+                .unwrap();
             assert_eq!(stack, [ScriptValue::Int(expected)]);
         }
         let mut invalid = vec![
@@ -214,12 +213,8 @@ mod tests {
             ScriptValue::Int(0),
             ScriptValue::Int(0),
         ];
-        assert!(apply_tile_contains_obj_pid(
-            &objects,
-            TILE_CONTAINS_OBJ_PID_OPCODE,
-            &mut invalid,
-        )
-        .is_err());
+        let result = apply_tile_contains_obj_pid(&objects, TILE_CONTAINS_OBJ_PID_OPCODE, &mut invalid);
+        assert!(result.is_err());
         assert_eq!(invalid[0], ScriptValue::Pointer(1));
     }
 
