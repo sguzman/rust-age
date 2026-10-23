@@ -14,12 +14,7 @@ fn display(values: &[i32]) -> String {
             .join(",")
     }
 }
-fn probe(
-    operation: &str,
-    initial: &str,
-    index: i32,
-    value: i32,
-) -> Result<String, Box<dyn Error>> {
+fn probe(operation: &str, initial: &str, index: i32, value: i32) -> Result<String, Box<dyn Error>> {
     let values: &[i32] = if initial == "empty" {
         &[]
     } else {
@@ -48,12 +43,7 @@ fn main() {
             continue;
         }
         let result = (|| -> Result<String, Box<dyn Error>> {
-            probe(
-                fields[1],
-                fields[2],
-                fields[3].parse()?,
-                fields[4].parse()?,
-            )
+            probe(fields[1], fields[2], fields[3].parse()?, fields[4].parse()?)
         })()
         .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", fields[0], result);
