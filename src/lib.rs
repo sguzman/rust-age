@@ -38,4 +38,5 @@ pub mod script_native_vars;
 pub mod script_procedures;
 pub mod script_program;
 pub mod script_runtime;
+pub mod script_timer;
 pub mod script_vm;
