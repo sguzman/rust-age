@@ -36,10 +36,12 @@ impl SpriteBounds {
     ) -> io::Result<Self> {
         let direction = usize::try_from(object.rotation)
             .map_err(|_| invalid("negative object sprite rotation"))?;
-        let index = usize::try_from(object.frame)
-            .map_err(|_| invalid("negative object sprite frame"))?;
+        let index =
+            usize::try_from(object.frame).map_err(|_| invalid("negative object sprite frame"))?;
         let Some(frames) = art.frames.get(direction) else {
-            return Err(invalid("object sprite rotation exceeds CE six-direction limit"));
+            return Err(invalid(
+                "object sprite rotation exceeds CE six-direction limit",
+            ));
         };
         let Some(frame) = frames.get(index) else {
             return Err(invalid("object sprite frame index out of bounds"));
@@ -55,20 +57,15 @@ impl SpriteBounds {
             let Some((x, y)) = view.tile_coord(object.tile) else {
                 return Err(invalid("object tile outside original 200x200 hex map"));
             };
-            let anchor_x = i64::from(x)
-                + 16
-                + i64::from(art.x_offsets[direction])
-                + i64::from(object.x);
-            let anchor_y = i64::from(y)
-                + 8
-                + i64::from(art.y_offsets[direction])
-                + i64::from(object.y);
+            let anchor_x =
+                i64::from(x) + 16 + i64::from(art.x_offsets[direction]) + i64::from(object.x);
+            let anchor_y =
+                i64::from(y) + 8 + i64::from(art.y_offsets[direction]) + i64::from(object.y);
             (anchor_x - w / 2, anchor_y - h + 1)
         };
         let expand = i64::from(outlined);
-        let to_i32 = |value: i64| {
-            i32::try_from(value).map_err(|_| invalid("object bounds overflow i32"))
-        };
+        let to_i32 =
+            |value: i64| i32::try_from(value).map_err(|_| invalid("object bounds overflow i32"));
         Ok(Self {
             left: to_i32(left - expand)?,
             top: to_i32(top - expand)?,
@@ -133,11 +130,17 @@ mod tests {
     fn placed_actor_uses_original_hex_anchor_frm_offsets_and_frame_size() {
         let (view, object, frm) = fixture();
         let bounds = SpriteBounds::compute(&view, &object, &frm, false).unwrap();
-        assert_eq!((bounds.left, bounds.top, bounds.right, bounds.bottom), (317, 164, 336, 193));
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (317, 164, 336, 193)
+        );
         assert_eq!(bounds.width(), 20);
         assert_eq!(bounds.height(), 30);
         let outlined = SpriteBounds::compute(&view, &object, &frm, true).unwrap();
-        assert_eq!((outlined.left, outlined.top, outlined.right, outlined.bottom), (316, 163, 337, 194));
+        assert_eq!(
+            (outlined.left, outlined.top, outlined.right, outlined.bottom),
+            (316, 163, 337, 194)
+        );
     }
 
     #[test]
@@ -145,7 +148,10 @@ mod tests {
         let (view, mut object, frm) = fixture();
         object.tile = -1;
         let bounds = SpriteBounds::compute(&view, &object, &frm, false).unwrap();
-        assert_eq!((bounds.left, bounds.top, bounds.right, bounds.bottom), (20, 10, 39, 39));
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (20, 10, 39, 39)
+        );
     }
 
     #[test]
