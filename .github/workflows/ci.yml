@@ -74,6 +74,12 @@ jobs:
           /tmp/rust-age-ce-native-bytecode tests/native_bytecode_cases.txt > /tmp/rust-age-ce-native-bytecode.txt
           cargo run --quiet --bin native_bytecode_probe > /tmp/rust-age-rust-native-bytecode.txt
           diff -u /tmp/rust-age-ce-native-bytecode.txt /tmp/rust-age-rust-native-bytecode.txt
+      - name: Compare CE C++ and Rust scripted clock invocation bytecode
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_clock_invocation_oracle.cc -o /tmp/rust-age-ce-clock-invocation
+          /tmp/rust-age-ce-clock-invocation tests/script_clock_invocation_cases.txt > /tmp/rust-age-ce-clock-invocation.txt
+          cargo run --quiet --bin script_clock_invocation_probe > /tmp/rust-age-rust-clock-invocation.txt
+          diff -u /tmp/rust-age-ce-clock-invocation.txt /tmp/rust-age-rust-clock-invocation.txt
       - name: Compare CE C++ and Rust game-time tick conversions
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_clock_oracle.cc -o /tmp/rust-age-ce-script-clock

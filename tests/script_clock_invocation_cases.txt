@@ -1,0 +1,8 @@
+enter_first 558000 15 1 1 1
+enter_revisit 558000 15 0 1 1
+midnight 0 23 0 1 1
+evening 863400 16 5 1 1
+next_day 864000 1 1 1 1
+missing_script 558000 15 1 0 1
+missing_game_vars 558000 15 1 1 0
+negative_ticks -19 15 0 1 1
