@@ -68,7 +68,10 @@ impl ScriptRuntime {
     }
 
     pub fn vm(&self, id: u64) -> Option<&ScriptVm> {
-        self.programs.iter().find(|entry| entry.id == id).map(|entry| &entry.vm)
+        self.programs
+            .iter()
+            .find(|entry| entry.id == id)
+            .map(|entry| &entry.vm)
     }
 
     pub fn vm_mut(&mut self, id: u64) -> Option<&mut ScriptVm> {
@@ -99,9 +102,12 @@ impl ScriptRuntime {
         let mut ready = Vec::new();
         for program in &mut self.programs {
             let id = program.id;
-            for procedure_index in program.vm.take_due_procedures_with(now_millis, |index, offset| {
-                evaluate_condition(id, index, offset)
-            })? {
+            for procedure_index in program
+                .vm
+                .take_due_procedures_with(now_millis, |index, offset| {
+                    evaluate_condition(id, index, offset)
+                })?
+            {
                 ready.push(DueProcedure {
                     program_id: id,
                     procedure_index,
@@ -154,11 +160,23 @@ mod tests {
         runtime.register(3, vm(0x01, 10, 0)).unwrap();
         assert_eq!(runtime.len(), 3);
         assert!(runtime.take_due_timed(10).is_empty());
-        assert_eq!(runtime.take_due_timed(11), [
-            DueProcedure { program_id: 3, procedure_index: 0 },
-            DueProcedure { program_id: 2, procedure_index: 0 },
-            DueProcedure { program_id: 1, procedure_index: 0 },
-        ]);
+        assert_eq!(
+            runtime.take_due_timed(11),
+            [
+                DueProcedure {
+                    program_id: 3,
+                    procedure_index: 0
+                },
+                DueProcedure {
+                    program_id: 2,
+                    procedure_index: 0
+                },
+                DueProcedure {
+                    program_id: 1,
+                    procedure_index: 0
+                },
+            ]
+        );
         assert!(runtime.take_due_timed(100).is_empty());
     }
 
@@ -168,18 +186,35 @@ mod tests {
         runtime.register(1, vm(0x03, 1, 77)).unwrap();
         runtime.register(2, vm(0x01, 1, 0)).unwrap();
         runtime.set_suspended(true);
-        assert!(runtime.take_due_with(100, |_, _, _| panic!("no callback when suspended")).unwrap().is_empty());
+        assert!(runtime
+            .take_due_with(100, |_, _, _| panic!("no callback when suspended"))
+            .unwrap()
+            .is_empty());
         runtime.set_suspended(false);
         let mut called = Vec::new();
-        assert_eq!(runtime.take_due_with(100, |id, idx, offset| {
-            called.push((id, idx, offset));
-            Ok(Some(false))
-        }).unwrap(), [DueProcedure { program_id: 2, procedure_index: 0 }]);
+        assert_eq!(
+            runtime
+                .take_due_with(100, |id, idx, offset| {
+                    called.push((id, idx, offset));
+                    Ok(Some(false))
+                })
+                .unwrap(),
+            [DueProcedure {
+                program_id: 2,
+                procedure_index: 0
+            }]
+        );
         assert_eq!(called, [(1, 0, 77)]);
         assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0x03);
-        assert_eq!(runtime.take_due_with(100, |_, _, _| Ok(Some(true))).unwrap(), [
-            DueProcedure { program_id: 1, procedure_index: 0 }
-        ]);
+        assert_eq!(
+            runtime
+                .take_due_with(100, |_, _, _| Ok(Some(true)))
+                .unwrap(),
+            [DueProcedure {
+                program_id: 1,
+                procedure_index: 0
+            }]
+        );
     }
 
     #[test]

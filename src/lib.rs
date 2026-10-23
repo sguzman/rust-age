@@ -31,6 +31,6 @@ pub mod script_binding;
 pub mod script_data;
 pub mod script_list;
 pub mod script_procedures;
-pub mod script_runtime;
 pub mod script_program;
+pub mod script_runtime;
 pub mod script_vm;
