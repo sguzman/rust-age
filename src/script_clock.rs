@@ -37,9 +37,7 @@ impl ScriptGameClock {
         let mut year = elapsed_days / 365 + 2161;
         let mut month = 11_usize; // CE starts on December 5.
         let mut day = elapsed_days % 365;
-        const DAYS_IN_MONTH: [i32; 12] = [
-            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-        ];
+        const DAYS_IN_MONTH: [i32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
         loop {
             let days = DAYS_IN_MONTH[month];
             if day < days {
@@ -61,8 +59,11 @@ impl ScriptGameClock {
     /// rejects overflowing multiplication rather than exposing C++ UB.
     pub fn apply_opcode(&self, opcode: u16, stack: &mut Vec<ScriptValue>) -> io::Result<()> {
         match opcode {
-            GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TIME_HOUR_OPCODE
-            | GET_MONTH_OPCODE | GET_DAY_OPCODE => {
+            GAME_TIME_OPCODE
+            | GAME_TIME_IN_SECONDS_OPCODE
+            | GAME_TIME_HOUR_OPCODE
+            | GET_MONTH_OPCODE
+            | GET_DAY_OPCODE => {
                 if stack.len() >= MAX_STACK_VALUES {
                     return Err(invalid("CE game-time result exceeds bounded stack"));
                 }
