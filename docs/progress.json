@@ -268,21 +268,22 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 39,
-              "evidence": "CI-tested bounded CE typed interpreter subset including numeric, static-string/number and null-pointer comparisons, stack/control/frame/local-call/name lookup, timed/conditional scheduling and cancellation. New synthetic-only condition bytecode preview has an explicit instruction budget, fresh isolated stacks and rollback on preview error; it can be supplied to source-priority conditional event polling but does not mutate the game world. Full CE conditional stack/flag restoration, callbacks and imported/dynamic-string operations pending."
+              "progress": 40,
+              "evidence": "CI-tested isolated CE typed ScriptVm and newest-program-first ScriptRuntime: numeric/static-string/pointer comparisons; stack/control/frame/local-call; named-procedure lookup; scheduling/cancellation, strict unsigned timed and conditional callback polling, bounded synthetic-only condition preview; owned program lifecycle and suspension. No engine script dispatch, imported/dynamic-string opcodes, full interpreter restoration, or verified real-game execution."
             },
             {
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 0
+              "progress": 4,
+              "evidence": "Isolated ScriptRuntime owns multiple script VMs, mirrors pinned CE insertProgram newest-first and doEvents per-program slot order, suspension guard and host-injected condition decisions; emits ready (instance ID, procedure index) without execution. Rust synthetic tests and 7 independent adapted C++/Rust traversal cases pass core CI; no gameplay engine callbacks, native opcodes, actual dispatch or quest effects."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 15,
-              "evidence": "CI compares independent adapted CE C++/Rust numeric VM cases, name lookup, 20 synthetic schedule/conditional/polling cases and 15 static-string/int/float/pointer comparison cases; supported test set passes core CI. Does NOT yet compile/run original CE game interpreter or establish real-game golden parity."
+              "progress": 16,
+              "evidence": "Core CI passes adapted C++/Rust numeric VM, named procedure lookup, 15 string/numeric/pointer comparisons, 20 schedule/conditional polling cases and 7 multi-program traversal cases. Independent synthetic subset oracles only; no original CE executable/gameplay golden tests."
             }
           ]
         },
