@@ -14,7 +14,12 @@ fn op(code: &mut Vec<u8>, opcode: u16) {
     code.extend_from_slice(&opcode.to_be_bytes());
 }
 
-fn simulate(mode: &str, operand: i32, first_truth: i32, now: u32) -> Result<String, Box<dyn Error>> {
+fn simulate(
+    mode: &str,
+    operand: i32,
+    first_truth: i32,
+    now: u32,
+) -> Result<String, Box<dyn Error>> {
     let call_when = matches!(mode, "WHEN" | "WHEN_TIMED" | "WHEN_BAD");
     let cancel = matches!(mode, "CANCEL" | "CANCEL_BAD");
     let cancel_all = mode == "CANCEL_ALL";
