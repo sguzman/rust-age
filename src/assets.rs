@@ -8,6 +8,8 @@ use crate::art_list::ArtList;
 use crate::config::Config;
 use crate::dat::DatArchive;
 use crate::message::Catalog;
+use crate::prototype::Prototype;
+use crate::prototype_list::PrototypeList;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -136,6 +138,44 @@ impl GameAssets {
                 io::Error::new(io::ErrorKind::NotFound, "art/tiles/tiles.lst missing")
             })?;
         Ok(ArtList::parse(&bytes))
+    }
+
+    /// Resolve original CE's one-based prototype list by PID type and ID.
+    /// Read-only lookup: does not instantiate gameplay objects.
+    pub fn prototype_by_pid(&mut self, pid: u32) -> io::Result<Option<Prototype>> {
+        let directory = match pid >> 24 {
+            0 => "items",
+            1 => "critters",
+            2 => "scenery",
+            3 => "walls",
+            4 => "tiles",
+            5 => "misc",
+            _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsupported PID kind")),
+        };
+        let index = pid & 0x00FF_FFFF;
+        if index == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "prototype PID index is zero"));
+        }
+        let list_path = format!("proto/{directory}/{directory}.lst");
+        let Some(list_bytes) = self.read(Bank::Master, &list_path)? else {
+            return Ok(None);
+        };
+        let list = PrototypeList::parse(&list_bytes);
+        let Some(file_name) = list.get(index)? else {
+            return Ok(None);
+        };
+        let path = format!("proto/{directory}/{file_name}");
+        let Some(data) = self.read(Bank::Master, &path)? else {
+            return Ok(None);
+        };
+        let proto = Prototype::decode(&data)?;
+        if proto.pid != pid {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "prototype PID differs from requested list ID",
+            ));
+        }
+        Ok(Some(proto))
     }
 
     pub fn entry_count(&self, bank: Bank) -> usize {
@@ -275,6 +315,26 @@ mod tests {
         let tiles = assets.tile_art_list().unwrap();
         assert_eq!(tiles.file_name(0).unwrap(), Some("grid001.frm"));
         assert_eq!(tiles.file_name(1).unwrap(), Some("other.frm"));
+        fs::create_dir_all(root.join("Master_Patches").join("Proto").join("Tiles")).unwrap();
+        fs::write(
+            root.join("Master_Patches").join("Proto").join("Tiles").join("tiles.lst"),
+            b"00000001.PRO\n00000002.PRO\n",
+        )
+        .unwrap();
+        let mut record = Vec::new();
+        for value in [0x0400_0002_i32, 99, 55, 10, 20, 30, 40] {
+            record.extend_from_slice(&value.to_be_bytes());
+        }
+        fs::write(
+            root.join("Master_Patches").join("Proto").join("Tiles").join("00000002.PRO"),
+            record,
+        )
+        .unwrap();
+        let proto = assets.prototype_by_pid(0x0400_0002).unwrap().unwrap();
+        assert_eq!(proto.message_id, 99);
+        assert_eq!(proto.fid, 55);
+        assert!(assets.prototype_by_pid(0x0400_0001).unwrap().is_none());
+        assert!(assets.prototype_by_pid(0x0400_0000).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

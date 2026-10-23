@@ -80,3 +80,7 @@ This is strictly a read-only, synthetic-test-backed reader. It does not instanti
 ## CE critter prototype stat tables
 
 The critter `.PRO` path now uses `critter_read_data` from the pinned CE `src/game/critter.cc`, reading **35 base stats**, **35 bonus stats**, **18 skills**, flags, body type, experience and kill type as original big-endian i32 fields. Synthetic fixtures assert a complete 0x19C-byte critter record, tail-byte preservation, and truncation rejection. This is a data reader only: stats calculations, combat, AI, actor construction and save compatibility remain unimplemented.
+
+## PID-indexed prototype list lookup
+
+CE `proto_list_str` selects a **one-based** `PID & 0xFFFFFF` row of `proto/<category>/<category>.lst`, then opens that row's `.PRO`. `prototype_list.rs` preserves row numbering and `GameAssets::prototype_by_pid` loads via master DAT/patch lookup, checking decoded PID identity. Filenames with traversal/separators are rejected. Synthetic fixtures cover list numbering, missing records and PID identity. No gameplay objects or prototype caching are constructed.
