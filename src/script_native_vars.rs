@@ -112,10 +112,12 @@ mod tests {
         let mut runtime = ScriptRuntime::new();
         let program = ScriptProgram::decode(&[0_u8; 54]).unwrap();
         for id in 1..=3 {
-            runtime.register(id, ScriptVm::new(program.clone())).unwrap();
+            runtime
+                .register(id, ScriptVm::new(program.clone()))
+                .unwrap();
         }
-        let record = |id: u64, category: usize, saved_offset: i32, count: i32| {
-            InstalledScriptBinding {
+        let record =
+            |id: u64, category: usize, saved_offset: i32, count: i32| InstalledScriptBinding {
                 binding: ScriptBinding {
                     category,
                     ordinal: id as usize - 1,
@@ -131,15 +133,10 @@ mod tests {
                     local_variable_count: count,
                 },
                 instance_id: Some(id),
-            }
-        };
+            };
         BoundScriptRuntime {
             runtime,
-            entries: vec![
-                record(1, 1, 0, 2),
-                record(2, 1, -1, 3),
-                record(3, 0, -1, 0),
-            ],
+            entries: vec![record(1, 1, 0, 2), record(2, 1, -1, 3), record(3, 0, -1, 0)],
         }
         .script_local_state(&MapVariables {
             globals: vec![12, -9],
