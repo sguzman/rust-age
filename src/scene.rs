@@ -22,6 +22,7 @@ use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
+use std::collections::BTreeMap;
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -122,6 +123,88 @@ impl PreparedScriptEnvironment {
             &self.object_queries,
         )?;
         Ok(event)
+    }
+}
+
+/// Opt-in detached CE script-event state keyed by installed Rust VM ID.
+/// This is separate from MAP loading and the script scheduler. It never
+/// executes an INT or invokes original game callbacks.
+#[derive(Debug, Clone, Default)]
+pub struct DetachedMapEventSessions {
+    sessions: BTreeMap<u64, DetachedScriptEvent>,
+}
+
+impl DetachedMapEventSessions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(&self, instance_id: u64) -> Option<&DetachedScriptEvent> {
+        self.sessions.get(&instance_id)
+    }
+
+    /// Mimic an explicit scr_set_objs call for an installed script; absent
+    /// participants are true NULL, and unsafe ObjectKeys are rejected.
+    pub fn set_objs(
+        &mut self,
+        environment: &PreparedScriptEnvironment,
+        instance_id: u64,
+        source: Option<ObjectKey>,
+        target: Option<ObjectKey>,
+    ) -> io::Result<()> {
+        let owner = environment.owner_for_instance(instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE script event instance unresolved")
+        })?;
+        let entry = self
+            .sessions
+            .entry(instance_id)
+            .or_insert_with(|| DetachedScriptEvent::new(owner));
+        if entry.owner_resolution() != owner {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE script event session owner changed",
+            ));
+        }
+        entry.set_objs(&environment.object_queries, source, target)
+    }
+
+    /// Revalidate the exact planned VM/SID/procedure before accessing any
+    /// per-script state. Existing target and fixed parameter persist.
+    /// An unsuccessful entry leaves the previous event metadata untouched.
+    pub fn begin_planned<'a>(
+        &'a mut self,
+        environment: &PreparedScriptEnvironment,
+        planned: &PlannedMapAction,
+    ) -> io::Result<&'a mut DetachedScriptEvent> {
+        let candidate = environment.detached_event_for_planned(planned)?;
+        let owner = candidate.owner_resolution();
+        let entry = self
+            .sessions
+            .entry(planned.instance_id)
+            .or_insert_with(|| DetachedScriptEvent::new(owner));
+        if entry.owner_resolution() != owner {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE script event session owner changed",
+            ));
+        }
+        entry.begin_action(
+            planned.action,
+            planned.external_parameter,
+            &environment.object_queries,
+        )?;
+        Ok(entry)
+    }
+
+    /// Explicit normal-completion boundary. The source is cleared and the
+    /// target retained, just as in pinned CE exec_script_proc.
+    pub fn finish(&mut self, instance_id: u64) -> io::Result<()> {
+        self.sessions
+            .get_mut(&instance_id)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE script event session missing")
+            })?
+            .finish_action()
     }
 }
 

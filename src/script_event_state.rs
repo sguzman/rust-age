@@ -44,6 +44,10 @@ impl DetachedScriptEvent {
         &self.invocation
     }
 
+    pub fn owner_resolution(&self) -> ScriptOwnerResolution {
+        self.owner
+    }
+
     /// Mutable CE action/overrides state, available only during an explicit
     /// detached invocation. The bounded native host may update overrides.
     pub fn active_invocation_mut(&mut self) -> io::Result<&mut ScriptInvocationState> {
