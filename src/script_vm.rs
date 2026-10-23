@@ -8,6 +8,7 @@
 //! native opcodes, persistent state, or player input. Unknown opcodes error.
 //! Only numeric arithmetic and basic stack/control operations are supported.
 use crate::script_program::ScriptProgram;
+use std::cmp::Ordering;
 use std::io;
 
 const MAX_STACK_VALUES: usize = 0x800;
@@ -255,6 +256,56 @@ impl ScriptVm {
             self.runtime_procedures[*index].flags = 0;
         }
         Ok(ready)
+    }
+
+    /// CE op_equal/op_not_equal/op_less and related comparisons: for any
+    /// original static string, compare zero-terminated 8-bit text with
+    /// strcmp ordering, not Unicode conversion or numeric coercion.
+    /// Numeric operands are rendered as CE's decimal integer or %.5f text.
+    /// Dynamic string heap handles remain explicitly unimplemented.
+    fn compare(&self, left: ScriptValue, right: ScriptValue, op: u16) -> io::Result<bool> {
+        if matches!(left, ScriptValue::StaticString(_))
+            || matches!(right, ScriptValue::StaticString(_))
+        {
+            let to_bytes = |value| -> io::Result<Vec<u8>> {
+                match value {
+                    ScriptValue::StaticString(offset) => {
+                        let offset = usize::try_from(offset)
+                            .map_err(|_| invalid("negative CE static string offset"))?;
+                        Ok(self.program.static_string(offset)?.to_vec())
+                    }
+                    ScriptValue::Int(number) => Ok(number.to_string().into_bytes()),
+                    ScriptValue::Float(number) if number.is_finite() => {
+                        Ok(format!("{number:.5}").into_bytes())
+                    }
+                    ScriptValue::DynamicString(_) => {
+                        Err(invalid("CE dynamic script strings not implemented"))
+                    }
+                    _ => Err(invalid("unsupported CE string comparison operand")),
+                }
+            };
+            let comparison = to_bytes(left)?.cmp(&to_bytes(right)?);
+            return Ok(match op {
+                0x33 => comparison == Ordering::Equal,
+                0x34 => comparison != Ordering::Equal,
+                0x35 => comparison != Ordering::Greater,
+                0x36 => comparison != Ordering::Less,
+                0x37 => comparison == Ordering::Less,
+                0x38 => comparison == Ordering::Greater,
+                _ => return Err(invalid("unsupported CE string comparison")),
+            });
+        }
+        if let (ScriptValue::Pointer(a), ScriptValue::Pointer(b))
+        | (ScriptValue::Pointer(a), ScriptValue::Int(b))
+        | (ScriptValue::Int(a), ScriptValue::Pointer(b)) = (left, right)
+        {
+            return match op {
+                0x33 => Ok(a == b),
+                0x34 => Ok(a != b),
+                _ => Err(invalid("unsupported CE pointer ordering")),
+            };
+        }
+        numeric_comparison(left, right, op)
     }
 
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
@@ -558,7 +609,7 @@ impl ScriptVm {
             0x33..=0x38 => {
                 let right = self.pop()?;
                 let left = self.pop()?;
-                let result = numeric_comparison(left, right, opcode & 0x03FF)?;
+                let result = self.compare(left, right, opcode & 0x03FF)?;
                 self.push(ScriptValue::Int(i32::from(result)))?;
             }
             0x3D => {
@@ -724,6 +775,96 @@ mod tests {
         let mut vm = ScriptVm::new(fixture(&code));
         vm.run_bounded(8).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Float(3.0)]);
+    }
+
+    fn fixture_with_static_strings(instructions: &[u8], strings: &[u8]) -> ScriptProgram {
+        assert!(instructions.len() <= 42);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..instructions.len()].copy_from_slice(instructions);
+        bytes.extend_from_slice(&0_i32.to_be_bytes()); // no procedures
+        bytes.extend_from_slice(&0_i32.to_be_bytes()); // no identifiers
+        bytes.extend_from_slice(&(strings.len() as i32).to_be_bytes());
+        bytes.extend_from_slice(strings);
+        ScriptProgram::decode(&bytes).unwrap()
+    }
+
+    fn push_static(code: &mut Vec<u8>, offset: i32) {
+        opcode(code, 0x9001);
+        code.extend_from_slice(&offset.to_be_bytes());
+    }
+
+    #[test]
+    fn ce_static_string_comparisons_preserve_byte_order_and_case() {
+        let mut code = Vec::new();
+        push_static(&mut code, 0);
+        push_static(&mut code, 6);
+        opcode(&mut code, 0x8037); // alpha < beta
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"alpha\0beta\0"));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
+
+        let mut code = Vec::new();
+        push_static(&mut code, 0);
+        push_static(&mut code, 4);
+        opcode(&mut code, 0x8033); // case-sensitive equality
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"ABC\0abc\0"));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(0)]);
+    }
+
+    #[test]
+    fn ce_static_strings_compare_against_formatted_ints_and_floats() {
+        let mut code = Vec::new();
+        push_int(&mut code, 7);
+        push_static(&mut code, 0);
+        opcode(&mut code, 0x8033); // 7 == "7"
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"7\0"));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
+
+        let mut code = Vec::new();
+        opcode(&mut code, 0xA001);
+        code.extend_from_slice(&1.5_f32.to_bits().to_be_bytes());
+        push_static(&mut code, 0);
+        opcode(&mut code, 0x8033);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"1.50000\0"));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
+    }
+
+    #[test]
+    fn ce_comparisons_reject_invalid_string_offsets_and_heap_handles() {
+        let mut code = Vec::new();
+        push_static(&mut code, -1);
+        push_static(&mut code, 0);
+        opcode(&mut code, 0x8033);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"ok\0"));
+        assert!(vm.run_bounded(8).is_err());
+
+        let mut code = Vec::new();
+        opcode(&mut code, 0x9801);
+        code.extend_from_slice(&0_i32.to_be_bytes());
+        push_static(&mut code, 0);
+        opcode(&mut code, 0x8034);
+        let mut vm = ScriptVm::new(fixture_with_static_strings(&code, b"ok\0"));
+        assert!(vm.run_bounded(8).is_err());
+    }
+
+    #[test]
+    fn ce_pointer_equals_null_integer_without_dereferencing() {
+        let mut code = Vec::new();
+        opcode(&mut code, 0xE001);
+        code.extend_from_slice(&0_i32.to_be_bytes());
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8033);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
     }
 
     #[test]
