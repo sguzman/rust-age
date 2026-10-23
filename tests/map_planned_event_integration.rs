@@ -526,7 +526,13 @@ fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests(
     assert_eq!(environment.map_locals.globals(), [12]);
     assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
-    assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+    assert!(environment
+        .scripts
+        .runtime
+        .vm(1)
+        .unwrap()
+        .stack()
+        .is_empty());
 
     // The identical CE setup frame can also mutate a *cloned* quest flag.
     code[15] = 0xC6; // SET_GLOBAL_VAR (0x80C6) in place of MAP-var write

@@ -171,14 +171,12 @@ impl PreparedScriptEnvironment {
                 max_steps,
                 &mut |opcode, stack| match opcode {
                     LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE
-                    | SET_MAP_VAR_OPCODE => {
-                        apply_map_variable_opcode(
-                            &mut map_locals,
-                            planned.instance_id,
-                            opcode,
-                            stack,
-                        )
-                    }
+                    | SET_MAP_VAR_OPCODE => apply_map_variable_opcode(
+                        &mut map_locals,
+                        planned.instance_id,
+                        opcode,
+                        stack,
+                    ),
                     crate::game_globals::GLOBAL_VAR_OPCODE
                     | crate::game_globals::SET_GLOBAL_VAR_OPCODE => game_globals
                         .as_mut()
@@ -193,12 +191,7 @@ impl PreparedScriptEnvironment {
                         invocation.mark_overrides();
                         Ok(())
                     }
-                    _ => apply_readonly_event_native_opcode(
-                        snapshot,
-                        &invocation,
-                        opcode,
-                        stack,
-                    ),
+                    _ => apply_readonly_event_native_opcode(snapshot, &invocation, opcode, stack),
                 },
             )?
             .ok_or_else(|| {
