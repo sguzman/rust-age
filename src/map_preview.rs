@@ -109,6 +109,69 @@ mod tests {
     use crate::framebuffer::IndexedSurface;
 
     #[test]
+    fn synthetic_map_resolves_original_tile_list_and_blits_frm() {
+        use crate::assets::GameAssets;
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "rust-age-floor-preview-{}-{stamp}",
+            std::process::id()
+        ));
+        let art = root.join("data").join("art").join("tiles");
+        fs::create_dir_all(&art).unwrap();
+        // Both DAT archives are structurally empty; only synthesized patch data
+        // is read by this test, never licensed commercial assets.
+        fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
+        fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
+        fs::write(art.join("tiles.lst"), b"TEST.FRM\\nEMPTY.FRM\\n").unwrap();
+
+        let mut sprite = Vec::new();
+        sprite.extend_from_slice(&4_i32.to_be_bytes());
+        sprite.extend_from_slice(&10_i16.to_be_bytes());
+        sprite.extend_from_slice(&0_i16.to_be_bytes());
+        sprite.extend_from_slice(&1_i16.to_be_bytes());
+        sprite.extend_from_slice(&[0_u8; 24]);
+        sprite.extend_from_slice(&[0_u8; 24]);
+        sprite.extend_from_slice(&16_i32.to_be_bytes());
+        sprite.extend_from_slice(&2_i16.to_be_bytes());
+        sprite.extend_from_slice(&2_i16.to_be_bytes());
+        sprite.extend_from_slice(&4_i32.to_be_bytes());
+        sprite.extend_from_slice(&0_i16.to_be_bytes());
+        sprite.extend_from_slice(&0_i16.to_be_bytes());
+        sprite.extend_from_slice(&[7, 0, 0, 9]);
+        fs::write(art.join("TEST.FRM"), sprite).unwrap();
+
+        let mut map = Vec::new();
+        map.extend_from_slice(&19_i32.to_be_bytes());
+        map.extend_from_slice(b"TEST.MAP\\0\\0\\0\\0\\0\\0\\0\\0");
+        for field in [20099_i32, 0, 2, 0, -1, 4 | 8, 0, 0, 0, 0] {
+            map.extend_from_slice(&field.to_be_bytes());
+        }
+        map.extend_from_slice(&[0_u8; 44 * 4]);
+        for square in 0..10_000 {
+            // Every cell except the one visible example is blank tile #1.
+            let word = if square == 5049 { 0_u32 } else { 1_u32 };
+            map.extend_from_slice(&word.to_be_bytes());
+        }
+
+        let mut assets = GameAssets::open(&root).unwrap();
+        let preview = FloorPreview::render(&mut assets, &map, 640, 380).unwrap();
+        assert_eq!(preview.unique_art, 1);
+        assert_eq!(preview.tile_count, 1);
+        let (x, y) = (288_usize, 180_usize);
+        let indices = preview.surface.indices();
+        assert_eq!(indices[y * 640 + x], 7);
+        assert_eq!(indices[y * 640 + x + 1], 0);
+        assert_eq!(indices[(y + 1) * 640 + x + 1], 9);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn framebuffer_used_by_floor_renderer_is_indexed() {
         let surface = IndexedSurface::new(640, 380).unwrap();
         assert_eq!(surface.indices().len(), 640 * 380);
