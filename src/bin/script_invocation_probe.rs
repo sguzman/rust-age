@@ -40,8 +40,7 @@ fn probe(present: bool, action: i32, kind: &str) -> Result<String, Box<dyn Error
         locals: vec![],
     })?;
     let mut game = GameGlobalState::from_initial_values(&[])?;
-    let steps =
-        run_invocation_subset_bounded(&mut vm, 1, &mut map, &mut game, &mut invocation, 6)?;
+    let steps = run_invocation_subset_bounded(&mut vm, 1, &mut map, &mut game, &mut invocation, 6)?;
     let stack = match vm.stack() {
         [] => "E".to_owned(),
         [ScriptValue::Int(value)] => value.to_string(),
