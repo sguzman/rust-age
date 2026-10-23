@@ -102,6 +102,17 @@ impl CollisionIndex {
         None
     }
 
+    /// Return a runtime object's current hex, by its stable serialized key.
+    pub fn tile_of(&self, key: ObjectKey) -> Option<i32> {
+        self.objects.iter().find_map(|(&(elevation, tile), objects)| {
+            if elevation == key.elevation && objects.iter().any(|object| object.key == key) {
+                Some(tile)
+            } else {
+                None
+            }
+        })
+    }
+
     /// Move an existing object to a different hex on the same elevation.
     ///
     /// This adjusts only the collision index, not MAP object records,

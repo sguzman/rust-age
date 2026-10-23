@@ -200,3 +200,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## Mutable CE map collision state (pure runtime primitive)
 
 The CE-derived `CollisionIndex` now supports same-elevation object relocation by stable `ObjectKey` and updates of original hidden, `NO_BLOCK`, and `MULTIHEX` flags. Moving a blocker removes it from the old tile and inserts it in the new tile without changing nearby geometry or unrelated occupants; tests cover move/idempotence, invalid targets and dynamic multihex visibility. This *only* updates the collision index: the original `obj_move_to_tile` also updates object tables, lighting, roofs, seen tiles, script triggers and exits, none of which is claimed or implemented by this primitive.
+
+## CE-style runtime actor route stepping (pure simulation)
+
+`src/actor_route.rs` connects the original hex-neighbor order, bounded CE path search and mutable collision index. The actor is located through its stable `ObjectKey`, excluded from its own blocker tests, and moved one rotation at a time only after rechecking current occupancy. A changed blocker yields `Blocked` without consuming the next step; external relocations invalidate stale routes. Synthetic tests verify blocked/retried routes and occupancy consistency. The simulation does not mutate original MAP records or provide time-stepped animation, doors, light/roof updates, script triggers or a playable main loop.
