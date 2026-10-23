@@ -255,8 +255,8 @@ pub fn run_invocation_subset_bounded(
 mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded, run_variable_subset_bounded,
-        run_with_script_action_bounded, ScriptInvocationState, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
-        FIXED_PARAM_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
+        run_with_script_action_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
+        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
         SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
@@ -416,24 +416,31 @@ mod tests {
         let mut map = fixture();
         let mut globals = GameGlobalState::from_initial_values(&[8]).unwrap();
         let mut first = program(&code);
-        assert_eq!(run_invocation_subset_bounded(
-            &mut first, 1, &mut map, &mut globals, &mut invocation, 8,
-        ).unwrap(), 4);
+        assert_eq!(
+            run_invocation_subset_bounded(
+                &mut first,
+                1,
+                &mut map,
+                &mut globals,
+                &mut invocation,
+                8,
+            )
+            .unwrap(),
+            4
+        );
         assert_eq!(first.stack(), [ScriptValue::Int(16)]);
         assert!(invocation.begin_action(23));
         assert_eq!(invocation.fixed_parameter(), 1);
         let mut next = program(&code);
-        run_invocation_subset_bounded(
-            &mut next, 1, &mut map, &mut globals, &mut invocation, 8,
-        ).unwrap();
+        run_invocation_subset_bounded(&mut next, 1, &mut map, &mut globals, &mut invocation, 8)
+            .unwrap();
         assert_eq!(next.stack(), [ScriptValue::Int(24)]);
         let mut missing = ScriptInvocationState::missing();
         assert!(!missing.set_fixed_parameter(99));
         assert_eq!(missing.fixed_parameter(), 0);
         let mut absent = program(&code);
-        run_invocation_subset_bounded(
-            &mut absent, 1, &mut map, &mut globals, &mut missing, 8,
-        ).unwrap();
+        run_invocation_subset_bounded(&mut absent, 1, &mut map, &mut globals, &mut missing, 8)
+            .unwrap();
         assert_eq!(absent.stack(), [ScriptValue::Int(0)]);
     }
 

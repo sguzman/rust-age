@@ -3,8 +3,8 @@ use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::script_binding::BoundScriptRuntime;
 use rust_age::script_native_vars::{
-    run_invocation_subset_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
-    SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
+    run_invocation_subset_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE, SCRIPT_ACTION_OPCODE,
+    SCRIPT_OVERRIDES_OPCODE,
 };
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;

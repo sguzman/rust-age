@@ -40,7 +40,10 @@ impl PlannedMapAction {
             ));
         }
         let action = i32::try_from(self.action).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE lifecycle action exceeds i32")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE lifecycle action exceeds i32",
+            )
         })?;
         let mut state = ScriptInvocationState::installed();
         state.begin_action(action);
@@ -242,7 +245,13 @@ mod tests {
             .plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 1)
             .unwrap();
         assert!(revisited.iter().all(|a| a.external_parameter == Some(0)));
-        assert_eq!(revisited[0].detached_invocation().unwrap().fixed_parameter(), 0);
+        assert_eq!(
+            revisited[0]
+                .detached_invocation()
+                .unwrap()
+                .fixed_parameter(),
+            0
+        );
         let update = bound
             .plan_map_lifecycle(MapLifecyclePhase::Update, 500, 0)
             .unwrap();
