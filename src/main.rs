@@ -29,6 +29,7 @@ fn usage() {
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
     println!("       rust-age --inspect-script-index /path/to/Fallout 0");
+    println!("       rust-age --inspect-game-global /path/to/Fallout 123");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
     println!(
@@ -280,6 +281,32 @@ fn main() {
                     println!("Selection only; no Fallout script has executed.");
                 }
                 Err(error) => fail(format!("Cannot inspect MAP lifecycle: {error}")),
+            }
+        }
+        [_, flag, directory, index] if flag == "--inspect-game-global" => {
+            let index = index
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("Invalid decimal game-global index"));
+            let result = GameAssets::open(Path::new(directory))
+                .and_then(|mut assets| assets.game_global_defaults());
+            match result {
+                Ok(Some(globals)) => {
+                    println!(
+                        "Fallout 1 GAME_GLOBAL_VARS defaults: {}",
+                        globals.values().len()
+                    );
+                    let is_valid = usize::try_from(index)
+                        .ok()
+                        .is_some_and(|index| index < globals.values().len());
+                    println!("  index {index}: {}", globals.read(index));
+                    println!(
+                        "  status: {}",
+                        if is_valid { "present" } else { "out of range" }
+                    );
+                    println!("Installed defaults only; no Fallout script has executed.");
+                }
+                Ok(None) => fail("Original data/vault13.gam is not installed"),
+                Err(error) => fail(format!("Cannot inspect GAME_GLOBAL_VARS: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map-procedures" => {
