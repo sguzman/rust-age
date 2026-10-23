@@ -357,6 +357,41 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    /// Inspect which scheduled CE script procedures are ready under current
+    /// immutable MAP/quest/clock inputs. Conditional events take priority
+    /// over timed events, and CE's strict time comparison is preserved.
+    /// The installed VM, scheduler flags and world state never change.
+    pub fn preview_planned_due_reads_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        let event = self.detached_event_for_planned(planned)?;
+        let vm = self
+            .scripts
+            .runtime
+            .vm(planned.instance_id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE due VM missing"))?;
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        vm.preview_due_procedures_with_host_bounded(
+            now_millis,
+            max_steps_per_condition,
+            &mut |opcode, stack| {
+                apply_readonly_event_native_with_vars(
+                    snapshot,
+                    event.invocation(),
+                    &self.map_locals,
+                    self.game_globals.as_ref(),
+                    planned.instance_id,
+                    opcode,
+                    stack,
+                )
+            },
+        )
+    }
+
     /// Preview only supported CE object, event and clock READ opcodes
     /// inside the local procedure, using a cloned installed VM and a pure
     /// native adapter. No global/local state writes, overrides, timers,

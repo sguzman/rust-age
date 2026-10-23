@@ -387,6 +387,29 @@ impl ScriptVm {
         Ok(probe.pop_int()? != 0)
     }
 
+    /// Return CE timed/conditional readiness from an isolated copy of the
+    /// procedure table. Original flags and event times are NOT consumed,
+    /// even if a condition succeeds or a later condition fails.
+    ///
+    /// The native adapter must be pure/read-only for an observation-only
+    /// preview; only the interpreter's own state is cloned.
+    pub fn preview_due_procedures_with_host_bounded(
+        &self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Vec<usize>> {
+        let mut detached = self.clone();
+        detached.take_due_procedures_with(now_millis, |_, condition_offset| {
+            self.preview_condition_with_host_bounded(
+                condition_offset,
+                max_steps_per_condition,
+                native,
+            )
+            .map(Some)
+        })
+    }
+
     /// Synthetic-only end-to-end binding of the bounded condition preview
     /// to the original CE doEvents precedence. Each condition is evaluated
     /// independently from the same pre-poll VM snapshot, so this is not yet

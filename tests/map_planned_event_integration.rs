@@ -539,6 +539,12 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
     assert!(environment
         .preview_planned_condition_reads_bounded(&plan, 0, clock, 5)
         .unwrap());
+    assert_eq!(
+        environment
+            .preview_planned_due_reads_bounded(&plan, clock, 100, 5)
+            .unwrap(),
+        vec![0]
+    );
     assert!(environment
         .preview_planned_condition_reads_bounded(&plan, 0, clock, 4)
         .is_err());
@@ -572,12 +578,19 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
     assert!(!environment
         .preview_planned_condition_reads_bounded(&plan, 0, clock, 5)
         .unwrap());
+    assert!(environment
+        .preview_planned_due_reads_bounded(&plan, clock, 100, 5)
+        .unwrap()
+        .is_empty());
 
     // Script overrides remain a write and must be refused by this adapter.
     *environment.scripts.runtime.vm_mut(1).unwrap() =
         synthetic_vm_with_condition(&body, &[0x80, 0xB9, 0x80, 0x11]);
     assert!(environment
         .preview_planned_condition_reads_bounded(&plan, 0, clock, 2)
+        .is_err());
+    assert!(environment
+        .preview_planned_due_reads_bounded(&plan, clock, 100, 5)
         .is_err());
     assert_eq!(environment.map_locals.globals(), [13]);
     assert_eq!(
