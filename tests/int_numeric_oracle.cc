@@ -121,7 +121,9 @@ int main(int argc,char** argv) {
     std::ifstream cases(argv[1]);if(!cases)return 2;
     std::string name,hex;
     while(cases>>name>>hex) {
-        try {std::cout<<name<<" "<<execute(bytes_from_hex(hex))<<"\n";}
-        catch(const std::exception&) {std::cout<<name<<" ERR\n";}
+        std::string result;
+        try {result=execute(bytes_from_hex(hex));}
+        catch(const std::exception&) {result="ERR";}
+        std::cout<<name<<" "<<result<<"\n";
     }
 }
