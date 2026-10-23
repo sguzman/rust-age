@@ -41,12 +41,14 @@ fn binding(cat: usize, ordinal: usize, sid: i32, id: Option<u64>) -> InstalledSc
 }
 fn setup() -> Result<BoundScriptRuntime, Box<dyn Error>> {
     let mut runtime = ScriptRuntime::new();
-    runtime.register(1, make_vm(&[
-        b"main", b"start", b"map_update_p_proc", b"map_exit_p_proc",
-    ])?)?;
-    runtime.register(2, make_vm(&[
-        b"main", b"start", b"map_enter_p_proc", b"map_update_p_proc",
-    ])?)?;
+    runtime.register(
+        1,
+        make_vm(&[b"main", b"start", b"map_update_p_proc", b"map_exit_p_proc"])?,
+    )?;
+    runtime.register(
+        2,
+        make_vm(&[b"main", b"start", b"map_enter_p_proc", b"map_update_p_proc"])?,
+    )?;
     runtime.register(4, make_vm(&[b"main", b"start", b"MAP_ENTER_P_PROC"])?)?;
     Ok(BoundScriptRuntime {
         runtime,
@@ -72,8 +74,15 @@ fn probe(phase: &str, sid: i32, flags: i32) -> Result<String, Box<dyn Error>> {
     }
     Ok(planned
         .iter()
-        .map(|p| format!("{}:{}:{}:{}", p.script_id, p.action, p.procedure_index,
-            p.external_parameter.unwrap_or(-1)))
+        .map(|p| {
+            format!(
+                "{}:{}:{}:{}",
+                p.script_id,
+                p.action,
+                p.procedure_index,
+                p.external_parameter.unwrap_or(-1)
+            )
+        })
         .collect::<Vec<_>>()
         .join(","))
 }
