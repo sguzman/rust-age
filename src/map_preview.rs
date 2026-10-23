@@ -128,7 +128,7 @@ mod tests {
         // is read by this test, never licensed commercial assets.
         fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
         fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
-        fs::write(art.join("tiles.lst"), b"TEST.FRM\\nEMPTY.FRM\\n").unwrap();
+        fs::write(art.join("tiles.lst"), b"TEST.FRM\nEMPTY.FRM\n").unwrap();
 
         let mut sprite = Vec::new();
         sprite.extend_from_slice(&4_i32.to_be_bytes());
@@ -148,7 +148,7 @@ mod tests {
 
         let mut map = Vec::new();
         map.extend_from_slice(&19_i32.to_be_bytes());
-        map.extend_from_slice(b"TEST.MAP\\0\\0\\0\\0\\0\\0\\0\\0");
+        map.extend_from_slice(b"TEST.MAP\0\0\0\0\0\0\0\0");
         for field in [20099_i32, 0, 2, 0, -1, 4 | 8, 0, 0, 0, 0] {
             map.extend_from_slice(&field.to_be_bytes());
         }
