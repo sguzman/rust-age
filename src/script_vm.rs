@@ -258,6 +258,33 @@ impl ScriptVm {
         Ok(ready)
     }
 
+    /// Consume one ready CE procedure, preserving the original engine's
+    /// per-entry condition precedence, strict unsigned time comparison and
+    /// immediate flag clearing before dispatch. The evaluator is supplied
+    /// by the host and no procedure bytecode runs here. A host error leaves
+    /// this entry armed (the Rust diagnostic safety choice).
+    pub fn consume_due_procedure_with(
+        &mut self,
+        procedure_index: usize,
+        now_millis: u32,
+        evaluate_condition: impl FnOnce(i32) -> io::Result<Option<bool>>,
+    ) -> io::Result<bool> {
+        let entry = self
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE procedure index outside event table"))?;
+        let ready = if entry.flags & 0x02 != 0 {
+            evaluate_condition(entry.condition_offset)? == Some(true)
+        } else {
+            entry.flags & 0x01 != 0 && (entry.event_time as u32) < now_millis
+        };
+        if ready {
+            self.runtime_procedures[procedure_index].flags = 0;
+        }
+        Ok(ready)
+    }
+
     /// CE op_equal/op_not_equal/op_less and related comparisons: for any
     /// original static string, compare zero-terminated 8-bit text with
     /// strcmp ordering, not Unicode conversion or numeric coercion.

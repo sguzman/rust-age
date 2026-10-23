@@ -144,6 +144,41 @@ impl ScriptRuntime {
         Ok(ready)
     }
 
+    /// Host callback boundary for ready CE procedures. Unlike the existing
+    /// batched diagnostic, this walks each program's procedures in order and
+    /// invokes the supplied callback immediately *after* the matching event
+    /// flags are cleared. Later decisions can therefore observe host changes
+    /// made by earlier callbacks. No native game callback is implemented by
+    /// Rust Age; the caller opts in to whatever synthetic host logic runs.
+    /// Callback errors leave the due event consumed, as CE clears it before
+    /// calling executeProc; earlier callbacks also remain effective.
+    pub fn dispatch_due_with(
+        &mut self,
+        now_millis: u32,
+        mut evaluate: impl FnMut(u64, usize, i32) -> io::Result<Option<bool>>,
+        mut dispatch: impl FnMut(u64, usize, &mut ScriptVm) -> io::Result<()>,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut completed = Vec::new();
+        for program in &mut self.programs {
+            let id = program.id;
+            for index in 0..program.vm.runtime_procedures().len() {
+                if program.vm.consume_due_procedure_with(index, now_millis, |offset| {
+                    evaluate(id, index, offset)
+                })? {
+                    dispatch(id, index, &mut program.vm)?;
+                    completed.push(DueProcedure {
+                        program_id: id,
+                        procedure_index: index,
+                    });
+                }
+            }
+        }
+        Ok(completed)
+    }
+
     /// Synthetic-only bounded local interrupt procedure previews for due
     /// programs. Unlike CE's live scheduler, this diagnostic commits the
     /// consumed event flags only when every preview succeeds; engine native
@@ -364,6 +399,70 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn opt_in_host_dispatch_observes_ce_order_and_consumed_flags() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, vm(0x03, 1, 77)).unwrap();
+        runtime.register(2, vm(0x01, 1, 0)).unwrap();
+        runtime.set_suspended(true);
+        assert!(runtime
+            .dispatch_due_with(100, |_, _, _| panic!("suspended condition"), |_, _, _| {
+                panic!("suspended dispatch")
+            })
+            .unwrap()
+            .is_empty());
+        runtime.set_suspended(false);
+        let mut called = Vec::new();
+        let result = runtime
+            .dispatch_due_with(
+                100,
+                |id, _, offset| {
+                    assert_eq!((id, offset), (1, 77));
+                    Ok(Some(true))
+                },
+                |id, index, vm| {
+                    assert_eq!(vm.runtime_procedures()[index].flags, 0);
+                    called.push(id);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(called, [2, 1]);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].program_id, 2);
+        assert_eq!(result[1].program_id, 1);
+        assert!(runtime.dispatch_due_with(100, |_, _, _| Ok(Some(true)), |_, _, _| Ok(())).unwrap().is_empty());
+    }
+
+    #[test]
+    fn host_dispatch_failure_preserves_consumed_event_and_skips_later_program() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, vm(0x01, 1, 0)).unwrap();
+        runtime.register(2, vm(0x01, 1, 0)).unwrap();
+        let mut visited = Vec::new();
+        assert!(runtime
+            .dispatch_due_with(
+                100,
+                |_, _, _| Ok(None),
+                |id, _, _| {
+                    visited.push(id);
+                    Err(std::io::Error::other("synthetic host dispatch failed"))
+                },
+            )
+            .is_err());
+        assert_eq!(visited, [2]);
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 1);
+        let mut visited_after = Vec::new();
+        runtime
+            .dispatch_due_with(100, |_, _, _| Ok(None), |id, _, _| {
+                visited_after.push(id);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(visited_after, [1]);
     }
 
     #[test]
