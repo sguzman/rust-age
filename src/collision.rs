@@ -30,10 +30,11 @@ pub struct CollisionObject {
 impl CollisionObject {
     fn eligible(self, excluded: Option<ObjectKey>) -> bool {
         let kind = (self.fid >> 24) & 0x0F;
-        self.key != excluded.unwrap_or(ObjectKey {
-            elevation: usize::MAX,
-            ordinal: usize::MAX,
-        })
+        self.key
+            != excluded.unwrap_or(ObjectKey {
+                elevation: usize::MAX,
+                ordinal: usize::MAX,
+            })
             && self.flags & (OBJECT_HIDDEN | OBJECT_NO_BLOCK) == 0
             && (1..=3).contains(&kind)
     }
@@ -53,14 +54,16 @@ impl CollisionIndex {
                 if !(0..40_000).contains(&header.tile) {
                     continue;
                 }
-                index.objects.entry((elevation, header.tile)).or_default().push(
-                    CollisionObject {
+                index
+                    .objects
+                    .entry((elevation, header.tile))
+                    .or_default()
+                    .push(CollisionObject {
                         key: ObjectKey { elevation, ordinal },
                         tile: header.tile,
                         fid: header.fid as u32,
                         flags: header.flags,
-                    },
-                );
+                    });
             }
         }
         index
@@ -86,9 +89,11 @@ impl CollisionIndex {
         for direction in 0..6 {
             let next = view.move_in_direction(tile, direction, 1)?;
             if let Some(objects) = self.objects.get(&(elevation, next)) {
-                if let Some(object) = objects.iter().copied().find(|o| {
-                    o.flags & OBJECT_MULTIHEX != 0 && o.eligible(excluded)
-                }) {
+                if let Some(object) = objects
+                    .iter()
+                    .copied()
+                    .find(|o| o.flags & OBJECT_MULTIHEX != 0 && o.eligible(excluded))
+                {
                     return Some(object);
                 }
             }
@@ -103,7 +108,8 @@ impl CollisionIndex {
         elevation: usize,
         excluded: Option<ObjectKey>,
     ) -> bool {
-        self.first_blocker(view, tile, elevation, excluded).is_none()
+        self.first_blocker(view, tile, elevation, excluded)
+            .is_none()
     }
 }
 
@@ -165,11 +171,25 @@ mod tests {
             object(9, 20098, 3, OBJECT_NO_BLOCK),
             object(10, 20098, 1, 0),
         ]);
-        assert_eq!(blocked.first_blocker(&view, 20098, 0, None).unwrap().key.ordinal, 3);
-        assert!(blocked.first_blocker(&view, 20098, 0, Some(ObjectKey {
-            elevation: 0,
-            ordinal: 3,
-        })).is_none());
+        assert_eq!(
+            blocked
+                .first_blocker(&view, 20098, 0, None)
+                .unwrap()
+                .key
+                .ordinal,
+            3
+        );
+        assert!(blocked
+            .first_blocker(
+                &view,
+                20098,
+                0,
+                Some(ObjectKey {
+                    elevation: 0,
+                    ordinal: 3,
+                })
+            )
+            .is_none());
         assert!(blocked.first_blocker(&view, 20098, 1, None).is_none());
     }
 
@@ -179,7 +199,10 @@ mod tests {
         let normal = index(vec![object(1, 20098, 2, 0)]);
         assert!(normal.is_passable(&view, 20099, 0, None));
         let huge = index(vec![object(1, 20098, 2, OBJECT_MULTIHEX)]);
-        assert_eq!(huge.first_blocker(&view, 20099, 0, None).unwrap().tile, 20098);
+        assert_eq!(
+            huge.first_blocker(&view, 20099, 0, None).unwrap().tile,
+            20098
+        );
         assert!(huge.first_blocker(&view, -1, 0, None).is_none());
     }
 
@@ -194,7 +217,9 @@ mod tests {
         .unwrap();
         let mut tile = 20099;
         for direction in route {
-            tile = view.move_in_direction(tile, usize::from(direction), 1).unwrap();
+            tile = view
+                .move_in_direction(tile, usize::from(direction), 1)
+                .unwrap();
             assert_ne!(tile, 20098);
         }
         assert_eq!(tile, 20097);
