@@ -3,9 +3,7 @@ use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::script_binding::BoundScriptRuntime;
 use rust_age::script_clock::ScriptGameClock;
-use rust_age::script_native_vars::{
-    run_invocation_with_clock_bounded, ScriptInvocationState,
-};
+use rust_age::script_native_vars::{run_invocation_with_clock_bounded, ScriptInvocationState};
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
@@ -35,7 +33,11 @@ fn program() -> Result<ScriptVm, Box<dyn Error>> {
     Ok(ScriptVm::new(ScriptProgram::decode(&bytes)?))
 }
 fn run(
-    ticks: i32, action: i32, fixed: i32, installed: bool, loaded: bool,
+    ticks: i32,
+    action: i32,
+    fixed: i32,
+    installed: bool,
+    loaded: bool,
 ) -> Result<String, Box<dyn Error>> {
     let mut vm = program()?;
     let bound = BoundScriptRuntime {
@@ -46,9 +48,7 @@ fn run(
         globals: Vec::new(),
         locals: Vec::new(),
     })?;
-    let mut game = GameGlobalState::from_initial_values(
-        if loaded { &[7] } else { &[] },
-    )?;
+    let mut game = GameGlobalState::from_initial_values(if loaded { &[7] } else { &[] })?;
     let mut invocation = if installed {
         ScriptInvocationState::installed()
     } else {
@@ -57,18 +57,27 @@ fn run(
     invocation.set_fixed_parameter(fixed);
     invocation.begin_action(action);
     let steps = run_invocation_with_clock_bounded(
-        &mut vm, 1, &mut locals, &mut game, &mut invocation,
-        ScriptGameClock { ticks }, 16,
+        &mut vm,
+        1,
+        &mut locals,
+        &mut game,
+        &mut invocation,
+        ScriptGameClock { ticks },
+        16,
     )?;
     let top = match vm.stack() {
         [ScriptValue::Int(value)] => *value,
         _ => return Err("unexpected CE native trace result stack".into()),
     };
-    let game_value = game.values().first()
-        .map(i32::to_string).unwrap_or_else(|| "none".to_owned());
+    let game_value = game
+        .values()
+        .first()
+        .map(i32::to_string)
+        .unwrap_or_else(|| "none".to_owned());
     Ok(format!(
         "S:{top} G:{game_value} O:{} PC:{} N:{steps}",
-        i32::from(invocation.overrides()), vm.pc()
+        i32::from(invocation.overrides()),
+        vm.pc()
     ))
 }
 fn main() {
@@ -79,10 +88,14 @@ fn main() {
         }
         let output = (|| -> Result<String, Box<dyn Error>> {
             run(
-                parts[1].parse()?, parts[2].parse()?, parts[3].parse()?,
-                parts[4] == "1", parts[5] == "1",
+                parts[1].parse()?,
+                parts[2].parse()?,
+                parts[3].parse()?,
+                parts[4] == "1",
+                parts[5] == "1",
             )
-        })().unwrap_or_else(|_| "ERR".to_owned());
+        })()
+        .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", parts[0], output);
     }
 }
