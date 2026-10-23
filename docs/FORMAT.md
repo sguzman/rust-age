@@ -112,3 +112,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## CE make_path_func traversal (pure logic)
 
 `src/pathfinding.rs` reproduces the original `anim.cc` 2000-slot open/closed search, visited-on-insert semantics, screen-coordinate `idist` heuristic, CE hex-neighbor order, original 50-point step cost and 10-point noncombat turning penalty. It returns a bounded direction sequence and checks obstacles via a caller-supplied passability callback (doors, collision and combat are not implemented). Tests cover nearest-neighbor parity, destination occupancy flag, detours, reachability and invalid tiles. This has not been compared against a compiled original C++ A* oracle and is not yet wired to runtime actor movement.
+
+## Original object collision and multhex semantics (pure index)
+
+`src/collision.rs` ports CE `obj_blocking_at` rules: only critter/scenery/wall FIDs block; hidden and `OBJECT_NO_BLOCK` actors are ignored; direct-tile occupants are checked before neighboring `OBJECT_MULTIHEX` occupants; current actor identity is excluded by per-elevation ordinal. The index is constructed from deserialized top-level MAP records, not nested inventory. A synthetic route test composes this index with the pure CE pathfinder. Door usability, runtime actor state, dynamic movement and collision updates remain pending.

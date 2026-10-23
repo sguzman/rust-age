@@ -4,6 +4,7 @@ pub mod art_fid;
 pub mod art_list;
 pub mod assets;
 pub mod config;
+pub mod collision;
 pub mod dat;
 pub mod framebuffer;
 pub mod frm;
