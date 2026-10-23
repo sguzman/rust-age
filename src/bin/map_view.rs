@@ -37,8 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read(Bank::Master, &args[2])?
         .ok_or_else(|| error("original MAP file is missing"))?;
     let preview = FloorPreview::render(&mut assets, &map_bytes, WIDTH, HEIGHT)?;
-    let roof_preview =
-        FloorPreview::render_layers(&mut assets, &map_bytes, WIDTH, HEIGHT, true)?;
+    let roof_preview = FloorPreview::render_layers(&mut assets, &map_bytes, WIDTH, HEIGHT, true)?;
 
     let sdl = sdl2::init().map_err(error)?;
     let video = sdl.video().map_err(error)?;
@@ -83,7 +82,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
             .map_err(error)?;
-
 
         canvas.clear();
         canvas.copy(&texture, None, None).map_err(error)?;
