@@ -532,9 +532,7 @@ pub fn apply_readonly_event_native_with_vars(
                 LOCAL_VAR_OPCODE => map
                     .peek_saved_typed(instance_id, index)?
                     .unwrap_or(ScriptValue::Int(-1)),
-                MAP_VAR_OPCODE => map
-                    .read_global_typed(index)
-                    .unwrap_or(ScriptValue::Int(-1)),
+                MAP_VAR_OPCODE => map.read_global_typed(index).unwrap_or(ScriptValue::Int(-1)),
                 _ => ScriptValue::Int(
                     game.ok_or_else(|| invalid("CE game globals not supplied"))?
                         .read(index),

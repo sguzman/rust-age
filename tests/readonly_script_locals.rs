@@ -67,15 +67,21 @@ fn preview(
         target: Some(0),
     };
     let invocation = ScriptInvocationState::installed();
-    bound.runtime.vm(1).unwrap().preview_local_action_with_host_bounded(
-        0,
-        4,
-        &mut |opcode, stack| {
+    bound
+        .runtime
+        .vm(1)
+        .unwrap()
+        .preview_local_action_with_host_bounded(0, 4, &mut |opcode, stack| {
             apply_readonly_event_native_with_vars(
-                snapshot, &invocation, map, None, 1, opcode, stack,
+                snapshot,
+                &invocation,
+                map,
+                None,
+                1,
+                opcode,
+                stack,
             )
-        },
-    )
+        })
 }
 
 #[test]
