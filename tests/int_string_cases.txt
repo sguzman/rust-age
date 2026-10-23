@@ -1,0 +1,15 @@
+s_equal S alpha S alpha eq
+s_case S Alpha S alpha eq
+s_less S alpha S beta lt
+s_greater S zeta S beta gt
+s_le S a S a le
+s_ge S z S a ge
+s_neq S a S b ne
+mixed_i I 7 S 7 eq
+mixed_negative S -12 I -12 eq
+mixed_float F 1.5 S 1.50000 eq
+mixed_float_reverse S 1.50000 F 1.5 eq
+mixed_numeric_diff S 02 I 2 ne
+pointer_null P 0 I 0 eq
+pointer_ne I 0 P 7 ne
+pointer_pointer P 5 P 5 eq
