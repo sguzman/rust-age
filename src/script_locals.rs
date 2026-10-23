@@ -156,7 +156,6 @@ impl MapScriptLocals {
 
 #[cfg(test)]
 mod tests {
-    use super::MapScriptLocals;
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_list::ScriptRunInfo;
