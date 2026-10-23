@@ -447,6 +447,7 @@ mod tests {
     #[test]
     fn synthetic_invocation_combines_clock_action_fixed_param_and_game_globals() {
         let mut code = Vec::new();
+        int(&mut code, 0); // setter pops value before this index
         op(&mut code, GAME_TIME_HOUR_OPCODE);
         op(&mut code, SCRIPT_ACTION_OPCODE);
         op(&mut code, 0x8039);
@@ -454,7 +455,6 @@ mod tests {
         op(&mut code, 0x8039);
         op(&mut code, GAME_TIME_IN_SECONDS_OPCODE);
         op(&mut code, 0x8039);
-        int(&mut code, 0);
         op(&mut code, 0x80C6);
         op(&mut code, SCRIPT_OVERRIDES_OPCODE);
         int(&mut code, 0);

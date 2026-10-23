@@ -22,9 +22,9 @@ static void integer(std::vector<uint8_t>& v, int32_t n) {
 }
 static std::vector<uint8_t> program() {
     std::vector<uint8_t> code;
+    integer(code, 0); // CE setter pops value, then index
     for (uint16_t opcode : {0x80F6, 0x80C7, 0x8039, 0x80F7, 0x8039,
                             0x80EB, 0x8039}) word(code, opcode);
-    integer(code, 0);
     word(code, 0x80C6);
     word(code, 0x80B9);
     integer(code, 0);

@@ -18,10 +18,10 @@ fn int(code: &mut Vec<u8>, value: i32) {
 }
 fn program() -> Result<ScriptVm, Box<dyn Error>> {
     let mut code = Vec::new();
+    int(&mut code, 0); // CE setter expects index below value
     for opcode in [0x80F6, 0x80C7, 0x8039, 0x80F7, 0x8039, 0x80EB, 0x8039] {
         op(&mut code, opcode);
     }
-    int(&mut code, 0);
     op(&mut code, 0x80C6);
     op(&mut code, 0x80B9);
     int(&mut code, 0);
