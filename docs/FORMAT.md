@@ -176,3 +176,7 @@ The isolated `ScriptVm` now also implements numeric comparisons (EQ, NE, LE, GE,
 ## CE local procedure call and return skeleton (isolated)
 
 The bounded VM now resolves local `CALL` by original 24-byte procedure-table index and body offset, supports `FETCH_PROCEDURE_ADDRESS`, `CHECK_PROCEDURE_ARGUMENT_COUNT`, and `POP_RETURN` from the caller-populated typed return stack. Critical-section flags can be entered and left under an instruction budget. Local synthetic procedure calls and return targets are tested. Imported/external procedure flags are rejected, rather than falsely pretending CE’s native-game integration is available. This is not yet CE’s complete call setup, return-value flow, procedure scheduler or runtime dispatch.
+
+## CE scripts.lst positional names and read-only .INT resolution
+
+`src/script_list.rs` mirrors `scr_index_to_name` in the pinned CE `src/game/scripts.cc`: zero-based row numbering, first-dot extension substitution to `.int`, and `scr_list_str`'s lower-24-bit index mask. `GameAssets::script_path_by_index` caches the source list per installation and `script_program_by_index` resolves the original master-bank `scripts/<name>.int` asset for the bounded parser. Explicit cache invalidation sees changed patches. Synthetic tests check comment handling, casefolded loose files, missing data, traversal rejection and the index-to-INT pipeline. No compiled game scripts are executed or bundled.

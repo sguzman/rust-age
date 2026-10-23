@@ -11,6 +11,8 @@ use crate::dat::DatArchive;
 use crate::message::Catalog;
 use crate::prototype::Prototype;
 use crate::prototype_list::PrototypeList;
+use crate::script_list::ScriptList;
+use crate::script_program::ScriptProgram;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io;
@@ -35,6 +37,7 @@ pub struct GameAssets {
     prototype_lists: BTreeMap<String, PrototypeList>,
     /// Previously decoded original PRO records, indexed by stable PID.
     prototypes: BTreeMap<u32, Prototype>,
+    script_list: Option<ScriptList>,
 }
 
 /// Resolve a relative path case-insensitively, as CE does on Linux.
@@ -127,6 +130,7 @@ impl GameAssets {
             art_lists: BTreeMap::new(),
             prototype_lists: BTreeMap::new(),
             prototypes: BTreeMap::new(),
+            script_list: None,
         })
     }
 
@@ -137,6 +141,35 @@ impl GameAssets {
         self.art_lists.clear();
         self.prototype_lists.clear();
         self.prototypes.clear();
+        self.script_list = None;
+    }
+
+    /// Resolve CE scr_list_str using the zero-based scripts.lst row number
+    /// masked to 24 bits. Does not execute or load the returned program.
+    pub fn script_path_by_index(&mut self, script_index: u32) -> io::Result<Option<String>> {
+        if self.script_list.is_none() {
+            let Some(bytes) = self.read(Bank::Master, "scripts/scripts.lst")? else {
+                return Ok(None);
+            };
+            self.script_list = Some(ScriptList::parse(&bytes));
+        }
+        let index = (script_index & 0x00FF_FFFF) as usize;
+        let file = match &self.script_list {
+            Some(list) => list.file_name(index)?,
+            None => None,
+        };
+        Ok(file.map(|name| format!("scripts/{name}")))
+    }
+
+    /// Decode a script by original index. Execution remains disabled.
+    pub fn script_program_by_index(&mut self, script_index: u32) -> io::Result<Option<ScriptProgram>> {
+        let Some(path) = self.script_path_by_index(script_index)? else {
+            return Ok(None);
+        };
+        match self.read(Bank::Master, &path)? {
+            Some(bytes) => ScriptProgram::decode(&bytes).map(Some),
+            None => Ok(None),
+        }
     }
 
     /// Read the original localized MSG catalog under text/<language>/,
