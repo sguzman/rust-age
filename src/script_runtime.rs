@@ -117,6 +117,33 @@ impl ScriptRuntime {
         Ok(ready)
     }
 
+    /// End-to-end synthetic-only bounded INT condition evaluation across
+    /// the CE newest-program-first list. Each program uses isolated scratch
+    /// stacks and never invokes engine callbacks; real CE condition stack,
+    /// flag and native opcode effects remain unsupported.
+    pub fn take_due_preview(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut ready = Vec::new();
+        for program in &mut self.programs {
+            for procedure_index in program
+                .vm
+                .take_due_procedures_preview(now_millis, max_steps_per_condition)?
+            {
+                ready.push(DueProcedure {
+                    program_id: program.id,
+                    procedure_index,
+                });
+            }
+        }
+        Ok(ready)
+    }
+
     pub fn take_due_timed(&mut self, now_millis: u32) -> Vec<DueProcedure> {
         if self.suspended {
             return Vec::new();
@@ -215,6 +242,46 @@ mod tests {
                 procedure_index: 0
             }]
         );
+    }
+
+    fn condition_vm(value: i32) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&value.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, 0x02, 0, 20, 0, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn synthetic_bounded_script_conditions_obey_program_order_without_gameplay() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, condition_vm(1)).unwrap();
+        runtime.register(2, vm(0x01, 10, 0)).unwrap();
+        runtime.register(3, condition_vm(0)).unwrap();
+        let ready = runtime.take_due_preview(11, 3).unwrap();
+        assert_eq!(ready.len(), 2);
+        assert_eq!(ready[0].program_id, 2);
+        assert_eq!(ready[1].program_id, 1);
+        assert_eq!(runtime.vm(3).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0);
+        assert!(runtime.take_due_preview(100, 3).unwrap().is_empty());
+    }
+
+    #[test]
+    fn synthetic_condition_budget_error_preserves_pending_program_state() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(9, condition_vm(1)).unwrap();
+        assert!(runtime.take_due_preview(100, 1).is_err());
+        assert_eq!(runtime.vm(9).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert_eq!(runtime.take_due_preview(100, 3).unwrap()[0].program_id, 9);
     }
 
     #[test]
