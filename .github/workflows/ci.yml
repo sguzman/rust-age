@@ -104,6 +104,12 @@ jobs:
           /tmp/rust-age-ce-object-read tests/script_object_read_cases.txt > /tmp/rust-age-ce-object-read.txt
           cargo run --quiet --bin script_object_read_probe > /tmp/rust-age-rust-object-read.txt
           diff -u /tmp/rust-age-ce-object-read.txt /tmp/rust-age-rust-object-read.txt
+      - name: Compare CE C++ and Rust speculative local procedure variable writes
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_sandbox_write_oracle.cc -o /tmp/rust-age-ce-sandbox-write
+          /tmp/rust-age-ce-sandbox-write tests/script_sandbox_write_cases.txt > /tmp/rust-age-ce-sandbox-write.txt
+          cargo run --quiet --bin script_sandbox_write_probe > /tmp/rust-age-rust-sandbox-write.txt
+          diff -u /tmp/rust-age-ce-sandbox-write.txt /tmp/rust-age-rust-sandbox-write.txt
       - name: Compare CE C++ and Rust immutable MAP and game-global local procedure reads
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_local_globals_oracle.cc -o /tmp/rust-age-ce-local-globals
