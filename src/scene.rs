@@ -168,6 +168,64 @@ impl PreparedScriptEnvironment {
         Ok(preview.returned)
     }
 
+    /// Preview an already-active, explicitly begun MAP script event
+    /// against a CLONED installed INT. Unlike the initial-plan-only preview,
+    /// this reads the retained per-script source/target/fixedParam context.
+    /// Validation and execution are read-only: failure neither consumes the
+    /// active event nor updates the registered VM, MAP or game globals.
+    pub fn preview_active_event_reads_bounded(
+        &self,
+        sessions: &DetachedMapEventSessions,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<Option<ScriptValue>> {
+        let frame = self.local_frame_for_planned(planned)?;
+        let event = sessions.get(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE active event session missing")
+        })?;
+        let action = i32::try_from(planned.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE planned action exceeds i32")
+        })?;
+        if !event.is_active()
+            || event.invocation().action() != action
+            || Some(event.owner_resolution()) != self.owner_for_instance(planned.instance_id)
+            || planned
+                .external_parameter
+                .is_some_and(|fixed| event.invocation().fixed_parameter() != fixed)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active event session does not match planned action",
+            ));
+        }
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        let preview = self
+            .scripts
+            .runtime
+            .preview_local_action_with_host_bounded(
+                planned.instance_id,
+                planned.action,
+                max_steps,
+                &mut |opcode, stack| {
+                    apply_readonly_event_native_opcode(snapshot, event.invocation(), opcode, stack)
+                },
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE active event local action missing after preflight",
+                )
+            })?;
+        if preview.frame != frame {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active event local frame changed during preview",
+            ));
+        }
+        Ok(preview.returned)
+    }
+
     /// Compose an already-planned CE MAP lifecycle action with its exact
     /// installed Rust VM record and source-derived owner. A stale or altered
     /// plan is rejected before allocating detached action metadata.

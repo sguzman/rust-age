@@ -223,6 +223,14 @@ fn isolated_map_event_sessions_retain_fixed_parameter_and_reject_stale_actions()
 #[test]
 fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
     let mut environment = environment();
+    let mut vm = ScriptRuntime::new();
+    // POP argument marker; source_obj; tile_num; value-returning CE exit.
+    vm.register(
+        1,
+        synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xBD, 0x80, 0xD4, 0x80, 0x25]),
+    )
+    .unwrap();
+    environment.scripts.runtime = vm;
     let object = |id, sid, tile| MapObject {
         record: ObjectRecord {
             header: ObjectHeader {
@@ -306,7 +314,29 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
     let started = sessions.begin_planned(&environment, &plan).unwrap();
     assert_eq!(started.source_handle(), 2);
     assert_eq!(started.target_handle(), 1);
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: None,
+    };
+    assert_eq!(
+        environment
+            .preview_active_event_reads_bounded(&sessions, &plan, clock, 5)
+            .unwrap(),
+        Some(ScriptValue::Int(20100))
+    );
+    assert_eq!(sessions.get(1).unwrap().source_handle(), 2);
+    assert!(environment
+        .preview_active_event_reads_bounded(
+            &DetachedMapEventSessions::new(),
+            &plan,
+            clock,
+            5,
+        )
+        .is_err());
     sessions.finish(1).unwrap();
+    assert!(environment
+        .preview_active_event_reads_bounded(&sessions, &plan, clock, 5)
+        .is_err());
     let resumed = sessions
         .begin_planned(
             &environment,
@@ -319,6 +349,28 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
     assert_eq!(resumed.source_handle(), 0);
     assert_eq!(resumed.target_handle(), 1);
     assert_eq!(resumed.invocation().fixed_parameter(), 1);
+    assert_eq!(
+        environment
+            .preview_active_event_reads_bounded(
+                &sessions,
+                &rust_age::script_lifecycle::PlannedMapAction {
+                    external_parameter: None,
+                    ..plan
+                },
+                clock,
+                5,
+            )
+            .unwrap(),
+        Some(ScriptValue::Int(-1))
+    );
+    let stale = rust_age::script_lifecycle::PlannedMapAction {
+        script_id: 99,
+        ..plan
+    };
+    assert!(environment
+        .preview_active_event_reads_bounded(&sessions, &stale, clock, 5)
+        .is_err());
+    assert_eq!(sessions.get(1).unwrap().target_handle(), 1);
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
 
