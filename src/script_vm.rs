@@ -6,7 +6,8 @@
 //!
 //! The default interpreter is disconnected from gameplay, callbacks and player
 //! input. A separate opt-in, bounded host path executes a limited native
-//! variable/action subset with caller-supplied synthetic state. Other opcodes error.
+//! variable/action/game-time subset with caller-supplied synthetic state.
+//! Other opcodes error.
 //! A narrow numeric, static-string, scheduling and stack/control subset is supported.
 use crate::script_program::ScriptProgram;
 use std::cmp::Ordering;

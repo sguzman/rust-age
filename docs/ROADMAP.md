@@ -55,21 +55,21 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `██░░░░░░░░ 21%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `██░░░░░░░░ 22%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
-### 🔣 P6 — Script interpreter and native opcodes — `███░░░░░░░ 34%`
+### 🔣 P6 — Script interpreter and native opcodes — `████░░░░░░ 35%`
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
-- ⚙️ T602 — Port interpreter, procedures and interpreter state — `████░░░░░░ 44%`
-- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `██░░░░░░░░ 19%`
-- 🧪 T604 — Golden-script differential tests versus CE — `███░░░░░░░ 25%`
+- ⚙️ T602 — Port interpreter, procedures and interpreter state — `█████░░░░░ 45%`
+- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `██░░░░░░░░ 21%`
+- 🧪 T604 — Golden-script differential tests versus CE — `███░░░░░░░ 27%`
 
-### 📜 P7 — Quests, dialogue and triggers — `█░░░░░░░░░ 9%`
+### 📜 P7 — Quests, dialogue and triggers — `█░░░░░░░░░ 10%`
 
 - 🗣️ T701 — Port dialogue branches and NPC reactions — `░░░░░░░░░░ 0%`
-- 🚩 T702 — Port map scripts, spatial triggers and timers — `██░░░░░░░░ 20%`
-- 🧮 T703 — Port global/local state and quest flags — `██░░░░░░░░ 16%`
+- 🚩 T702 — Port map scripts, spatial triggers and timers — `██░░░░░░░░ 21%`
+- 🧮 T703 — Port global/local state and quest flags — `██░░░░░░░░ 17%`
 - 🤝 T704 — Port companion scripts and party interactions — `░░░░░░░░░░ 0%`
 
 ## ⚔️ M4 — Gameplay and combat parity — `░░░░░░░░░░ 1%`

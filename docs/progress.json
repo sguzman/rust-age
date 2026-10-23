@@ -268,22 +268,22 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 44,
-              "evidence": "CI-tested bounded CE core interpreter with explicit host-gated 0x80B9, 0x80C1..0x80C7 and 0x80F7 instructions. Synthetic core+native opcode bytecode traces, detached operand-state rollback on rejected host, numeric/stack/frame/control procedure work. Real interpreter host/native world callbacks and full lifecycle remain absent."
+              "progress": 45,
+              "evidence": "CI-tested bounded CE core bytecode VM, typed stacks, schedules, frames and explicit callback-gated native state/time instruction subset. Synthetic INT programs can combine core arithmetic with 0x80B9, 0x80C1..C7, 0x80EA/EB, 0x80F2 and 0x80F7 using caller-owned data. Ordinary VM and MAP loading do not execute native opcodes; full callbacks, imported procedures and lifecycle remain missing."
             },
             {
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 19,
-              "evidence": "CI-tested opt-in CE native MAP/local/game-global variable dispatch plus SCRIPT_ACTION 0x80C7, SCRIPT_OVERRIDES 0x80B9 and FIXED_PARAM 0x80F7. Detached invocation state models action assignment, override reset per action, first-visit fixed parameter from read-only MAP lifecycle planner. No automated MAP dispatch, engine side effects or full quest execution."
+              "progress": 21,
+              "evidence": "CI-tested opt-in CE MAP/local/game-global native opcode adapters, SCRIPT_ACTION, SCRIPT_OVERRIDES and FIXED_PARAM invocation fields, plus pure GAME_TIME/GAME_TIME_IN_SECONDS/GAME_TICKS using explicit deterministic tick snapshots. No unverified host functions, real clock, event scheduler-to-world dispatch or live quest effects."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 25,
-              "evidence": "CI passes independent adapted C++/Rust synthetic comparisons including 12 bounded CE core+native bytecode traces, 12 script invocation/fixed-param contexts, 31 native variable operand cases, 16 game-global opcode cases, 21 tagged MAP-local cases, and earlier event/procedure/map tests. Does not prove parity with compiled original CE or real Fallout content."
+              "progress": 27,
+              "evidence": "CI-tested independent adapted C++/Rust synthetic comparisons include 12 core+native opcode traces, 12 invocation/fixed-param traces, 12 game-time tick conversions, 10 vault13.gam default parser cases, earlier native variable, global, map lifecycle, scheduler and stack/procedure cases. These are not real original CE executable or commercial game golden fixtures."
             }
           ]
         },
@@ -302,15 +302,15 @@
               "id": "T702",
               "emoji": "🚩",
               "name": "Port map scripts, spatial triggers and timers",
-              "progress": 20,
-              "evidence": "CI-tested MAP->scripts.lst->INT unstarted VM loading, SID/category/flags, source-ordered START/ENTER/UPDATE/EXIT planning, first-visit parameter and detached invocation metadata with no execution. Static scene and Linux inspection remain read-only; spatial triggers/timers/real events are missing."
+              "progress": 21,
+              "evidence": "CI-tested original MAP/script.lst/INT unstarted instance loader and source-ordered lifecycle plans; `PlannedMapAction::detached_invocation` models action slots and MAP_ENTER first-visit fixed parameter. `StaticScene::unstarted_script_environment` separately loads MAP VM/local state and optional vault13.gam game-wide globals. Real spatial triggers, native engine dispatch, timer events and game interactions absent."
             },
             {
               "id": "T703",
               "emoji": "🧮",
               "name": "Port global/local state and quest flags",
-              "progress": 16,
-              "evidence": "CI-tested bounded Rust MAP script-local and MAP-global typed integer/opaque pointer state, original saved/local_vars offsets, zeroed lazy allocation, null pointer behavior and isolated source MAP; detached native variable opcode adapters with CE fallbacks. GameGlobalState now parses original installed data/vault13.gam GAME_GLOBAL_VARS defaults and supports game-global 0x80C5/0x80C6 synthetic adapter; Linux --inspect-game-global tested. No save/load persistence, actual VM bytecode dispatch or live quest logic."
+              "progress": 17,
+              "evidence": "CI-tested bounded MAP-local and MAP-global integer/opaque pointer state, lazy local allocation and immutable decoded MAP source; separate game-wide GAME_GLOBAL_VARS parser/loading from installed vault13.gam, index-accurate synthetic read/write and optional scene state assembly. Native opcodes execute only in an explicitly gated synthetic VM; original quest/save persistence, actual engine mutation and full global flags absent."
             },
             {
               "id": "T704",
