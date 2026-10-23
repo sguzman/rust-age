@@ -72,12 +72,14 @@ pub struct ScriptProcedureBinding {
 
 /// Decode each original script index only once per MAP inspection, even when
 /// several serialized script records share the same installed INT program.
+type CachedProcedureTable = Option<(usize, [Option<usize>; 24])>;
+
 pub fn bind_script_procedures(
     assets: &mut GameAssets,
     tables: &ScriptTables,
 ) -> io::Result<Vec<ScriptProcedureBinding>> {
     let bindings = bind_scripts(assets, tables)?;
-    let mut cache: BTreeMap<u32, Option<(usize, [Option<usize>; 24])>> = BTreeMap::new();
+    let mut cache: BTreeMap<u32, CachedProcedureTable> = BTreeMap::new();
     let mut resolved = Vec::with_capacity(bindings.len());
     for binding in bindings {
         let metadata = if binding.script_index >= 0 && binding.path.is_some() {
