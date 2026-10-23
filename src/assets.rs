@@ -162,7 +162,10 @@ impl GameAssets {
     }
 
     /// Decode a script by original index. Execution remains disabled.
-    pub fn script_program_by_index(&mut self, script_index: u32) -> io::Result<Option<ScriptProgram>> {
+    pub fn script_program_by_index(
+        &mut self,
+        script_index: u32,
+    ) -> io::Result<Option<ScriptProgram>> {
         let Some(path) = self.script_path_by_index(script_index)? else {
             return Ok(None);
         };
