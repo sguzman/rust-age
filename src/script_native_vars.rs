@@ -9,7 +9,7 @@
 use crate::game_globals::GameGlobalState;
 use crate::script_clock::{
     ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-    GAME_TIME_OPCODE,
+    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
 };
 use crate::script_locals::MapScriptLocals;
 use crate::script_vm::{ScriptValue, ScriptVm};
@@ -283,7 +283,9 @@ pub fn run_invocation_with_clock_bounded(
         GAME_TIME_OPCODE
         | GAME_TIME_IN_SECONDS_OPCODE
         | GAME_TICKS_OPCODE
-        | GAME_TIME_HOUR_OPCODE => clock.apply_opcode(opcode, stack),
+        | GAME_TIME_HOUR_OPCODE
+        | GET_MONTH_OPCODE
+        | GET_DAY_OPCODE => clock.apply_opcode(opcode, stack),
         _ => Err(invalid("unrecognized CE script-state or game-clock opcode")),
     })
 }
