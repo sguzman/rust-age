@@ -348,9 +348,35 @@ impl ScriptVm {
         condition_offset: i32,
         max_steps: usize,
     ) -> io::Result<bool> {
+        self.preview_condition_with_host_bounded(
+            condition_offset,
+            max_steps,
+            &mut |_, _| Err(invalid("CE condition native host not provided")),
+        )
+    }
+
+    /// Evaluate an INT condition on a detached VM with a strict instruction
+    /// budget and an EXPLICIT native-opcode adapter. Original CE conditional
+    /// expressions can contain game-variable and event reads, so the
+    /// core-only preview above intentionally rejects them. This method does
+    /// not install, consume or dispatch a pending CE procedure.
+    ///
+    /// Only the VM is cloned. Callers requiring a read-only preview MUST
+    /// supply a pure, read-only native adapter: arbitrary host side effects
+    /// cannot be rolled back by the interpreter. Unsupported opcodes, bad
+    /// offsets and unfinished conditions fail closed.
+    pub fn preview_condition_with_host_bounded(
+        &self,
+        condition_offset: i32,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<bool> {
         let offset = usize::try_from(condition_offset)
             .map_err(|_| invalid("negative CE condition bytecode offset"))?;
-        self.program.word_at(offset)?;
+        let first_opcode = self.program.word_at(offset)?;
+        if first_opcode & 0x8000 == 0 {
+            return Err(invalid("invalid CE condition opcode marker"));
+        }
         let mut probe = self.clone();
         probe.pc = offset;
         probe.stack.clear();
@@ -359,7 +385,7 @@ impl ScriptVm {
         probe.base_pointer = -1;
         probe.critical_section = false;
         probe.halted = false;
-        probe.run_bounded(max_steps)?;
+        probe.run_variable_subset_bounded(max_steps, native)?;
         Ok(probe.pop_int()? != 0)
     }
 
@@ -1071,6 +1097,59 @@ mod tests {
         bytes.extend_from_slice(b"main\0");
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn bounded_ce_condition_accepts_explicit_pure_native_reads_only() {
+        // One invented INT condition: MAP_GLOBAL[0] < 6. The adapter is a
+        // caller-controlled read-only value; no real game data is accessed.
+        let mut code = Vec::new();
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x80C3); // CE map_var
+        push_int(&mut code, 6);
+        opcode(&mut code, 0x8037); // LESS_THAN
+        opcode(&mut code, 0x8011); // STOP_PROGRAM
+        let vm = ScriptVm::new(fixture(&code));
+        for (map_value, expected) in [(5, true), (6, false), (-1, true)] {
+            let mut calls = 0;
+            let result = vm
+                .preview_condition_with_host_bounded(0, 5, &mut |opcode, stack| {
+                    assert_eq!(opcode, 0x80C3);
+                    assert_eq!(stack.pop(), Some(ScriptValue::Int(0)));
+                    calls += 1;
+                    stack.push(ScriptValue::Int(map_value));
+                    Ok(())
+                })
+                .unwrap();
+            assert_eq!(result, expected);
+            assert_eq!(calls, 1);
+        }
+        assert!(vm.preview_condition_bounded(0, 5).is_err());
+        assert!(vm
+            .preview_condition_with_host_bounded(0, 4, &mut |_, _| Ok(()))
+            .is_err());
+        assert!(vm
+            .preview_condition_with_host_bounded(-1, 5, &mut |_, _| Ok(()))
+            .is_err());
+        assert_eq!(vm.pc(), 0);
+        assert!(!vm.halted());
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+
+        // No gameplay writes can pass through a read-only native host.
+        let mut writes = Vec::new();
+        push_int(&mut writes, 7);
+        push_int(&mut writes, 0);
+        opcode(&mut writes, 0x80C4); // CE set_map_var
+        opcode(&mut writes, 0x8011);
+        let write_vm = ScriptVm::new(fixture(&writes));
+        assert!(write_vm
+            .preview_condition_with_host_bounded(0, 4, &mut |_, _| {
+                Err(super::invalid("read-only CE condition forbids native writes"))
+            })
+            .is_err());
+        assert_eq!(write_vm.pc(), 0);
+        assert!(write_vm.stack().is_empty());
     }
 
     #[test]
