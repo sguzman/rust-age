@@ -1,9 +1,11 @@
 //! Bounded CE MAP script-local integer storage, without engine callbacks.
 //! Pinned reference: game/scripts.cc scr_get_local_var/scr_set_local_var
 //! and game/map.cc map_malloc_local_var/map_get_local_var/map_set_local_var.
-//! CE pointer-valued local variables and script native opcodes are not ported.
+//! Pointer values are opaque i32 handles, not dereferenced native pointers.
+//! Game native opcodes and pointer persistence are not yet connected.
 use crate::map::MapVariables;
 use crate::script_binding::BoundScriptRuntime;
+use crate::script_vm::ScriptValue;
 use std::collections::BTreeMap;
 use std::io;
 
@@ -25,6 +27,7 @@ pub struct ScriptLocalRange {
 pub struct MapScriptLocals {
     globals: Vec<i32>,
     locals: Vec<i32>,
+    pointers: Vec<Option<i32>>,
     instances: BTreeMap<u64, ScriptLocalRange>,
 }
 
@@ -87,6 +90,7 @@ impl BoundScriptRuntime {
         Ok(MapScriptLocals {
             globals: map.globals.clone(),
             locals: map.locals.clone(),
+            pointers: vec![None; map.locals.len()],
             instances,
         })
     }
@@ -130,6 +134,7 @@ impl MapScriptLocals {
                 return Err(invalid("CE lazy local allocation exceeds Rust bound"));
             }
             self.locals.resize(end, 0); // original map_malloc_local_var.
+            self.pointers.resize(end, None); // original map_local_pointers.
             local.offset = Some(start);
         }
         Ok(Some(local.offset.unwrap() + index))
@@ -139,9 +144,52 @@ impl MapScriptLocals {
     /// None means no declared locals; CE get would leave its output untouched.
     pub fn read(&mut self, instance: u64, index: i32) -> io::Result<Option<i32>> {
         match self.slot(instance, index)? {
+            Some(slot) if self.pointers[slot].is_some() => {
+                Err(invalid("CE local contains opaque pointer; typed access required"))
+            }
             Some(slot) => Ok(Some(self.locals[slot])),
             None => Ok(None),
         }
+    }
+
+    /// CE map_get_local_var: return a pointer-tagged value if its separate
+    /// side table is populated, else a 32-bit integer. Null pointer values
+    /// are read as integer zero, mirroring original CE map_set_local_var.
+    pub fn read_typed(&mut self, instance: u64, index: i32) -> io::Result<Option<ScriptValue>> {
+        Ok(self.slot(instance, index)?.map(|slot| {
+            match self.pointers[slot] {
+                Some(pointer) => ScriptValue::Pointer(pointer),
+                None => ScriptValue::Int(self.locals[slot]),
+            }
+        }))
+    }
+
+    /// CE map_set_local_var: opaque pointers are stored out-of-band; their
+    /// integer MAP slot is zeroed. Non-pointer inputs supported here are
+    /// deliberately limited to integer values, not real engine object refs.
+    pub fn write_typed(
+        &mut self,
+        instance: u64,
+        index: i32,
+        value: ScriptValue,
+    ) -> io::Result<()> {
+        if !matches!(value, ScriptValue::Int(_) | ScriptValue::Pointer(_)) {
+            return Err(invalid("unsupported CE MAP local value type"));
+        }
+        let slot = self.slot(instance, index)?
+            .ok_or_else(|| invalid("CE script local set without declaration"))?;
+        match value {
+            ScriptValue::Int(number) => {
+                self.locals[slot] = number;
+                self.pointers[slot] = None;
+            }
+            ScriptValue::Pointer(pointer) => {
+                self.locals[slot] = 0;
+                self.pointers[slot] = (pointer != 0).then_some(pointer);
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
     }
 
     /// CE script-local integer write. Unlike get, no declaration is an error.
@@ -150,6 +198,7 @@ impl MapScriptLocals {
             .slot(instance, index)?
             .ok_or_else(|| invalid("CE script local set without declaration"))?;
         self.locals[slot] = value;
+        self.pointers[slot] = None;
         Ok(())
     }
 }
@@ -161,7 +210,7 @@ mod tests {
     use crate::script_list::ScriptRunInfo;
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
-    use crate::script_vm::ScriptVm;
+    use crate::script_vm::{ScriptValue, ScriptVm};
 
     fn record(
         category: usize,
@@ -230,6 +279,27 @@ mod tests {
         assert_eq!(state.locals(), [42, 11, 0, -5, 0]);
         assert_eq!(original.locals, [10, 11]); // source MAP is immutable.
         assert_eq!(original.globals, [99]);
+    }
+
+    #[test]
+    fn ce_pointer_tagged_locals_use_separate_side_array_without_dereference() {
+        let bound = fixture();
+        let original = MapVariables {
+            globals: vec![99],
+            locals: vec![10, 11],
+        };
+        let mut state = bound.script_local_state(&original).unwrap();
+        state.write_typed(2, 1, ScriptValue::Pointer(0x1234)).unwrap();
+        assert_eq!(state.locals(), [10, 11, 0, 0, 0]);
+        assert_eq!(state.read_typed(2, 1).unwrap(), Some(ScriptValue::Pointer(0x1234)));
+        assert!(state.read(2, 1).is_err());
+        state.write(2, 1, -17).unwrap();
+        assert_eq!(state.read_typed(2, 1).unwrap(), Some(ScriptValue::Int(-17)));
+        state.write_typed(2, 0, ScriptValue::Pointer(0)).unwrap();
+        assert_eq!(state.read_typed(2, 0).unwrap(), Some(ScriptValue::Int(0)));
+        assert!(state.write_typed(2, 1, ScriptValue::Float(1.5)).is_err());
+        assert_eq!(state.read_typed(2, 1).unwrap(), Some(ScriptValue::Int(-17)));
+        assert_eq!(original.locals, [10, 11]);
     }
 
     #[test]
