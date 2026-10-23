@@ -331,7 +331,9 @@ impl ScriptVm {
                 let seconds = self.pop_int()?;
                 let index = usize::try_from(index)
                     .map_err(|_| invalid("negative CE scheduled procedure index"))?;
-                let procedure = self.runtime_procedures.get_mut(index)
+                let procedure = self
+                    .runtime_procedures
+                    .get_mut(index)
                     .ok_or_else(|| invalid("CE scheduled procedure index out of bounds"))?;
                 procedure.event_time = self.clock_millis.wrapping_add(seconds.wrapping_mul(1000));
                 procedure.flags |= 0x01; // PROCEDURE_FLAG_TIMED
@@ -342,7 +344,9 @@ impl ScriptVm {
                 let condition = self.pop_int()?;
                 let index = usize::try_from(index)
                     .map_err(|_| invalid("negative CE conditional procedure index"))?;
-                let procedure = self.runtime_procedures.get_mut(index)
+                let procedure = self
+                    .runtime_procedures
+                    .get_mut(index)
                     .ok_or_else(|| invalid("CE conditional procedure index out of bounds"))?;
                 procedure.flags |= 0x02; // PROCEDURE_FLAG_CONDITIONAL
                 procedure.condition_offset = condition;
@@ -564,7 +568,9 @@ impl ScriptVm {
                 let index = self.pop_int()?;
                 let index = usize::try_from(index)
                     .map_err(|_| invalid("negative CE cancel procedure index"))?;
-                let procedure = self.runtime_procedures.get_mut(index)
+                let procedure = self
+                    .runtime_procedures
+                    .get_mut(index)
                     .ok_or_else(|| invalid("CE cancel procedure index out of bounds"))?;
                 procedure.flags = 0;
                 procedure.event_time = 0;
@@ -984,7 +990,12 @@ mod tests {
         assert_eq!(vm.runtime_procedures()[0].condition_offset, 0);
         assert_eq!(vm.program.procedures()[0].flags, 0x08);
 
-        let mut vm = ScriptVm::new(fixture_with_procedure(&[0x80, 0x49, 0x80, 0x11], 18, 0x04, 0));
+        let mut vm = ScriptVm::new(fixture_with_procedure(
+            &[0x80, 0x49, 0x80, 0x11],
+            18,
+            0x04,
+            0,
+        ));
         vm.run_bounded(4).unwrap();
         assert_eq!(vm.runtime_procedures()[0].flags, 0);
         assert_eq!(vm.program.procedures()[0].flags, 0x04);
