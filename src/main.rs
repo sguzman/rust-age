@@ -8,6 +8,7 @@ use rust_age::object_preview::ObjectPreview;
 use rust_age::palette::Palette;
 use rust_age::prototype::Prototype;
 use rust_age::scene::StaticScene;
+use rust_age::script_program::ScriptProgram;
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -21,6 +22,7 @@ fn usage() {
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
+    println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
     println!(
@@ -115,6 +117,33 @@ fn main() {
                     println!("No graphics renderer yet.");
                 }
                 Err(error) => fail(format!("Cannot decode sprite: {error}")),
+            }
+        }
+        [_, flag, directory, path] if flag == "--inspect-int" => {
+            let result = GameAssets::open(Path::new(directory))
+                .and_then(|mut assets| assets.read(Bank::Master, path))
+                .and_then(|bytes| {
+                    bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+                })
+                .and_then(|bytes| ScriptProgram::decode(&bytes));
+            match result {
+                Ok(program) => {
+                    println!("Fallout 1 .INT script: {path}");
+                    println!("Original CE procedures: {}", program.procedures().len());
+                    for (index, entry) in program.procedures().iter().take(16).enumerate() {
+                        match program.procedure_name(index) {
+                            Ok(name) => println!(
+                                "  [{index}] {} (offset {}, arguments {})",
+                                String::from_utf8_lossy(name),
+                                entry.body_offset,
+                                entry.argument_count
+                            ),
+                            Err(error) => println!("  [{index}] invalid procedure name: {error}"),
+                        }
+                    }
+                    println!("Script program metadata only; no bytecode executed.");
+                }
+                Err(error) => fail(format!("Cannot inspect Fallout 1 .INT script: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-pro" => {

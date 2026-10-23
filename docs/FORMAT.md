@@ -152,3 +152,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Complete CE core-interpreter opcode inventory
 
 `src/int_opcode.rs` contains all 76 contiguous core interpreter opcodes 0x8000..0x804B, preserving symbolic names from pinned CE `src/int/intrpret.h`. The lookup is verified for coverage, boundaries and selected arithmetic/control instructions. It is a registry for future VM work, **not** script execution. External game opcodes from `intextra` and library modules remain separate future work.
+
+## Linux native .INT metadata inspector
+
+`rust-age --inspect-int <Fallout installation> scripts/<name>.int` now opens scripts via the existing master DAT/patch resolution and lists original procedure names, bytecode offsets and argument counts using the CE read-only decoder. It does not launch any procedure or mutate game state. This offers a user-owned data inspection bridge before interpreter execution is ported.
