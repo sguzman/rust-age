@@ -5,7 +5,7 @@
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_vm::{PreviewedDueProcedurePoll, ScriptValue, ScriptVm};
+use crate::script_vm::{PreviewedDueProcedurePoll, PreviewedLocalActionVmFrame, ScriptValue, ScriptVm};
 use std::collections::VecDeque;
 use std::io;
 
@@ -21,6 +21,14 @@ fn invalid(message: &'static str) -> io::Error {
 pub struct PreviewedLocalAction {
     pub frame: PlannedLocalActionFrame,
     pub returned: Option<ScriptValue>,
+}
+
+/// Discard-only candidate after an exact built-in action's CE local call.
+/// Original registered VMs and native game state remain unchanged.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewedBoundLocalActionVmFrame {
+    pub binding: PlannedLocalActionFrame,
+    pub candidate: PreviewedLocalActionVmFrame,
 }
 
 /// Source-derived, READ-ONLY local CE executeProc/setupCall frame
@@ -313,9 +321,49 @@ impl ScriptRuntime {
         let vm = self
             .vm(program_id)
             .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
-        let returned =
-            vm.preview_local_action_with_host_bounded(frame.procedure_index, max_steps, native)?;
-        Ok(Some(PreviewedLocalAction { frame, returned }))
+        let candidate =
+            vm.preview_local_action_frame_with_host_bounded(frame.procedure_index, max_steps, native)?;
+        Ok(Some(PreviewedLocalAction {
+            frame,
+            returned: candidate.returned,
+        }))
+    }
+
+    /// Inspect the full speculative frame after one source-verified local
+    /// action. The adapter must be pure/read-only; no installed VM or native
+    /// world state is updated by returning this candidate.
+    pub fn preview_local_action_frame_with_host_bounded(
+        &self,
+        program_id: u64,
+        action: usize,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Option<PreviewedBoundLocalActionVmFrame>> {
+        let Some(binding) = self.inspect_local_action_frame(program_id, action)? else {
+            return Ok(None);
+        };
+        let vm = self
+            .vm(program_id)
+            .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
+        let candidate =
+            vm.preview_local_action_frame_with_host_bounded(binding.procedure_index, max_steps, native)?;
+        Ok(Some(PreviewedBoundLocalActionVmFrame { binding, candidate }))
+    }
+
+    /// Inspect a source-verified action's complete frame using core opcodes
+    /// only. No game natives are supplied by this convenience method.
+    pub fn preview_local_action_frame_core_bounded(
+        &self,
+        program_id: u64,
+        action: usize,
+        max_steps: usize,
+    ) -> io::Result<Option<PreviewedBoundLocalActionVmFrame>> {
+        self.preview_local_action_frame_with_host_bounded(
+            program_id,
+            action,
+            max_steps,
+            &mut |_, _| Err(invalid("CE local action native host not provided")),
+        )
     }
 
     /// Opt-in host dispatch of one resolved CE built-in action, independent

@@ -193,6 +193,19 @@ fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
         None
     );
     assert!(env.preview_planned_local_core_bounded(&action, 1).is_err());
+    let candidate = env
+        .preview_planned_local_frame_core_bounded(&action, 4)
+        .unwrap();
+    assert_eq!(candidate.binding, frame);
+    assert_eq!(candidate.candidate.returned, None);
+    assert!(candidate.candidate.data_stack.is_empty());
+    assert_eq!(candidate.candidate.return_stack, [ScriptValue::Int(0)]);
+    assert_eq!(candidate.candidate.program_counter, 20);
+    assert_eq!(candidate.candidate.saved_low_flags, 0);
+    assert_eq!(candidate.candidate.restored_low_flags, 0);
+    assert!(env
+        .preview_planned_local_frame_core_bounded(&action, 1)
+        .is_err());
     let mut event = env.detached_event_for_planned(&action).unwrap();
     assert!(event.is_active());
     assert_eq!(event.invocation().action(), 15);

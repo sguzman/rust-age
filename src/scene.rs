@@ -27,7 +27,7 @@ use crate::script_native_vars::{
 };
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
-use crate::script_runtime::PlannedLocalActionFrame;
+use crate::script_runtime::{PlannedLocalActionFrame, PreviewedBoundLocalActionVmFrame};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
@@ -188,6 +188,39 @@ impl PreparedScriptEnvironment {
             ));
         }
         Ok(preview.returned)
+    }
+
+    /// Expose the complete discarded post-action local VM frame after
+    /// validating the original MAP lifecycle plan and CE frame binding.
+    /// Core opcodes only; no native reads, gameplay callbacks, commits, or
+    /// persistent script/MAP/quest state changes are possible.
+    pub fn preview_planned_local_frame_core_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        max_steps: usize,
+    ) -> io::Result<PreviewedBoundLocalActionVmFrame> {
+        let inspected = self.local_frame_for_planned(planned)?;
+        let result = self
+            .scripts
+            .runtime
+            .preview_local_action_frame_core_bounded(
+                planned.instance_id,
+                planned.action,
+                max_steps,
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE local action missing after source-plan preflight",
+                )
+            })?;
+        if result.binding != inspected || result.candidate.program_counter != 20 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE candidate action frame does not match verified MAP binding",
+            ));
+        }
+        Ok(result)
     }
 
     /// Run a validated local MAP script action on CLONED VM, MAP-variable,
