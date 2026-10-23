@@ -43,8 +43,8 @@
               "id": "T004",
               "emoji": "🔎",
               "name": "Establish C++ baseline comparison and reference fixtures",
-              "progress": 25,
-              "evidence": "Pinned 108-unit CE CMake source matrix + generated CI-checked PORT_MATRIX.md; true behavioral differential fixture harness still absent"
+              "progress": 35,
+              "evidence": "C++ CE spatial-projection oracle and Rust spatial_probe added under tests/spatial_oracle.cc and src/bin/spatial_probe.rs, CI comparison added; full behavioral differential fixture system still absent and oracle latest CI pending."
             }
           ]
         },
@@ -121,22 +121,22 @@
               "id": "T202",
               "emoji": "🧟",
               "name": "Load FRM sprites, directions and animation timing",
-              "progress": 56,
-              "evidence": "FRM 6-direction decoding, optional native SDL2 sprite browser, user-owned sprite preview. SDL2 build passed CI 39878265184; no automated animation scheduling or real-asset parity."
+              "progress": 65,
+              "evidence": "FRM frame decode and native SDL browser; deterministic monotonic AnimationTimeline frame selection passed core CI 39879621422; space-key SDL playback compile latest CI pending; genuine game art QA outstanding."
             },
             {
               "id": "T203",
               "emoji": "💡",
               "name": "Port tile/roof layering, compositing and lighting",
-              "progress": 40,
-              "evidence": "Clipped indexed blitter with transparency, floor map art ID resolution and static unlit floor PPM image in src/map_preview.rs. Synthetic end-to-end pipeline passed 39877712951; no light interpolation, actual roof layering or objects."
+              "progress": 48,
+              "evidence": "Indexed transparent blitter, unlit floor and optional roof overlay with original per-square offsets and synthetic MAP/LST/FRM tests; roof backend passed CI 39878970336; true light map, egg masking and object layering absent."
             },
             {
               "id": "T204",
               "emoji": "🪟",
               "name": "Build native Linux window, framebuffer scaling and input loop",
-              "progress": 48,
-              "evidence": "Native Linux SDL2 diagnostic windows for sprite and MAP floor previews, optional feature in Cargo.toml. SDL2 all-targets Clippy passed CI 39878265184; no playable game event loop or native real-data graphical QA."
+              "progress": 55,
+              "evidence": "Native SDL2 Linux sprite and MAP diagnostic windows, static roof toggle and optional animation playback. Base Linux build passed CI 39879473283; animation viewer build pending; no playable game loop."
             }
           ]
         },
@@ -149,8 +149,8 @@
               "id": "T301",
               "emoji": "🧭",
               "name": "Implement original hex projection and map scrolling",
-              "progress": 60,
-              "evidence": "Source-derived CE hex hit mask, tile projection/inverse, parity movement and square floor/roof projection in src/hex.rs. Rust core tests passed 39877712951; no scrolling or map interaction."
+              "progress": 64,
+              "evidence": "CE hex hit mask and inverse, floor/roof square projection, neighbor parity and tests passed Rust CI 39877712951; narrow C++ differential oracle added, CI pending; scrolling/collision absent."
             },
             {
               "id": "T302",
@@ -162,8 +162,8 @@
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 38,
-              "evidence": "Version-19 MAP header, static square layers, tile LST lookup, entry metadata CLI and unlit floor preview. Synthetic MAP/LST/FRM integration CI passed 39877712951; map script/object loading and scene transitions absent."
+              "progress": 43,
+              "evidence": "CE MAP v19 and square layer parsing, original LST/FRM floor and roof diagnostics, headless PPM and native map browser; synthetic roof pass passed CI 39878970336; scripts/objects/transitions absent."
             },
             {
               "id": "T304",
