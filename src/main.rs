@@ -1,10 +1,13 @@
 use rust_age::assets::{Bank, GameAssets};
+use rust_age::collision::CollisionIndex;
 use rust_age::dat::DatArchive;
 use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
+use rust_age::hex::HexViewport;
 use rust_age::map::MapHeader;
 use rust_age::map_preview::FloorPreview;
 use rust_age::palette::Palette;
+use rust_age::pathfinding::make_path;
 use rust_age::prototype::{Prototype, PrototypeBody};
 use std::env;
 use std::fs::File;
@@ -17,6 +20,7 @@ fn usage() {
     println!("       rust-age --inspect-dat /path/to/master.dat");
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
+    println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
@@ -184,6 +188,60 @@ fn main() {
                     println!("No scripts executed or gameplay objects instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
+            }
+        }
+        [_, flag, directory, path, from, to] if flag == "--inspect-map-route" => {
+            let from = from
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("Invalid starting hex tile"));
+            let to = to
+                .parse::<i32>()
+                .unwrap_or_else(|_| fail("Invalid destination hex tile"));
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let bytes = assets
+                    .read(Bank::Master, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                let header = MapHeader::decode(&bytes)?;
+                let squares = header.decode_squares(&bytes)?;
+                let (_, objects, _) = squares.decode_objects_with(&bytes, |pid| {
+                    let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("missing original prototype {pid:#010X}"),
+                        )
+                    })?;
+                    Ok(match proto.body {
+                        PrototypeBody::Item { item_type, .. } => Some(item_type),
+                        PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
+                        _ => None,
+                    })
+                })?;
+                let view = HexViewport::new(200, 200, 640, 380, header.entering_tile)
+                    .ok_or_else(|| std::io::Error::other("invalid map viewport"))?;
+                let collision = CollisionIndex::from_map(&objects);
+                let elevation = usize::try_from(header.entering_elevation)
+                    .map_err(|_| std::io::Error::other("invalid map elevation"))?;
+                Ok(make_path(&view, from, to, true, true, |tile| {
+                    collision.is_passable(&view, tile, elevation, None)
+                }))
+            })();
+            match result {
+                Ok(Some(rotations)) => {
+                    println!("CE-style diagnostic route: {from} to {to}");
+                    println!("Steps: {}", rotations.len());
+                    println!(
+                        "Rotations: {}",
+                        rotations
+                            .iter()
+                            .map(u8::to_string)
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    );
+                    println!("No actor moved; locked-door handling and runtime state are absent.");
+                }
+                Ok(None) => println!("No route found under current static MAP collision data."),
+                Err(error) => fail(format!("Cannot inspect Fallout 1 map route: {error}")),
             }
         }
         [_, flag, directory, path, destination]
