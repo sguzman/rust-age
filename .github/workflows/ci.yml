@@ -128,6 +128,12 @@ jobs:
           /tmp/rust-age-ce-condition-frame tests/script_condition_frame_cases.txt > /tmp/rust-age-ce-condition-frame.txt
           cargo run --quiet --bin script_condition_frame_probe > /tmp/rust-age-rust-condition-frame.txt
           diff -u /tmp/rust-age-ce-condition-frame.txt /tmp/rust-age-rust-condition-frame.txt
+      - name: Compare CE C++ and Rust sequential conditional-event side effects
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_due_sequence_oracle.cc -o /tmp/rust-age-ce-due-sequence
+          /tmp/rust-age-ce-due-sequence tests/script_due_sequence_cases.txt > /tmp/rust-age-ce-due-sequence.txt
+          cargo run --quiet --bin script_due_sequence_probe > /tmp/rust-age-rust-due-sequence.txt
+          diff -u /tmp/rust-age-ce-due-sequence.txt /tmp/rust-age-rust-due-sequence.txt
       - name: Compare CE C++ and Rust detached local procedure returns
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_local_return_oracle.cc -o /tmp/rust-age-ce-local-return
