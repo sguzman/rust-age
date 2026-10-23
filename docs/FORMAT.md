@@ -84,3 +84,7 @@ The critter `.PRO` path now uses `critter_read_data` from the pinned CE `src/gam
 ## PID-indexed prototype list lookup
 
 CE `proto_list_str` selects a **one-based** `PID & 0xFFFFFF` row of `proto/<category>/<category>.lst`, then opens that row's `.PRO`. `prototype_list.rs` preserves row numbering and `GameAssets::prototype_by_pid` loads via master DAT/patch lookup, checking decoded PID identity. Filenames with traversal/separators are rejected. Synthetic fixtures cover list numbering, missing records and PID identity. No gameplay objects or prototype caching are constructed.
+
+## Original MAP script-list records (no execution)
+
+The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSubNode`: five script categories, one 32-bit count per category, up to 16 serialized records per extent (including padding), and subtype-dependent spatial/timed fields. It retains flags, script indices and raw legacy pointer tokens without following pointers or running bytecode. The MAP reader exposes the byte offset where the object section starts. Synthetic tests cover empty maps, spatial/timed layouts, padded extents and malformed counts. Interpreter, state mutation and event execution remain unimplemented.

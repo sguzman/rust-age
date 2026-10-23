@@ -14,3 +14,4 @@ pub mod message;
 pub mod palette;
 pub mod prototype;
 pub mod prototype_list;
+pub mod script_data;

@@ -4,6 +4,7 @@
 //! square_load) and src/game/map_defs.h.
 //! This does NOT load map scripts, dynamic objects or saved map state.
 
+use crate::script_data::ScriptTables;
 use std::io::{self, Cursor, Read};
 
 pub const MAP_VERSION: i32 = 19;
@@ -52,6 +53,16 @@ pub struct MapSquares {
 impl MapSquares {
     /// Original static floor art index (12-bit FID) at one square/elevation.
     /// The upper nibble of the floor word contains CE's overlay flags.
+    /// Read original MAP script-list records after the square layers.
+    /// No script code is executed. Object records begin at the returned offset.
+    pub fn decode_scripts(&self, file: &[u8]) -> io::Result<(ScriptTables, usize)> {
+        let data = file.get(self.scripts_offset..).ok_or_else(|| invalid("MAP scripts outside file"))?;
+        let scripts = ScriptTables::decode(data)?;
+        let object_offset = self.scripts_offset.checked_add(scripts.bytes_consumed)
+            .ok_or_else(|| invalid("MAP script offset overflow"))?;
+        Ok((scripts, object_offset))
+    }
+
     pub fn floor_id(&self, elevation: usize, square: usize) -> Option<u16> {
         let word = *self.elevations.get(elevation)?.as_ref()?.get(square)?;
         Some((word & 0x0FFF) as u16)
@@ -245,6 +256,18 @@ mod tests {
         assert_eq!(squares.floor_hidden(0, 0), Some(false));
         assert_eq!(squares.floor_id(1, 0), None);
         assert_eq!(squares.roof_id(0, SQUARE_COUNT), None);
+    }
+
+    #[test]
+    fn maps_object_boundary_after_empty_script_tables() {
+        let mut bytes = header(2 | 4 | 8, 0, 0);
+        bytes.extend_from_slice(&[0_u8; 20]);
+        bytes.extend_from_slice(&88_i32.to_be_bytes());
+        let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let (scripts, object_offset) = squares.decode_scripts(&bytes).unwrap();
+        assert_eq!(scripts.script_count(), 0);
+        assert_eq!(object_offset, HEADER_SIZE + 20);
+        assert_eq!(&bytes[object_offset..object_offset + 4], &88_i32.to_be_bytes());
     }
 
     #[test]
