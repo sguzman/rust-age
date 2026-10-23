@@ -1,0 +1,9 @@
+at_zero at 0 0 0 0
+at_positive at 8 7 0 250
+at_negative at 16 -2 0 750
+when_simple when 0 37 0 0
+when_preserve when 9 -11 0 50
+both_flags both 8 2 37 500
+both_overlap both 3 -4 79 900
+cancel_timed cancel 8 5 0 1234
+cancel_all all 20 0 0 0

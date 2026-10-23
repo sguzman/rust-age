@@ -44,6 +44,12 @@ jobs:
           /tmp/rust-age-ce-named tests/int_named_cases.txt > /tmp/rust-age-ce-named.txt
           cargo run --quiet --bin int_named_probe > /tmp/rust-age-rust-named.txt
           diff -u /tmp/rust-age-ce-named.txt /tmp/rust-age-rust-named.txt
+      - name: Compare CE C++ and Rust procedure scheduling metadata
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/int_schedule_oracle.cc -o /tmp/rust-age-ce-schedule
+          /tmp/rust-age-ce-schedule tests/int_schedule_cases.txt > /tmp/rust-age-ce-schedule.txt
+          cargo run --quiet --bin int_schedule_probe > /tmp/rust-age-rust-schedule.txt
+          diff -u /tmp/rust-age-ce-schedule.txt /tmp/rust-age-rust-schedule.txt
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
 
