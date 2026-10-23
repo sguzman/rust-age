@@ -136,6 +136,20 @@ fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> 
     })
 }
 
+/// A discarded, candidate-only result of one bounded CE doEvents-style
+/// condition evaluation. The actual installed interpreter is never updated.
+/// Stack and procedure changes here are speculative and must not be applied
+/// to game state without a separately verified commit boundary.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewedConditionFrame {
+    pub satisfied: bool,
+    pub data_stack: Vec<ScriptValue>,
+    pub return_stack: Vec<ScriptValue>,
+    pub frame_pointer: i32,
+    pub base_pointer: i32,
+    pub procedures: Vec<crate::script_program::ProcedureEntry>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScriptVm {
     pub program: ScriptProgram,
@@ -376,6 +390,21 @@ impl ScriptVm {
         max_steps: usize,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<bool> {
+        self.preview_condition_frame_with_host_bounded(condition_offset, max_steps, native)
+            .map(|frame| frame.satisfied)
+    }
+
+    /// Inspect the candidate interpreter frame *after* CE condition
+    /// evaluation and its integer result pop. Unlike doEvents, this never
+    /// commits the resulting operand/return stacks, frame/base pointers or
+    /// procedure scheduling flags. Callers may compare the hypothetical
+    /// effects while preserving the installed interpreter unchanged.
+    pub fn preview_condition_frame_with_host_bounded(
+        &self,
+        condition_offset: i32,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<PreviewedConditionFrame> {
         let offset = usize::try_from(condition_offset)
             .map_err(|_| invalid("negative CE condition bytecode offset"))?;
         let first_opcode = self.program.word_at(offset)?;
@@ -391,7 +420,15 @@ impl ScriptVm {
         probe.critical_section = false;
         probe.halted = false;
         probe.run_variable_subset_bounded(max_steps, native)?;
-        Ok(probe.pop_int()? != 0)
+        let satisfied = probe.pop_int()? != 0;
+        Ok(PreviewedConditionFrame {
+            satisfied,
+            data_stack: probe.stack,
+            return_stack: probe.return_stack,
+            frame_pointer: probe.frame_pointer,
+            base_pointer: probe.base_pointer,
+            procedures: probe.runtime_procedures,
+        })
     }
 
     /// Return CE timed/conditional readiness from an isolated copy of the
@@ -1180,6 +1217,47 @@ mod tests {
             .is_err());
         assert_eq!(write_vm.pc(), 0);
         assert!(write_vm.stack().is_empty());
+    }
+
+    #[test]
+    fn ce_condition_frame_preview_reports_discarded_stack_mutations() {
+        let mut bytes = vec![0_u8; 42];
+        let mut startup = Vec::new();
+        push_int(&mut startup, 9);
+        opcode(&mut startup, 0x8011);
+        bytes[..startup.len()].copy_from_slice(&startup);
+
+        // CE pops only the result (1). A newly pushed 77 would remain in
+        // the running interpreter's stack, but never in the installed Rust
+        // VM because this diagnostic is intentionally discard-only.
+        let mut condition = Vec::new();
+        push_int(&mut condition, 77);
+        push_int(&mut condition, 1);
+        opcode(&mut condition, 0x8011);
+        bytes[20..20 + condition.len()].copy_from_slice(&condition);
+        let mut vm = ScriptVm::new(fixture(&bytes));
+        vm.run_bounded(2).unwrap();
+
+        let candidate = vm
+            .preview_condition_frame_with_host_bounded(20, 3, &mut |_, _| {
+                Err(super::invalid("CE game native not supported in condition"))
+            })
+            .unwrap();
+        assert!(candidate.satisfied);
+        assert_eq!(
+            candidate.data_stack,
+            [ScriptValue::Int(9), ScriptValue::Int(77)]
+        );
+        assert!(candidate.return_stack.is_empty());
+        assert_eq!(candidate.frame_pointer, -1);
+        assert_eq!(candidate.base_pointer, -1);
+        assert!(candidate.procedures.is_empty());
+        assert!(vm.preview_condition_bounded(20, 3).unwrap());
+        assert_eq!(vm.stack(), [ScriptValue::Int(9)]);
+        assert_eq!(vm.pc(), 8);
+        assert!(vm.halted());
+        assert!(vm.preview_condition_bounded(20, 2).is_err());
+        assert_eq!(vm.stack(), [ScriptValue::Int(9)]);
     }
 
     #[test]
