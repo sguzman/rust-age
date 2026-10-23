@@ -94,7 +94,7 @@ fn main() {
             continue;
         }
         let result = (|| -> Result<bool, Box<dyn Error>> {
-            Ok(probe(parts[1], parts[2].parse()?, parts[3].parse()?)?)
+            probe(parts[1], parts[2].parse()?, parts[3].parse()?)
         })();
         let output = result
             .map(|value| format!("S:{}", i32::from(value)))
