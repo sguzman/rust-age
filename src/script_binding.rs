@@ -153,7 +153,7 @@ mod tests {
         for number in [1_i32, 4, 0, 0, 0, 0, 0, 6] {
             int_bytes.extend_from_slice(&number.to_be_bytes());
         }
-        int_bytes.extend_from_slice(b"start\\0");
+        int_bytes.extend_from_slice(b"start\0");
         int_bytes.extend_from_slice(&0_i32.to_be_bytes());
         fs::write(scripts.join("START.int"), int_bytes).unwrap();
         let tables = ScriptTables {
