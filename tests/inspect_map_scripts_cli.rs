@@ -44,6 +44,25 @@ fn synthetic_map() -> Vec<u8> {
     bytes
 }
 
+/// Invented CE-style program with main and two built-in action procedures.
+fn synthetic_int() -> Vec<u8> {
+    let mut bytes = vec![0_u8; 42];
+    let names: [&[u8]; 3] = [b"main", b"START", b"map_enter_p_proc"];
+    put(&mut bytes, names.len() as i32);
+    let mut identifiers = Vec::new();
+    for name in names {
+        for field in [4 + identifiers.len() as i32, 0, 0, 0, 0, 0] {
+            put(&mut bytes, field);
+        }
+        identifiers.extend_from_slice(name);
+        identifiers.push(0);
+    }
+    put(&mut bytes, identifiers.len() as i32);
+    bytes.extend_from_slice(&identifiers);
+    put(&mut bytes, 0); // empty static strings
+    bytes
+}
+
 #[test]
 fn reports_ce_map_script_index_and_run_flags_without_executing() {
     let stamp = SystemTime::now()
@@ -66,13 +85,13 @@ fn reports_ce_map_script_index_and_run_flags_without_executing() {
         b"START.ssl # map_init local_vars=3\n",
     )
     .unwrap();
+    fs::write(scripts.join("START.int"), synthetic_int()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_rust-age"))
         .arg("--inspect-map-scripts")
         .arg(&root)
         .arg("maps/test.map")
         .output()
         .unwrap();
-    fs::remove_dir_all(root).unwrap();
     assert!(output.status.success(), "{:?}", output);
     let output = String::from_utf8(output.stdout).unwrap();
     assert!(
@@ -91,4 +110,27 @@ fn reports_ce_map_script_index_and_run_flags_without_executing() {
         output.contains("no Fallout script has executed"),
         "{output}"
     );
+    let result = Command::new(env!("CARGO_BIN_EXE_rust-age"))
+        .arg("--inspect-map-procedures")
+        .arg(&root)
+        .arg("maps/test.map")
+        .output()
+        .unwrap();
+    fs::remove_dir_all(root).unwrap();
+    assert!(result.status.success(), "{result:?}");
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    assert!(
+        stdout.contains("Original MAP script procedure bindings: 1"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("INT procedures: 3, CE action bindings: 2 of 24"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("action [1] start -> procedure [1]"), "{stdout}");
+    assert!(
+        stdout.contains("action [15] map_enter_p_proc -> procedure [2]"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("no Fallout script has executed"), "{stdout}");
 }

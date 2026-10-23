@@ -11,7 +11,7 @@ use crate::map::{MapHeader, MapSquares, MapVariables};
 use crate::object_tables::ObjectTables;
 use crate::pathfinding::make_path;
 use crate::prototype::PrototypeBody;
-use crate::script_binding::{bind_scripts, ScriptBinding};
+use crate::script_binding::{bind_script_procedures, bind_scripts, ScriptBinding, ScriptProcedureBinding};
 use crate::script_data::ScriptTables;
 use std::io;
 
@@ -70,6 +70,15 @@ impl StaticScene {
     /// installed .INT path/flags. Does not execute script bytecode.
     pub fn script_bindings(&self, assets: &mut GameAssets) -> io::Result<Vec<ScriptBinding>> {
         bind_scripts(assets, &self.scripts)
+    }
+
+    /// Resolve installed INT procedure actions for a MAP without running
+    /// the VM or invoking engine callbacks. Missing assets stay visible.
+    pub fn script_procedure_bindings(
+        &self,
+        assets: &mut GameAssets,
+    ) -> io::Result<Vec<ScriptProcedureBinding>> {
+        bind_script_procedures(assets, &self.scripts)
     }
 
     /// CE-style numeric route through the initial static object collision.
