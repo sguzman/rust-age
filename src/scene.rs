@@ -11,6 +11,7 @@ use crate::map::{MapHeader, MapSquares, MapVariables};
 use crate::object_tables::ObjectTables;
 use crate::pathfinding::make_path;
 use crate::prototype::PrototypeBody;
+use crate::script_binding::{bind_scripts, ScriptBinding};
 use crate::script_data::ScriptTables;
 use std::io;
 
@@ -63,6 +64,12 @@ impl StaticScene {
             collision,
             bytes_consumed,
         })
+    }
+
+    /// Read-only association between each serialized MAP script and its
+    /// installed .INT path/flags. Does not execute script bytecode.
+    pub fn script_bindings(&self, assets: &mut GameAssets) -> io::Result<Vec<ScriptBinding>> {
+        bind_scripts(assets, &self.scripts)
     }
 
     /// CE-style numeric route through the initial static object collision.

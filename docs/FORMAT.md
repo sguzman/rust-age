@@ -188,3 +188,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## CE scripts.lst run-info declarations (read-only)
 
 `ScriptList::run_info` ports CE `scr_find_str_run_info` directive discovery after the first `#` comment marker. The case-sensitive `map_init`, `map_exit` and signed `local_vars=` decimal-prefix fields are preserved as data rather than executed. The decimal conversion is bounded to prevent overflow. `GameAssets::script_run_info_by_index` uses the same cached, lower-24-bit indexed list as original program path resolution. Map-init dispatch and local-variable allocation are not yet connected.
+
+## Static MAP script-to-INT index binding
+
+`src/script_binding.rs` walks the five CE MAP script categories, preserving record position, SID, owner and local-variable table offsets. The original `scripts.lst` lower-24-bit script index maps each record to an installed `.INT` name and its `map_init`, `map_exit`, `local_vars` declarations. Absent rows, missing scripts and `-1` indices remain visibly unresolved; no program is invented. `StaticScene::script_bindings` exposes the index for diagnostics. Tested with synthetic category mixtures; no startup scheduling or bytecode execution.
