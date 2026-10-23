@@ -290,7 +290,8 @@
     {
       "source": "src/game/queue.cc",
       "rust": [
-        "src/event_queue.rs"
+        "src/event_queue.rs",
+        "src/script_timer.rs"
       ],
       "status": "partial"
     },
@@ -301,8 +302,10 @@
     },
     {
       "source": "src/game/roll.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/random_roll.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/scripts.cc",
@@ -313,7 +316,9 @@
         "src/script_procedures.rs",
         "src/assets.rs",
         "src/script_lifecycle.rs",
-        "src/script_locals.rs"
+        "src/script_locals.rs",
+        "src/script_clock.rs",
+        "src/script_timer.rs"
       ],
       "status": "partial"
     },
@@ -474,7 +479,9 @@
       "rust": [
         "src/script_native_vars.rs",
         "src/game_globals.rs",
-        "src/script_locals.rs"
+        "src/script_locals.rs",
+        "src/script_clock.rs",
+        "src/script_random.rs"
       ],
       "status": "partial"
     },

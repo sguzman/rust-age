@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 21. **Not ported:** 87.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 22. **Not ported:** 86.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -67,10 +67,10 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/pipboy.cc` | — | ⚪ Not ported |
 | `src/game/protinst.cc` | — | ⚪ Not ported |
 | `src/game/proto.cc` | `src/prototype.rs`, `src/prototype_list.rs` | 🟡 Partial |
-| `src/game/queue.cc` | `src/event_queue.rs` | 🟡 Partial |
+| `src/game/queue.cc` | `src/event_queue.rs`, `src/script_timer.rs` | 🟡 Partial |
 | `src/game/reaction.cc` | — | ⚪ Not ported |
-| `src/game/roll.cc` | — | ⚪ Not ported |
-| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs`, `src/script_lifecycle.rs`, `src/script_locals.rs` | 🟡 Partial |
+| `src/game/roll.cc` | `src/random_roll.rs` | 🟡 Partial |
+| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs`, `src/script_lifecycle.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_timer.rs` | 🟡 Partial |
 | `src/game/select.cc` | — | ⚪ Not ported |
 | `src/game/selfrun.cc` | — | ⚪ Not ported |
 | `src/game/sfxcache.cc` | — | ⚪ Not ported |
@@ -112,7 +112,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 
 | C++ compilation unit | Rust counterpart | Status |
 |---|---|---|
-| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs` | 🟡 Partial |
+| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_random.rs` | 🟡 Partial |
 
 ## src/plib/assoc (1)
 
