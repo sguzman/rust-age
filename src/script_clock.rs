@@ -268,11 +268,9 @@ mod tests {
         assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
         let clock = ScriptGameClock { ticks: 558_000 };
         let value = vm
-            .preview_local_interrupt_with_host_bounded(
-                0,
-                4,
-                &mut |opcode, stack| clock.apply_opcode(opcode, stack),
-            )
+            .preview_local_interrupt_with_host_bounded(0, 4, &mut |opcode, stack| {
+                clock.apply_opcode(opcode, stack)
+            })
             .unwrap();
         assert_eq!(value, ScriptValue::Int(1530));
         assert_eq!(vm.pc(), 0);

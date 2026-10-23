@@ -387,11 +387,9 @@ impl ScriptVm {
         procedure_index: usize,
         max_steps: usize,
     ) -> io::Result<ScriptValue> {
-        self.preview_local_interrupt_with_host_bounded(
-            procedure_index,
-            max_steps,
-            &mut |_, _| Err(invalid("CE interrupt native host not provided")),
-        )
+        self.preview_local_interrupt_with_host_bounded(procedure_index, max_steps, &mut |_, _| {
+            Err(invalid("CE interrupt native host not provided"))
+        })
     }
 
     /// Explicit-host, synthetic-only local CE interrupt procedure preview. Mirrors the
