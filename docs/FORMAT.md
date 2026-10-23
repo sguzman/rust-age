@@ -212,3 +212,7 @@ The CE-derived `CollisionIndex` now supports same-elevation object relocation by
 ## CE chronological event queue (pure game-time scheduler)
 
 `src/event_queue.rs` ports the original 13 `EventType` indices and the scheduling/order/removal semantics of CE `queue_add`, `queue_remove`, `queue_remove_this`, `queue_find`, `queue_process`, `queue_clear_type`, and `queue_next_time`. Events are ordered by ascending signed CE game-time tick, with insertion after equal timestamps (FIFO). Due events are processed using one captured time; nonzero handler results stop dispatch. Ownerless/owner-scoped filtering and map-exit cleanup eligibility metadata are preserved. Synthetic tests cover ordering, equal-time ties, stop behavior, removal and overflow. This is a **pure queue**: native drug/poison/explosion/script callbacks, save serialization, owner pointer resolution and game clock integration are unported.
+
+## Original queue_save/queue_load framing
+
+`EventQueue::save_with`/`load_with` encode CE big-endian count/time/type/owner-ID fields (using `-2` for no owner) with caller-supplied event payload codecs and owner lookup. A malformed stream cannot partially overwrite the existing in-memory queue. Synthetic save/restore and invalid-event tests cover this narrow format layer. Actual CE event payload codecs, object identity across save files and native event side effects are not implemented.
