@@ -21,7 +21,7 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/spatial_oracle.cc -o /tmp/rust-age-ce-spatial
           /tmp/rust-age-ce-spatial > /tmp/rust-age-cpp-spatial.txt
-          cargo run --quiet --bin spatial-probe > /tmp/rust-age-rust-spatial.txt
+          cargo run --quiet --bin spatial_probe > /tmp/rust-age-rust-spatial.txt
           diff -u /tmp/rust-age-cpp-spatial.txt /tmp/rust-age-rust-spatial.txt
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
