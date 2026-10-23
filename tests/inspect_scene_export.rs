@@ -40,7 +40,24 @@ fn map_with_one_object() -> Vec<u8> {
     put(&mut map, 1); // total top-level objects
     put(&mut map, 1); // elevation zero objects
     for value in [
-        42, 20099, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0400_0001, 0, 0, 0, 0, -1, 0,
+        42,
+        20099,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0x0400_0001,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        0,
     ] {
         put(&mut map, value);
     }
@@ -93,7 +110,13 @@ fn cli_exports_static_item_sprite_into_original_640x380_scene() {
     let header = b"P6\n640 380\n255\n";
     assert!(ppm.starts_with(header));
     let data = &ppm[header.len()..];
-    assert_eq!(&data[(189 * 640 + 319) * 3..(189 * 640 + 319) * 3 + 3], &[255, 0, 0]);
-    assert_eq!(&data[(190 * 640 + 320) * 3..(190 * 640 + 320) * 3 + 3], &[0, 255, 0]);
+    assert_eq!(
+        &data[(189 * 640 + 319) * 3..(189 * 640 + 319) * 3 + 3],
+        &[255, 0, 0]
+    );
+    assert_eq!(
+        &data[(190 * 640 + 320) * 3..(190 * 640 + 320) * 3 + 3],
+        &[0, 255, 0]
+    );
     fs::remove_dir_all(root).unwrap();
 }
