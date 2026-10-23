@@ -63,6 +63,47 @@ fn synthetic_vm_with_scheduled_condition(
     ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
 }
 
+fn synthetic_vm_with_followup_condition(expected_fixed_parameter: i32) -> ScriptVm {
+    // Procedure zero schedules procedure one while doEvents walks the same
+    // installed VM. The second procedure reads the verified fixed_param
+    // event context, rather than a fabricated or mutable host callback.
+    let mut first = Vec::new();
+    first.extend_from_slice(&0xC001_u16.to_be_bytes());
+    first.extend_from_slice(&28_i32.to_be_bytes());
+    first.extend_from_slice(&0xC001_u16.to_be_bytes());
+    first.extend_from_slice(&1_i32.to_be_bytes());
+    first.extend_from_slice(&[0x80, 0x07]); // CALL_WHEN
+    first.extend_from_slice(&0xC001_u16.to_be_bytes());
+    first.extend_from_slice(&0_i32.to_be_bytes());
+    first.extend_from_slice(&[0x80, 0x11]); // false condition
+    assert_eq!(first.len(), 22);
+    let mut second = vec![0x80, 0xF7]; // CE fixed_param native read
+    second.extend_from_slice(&0xC001_u16.to_be_bytes());
+    second.extend_from_slice(&expected_fixed_parameter.to_be_bytes());
+    second.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]); // EQUAL; STOP
+    let mut bytes = vec![0_u8; 64];
+    bytes[..first.len()].copy_from_slice(&first);
+    bytes[28..28 + second.len()].copy_from_slice(&second);
+    bytes[48..52].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+    bytes.extend_from_slice(&2_i32.to_be_bytes());
+    let mut names = Vec::new();
+    for (name, flags, condition_offset) in [
+        (b"main".as_slice(), 0x02_i32, 0_i32),
+        (b"map_enter_p_proc".as_slice(), 0_i32, 0_i32),
+    ] {
+        let identifier_offset = 4 + names.len() as i32;
+        for field in [identifier_offset, flags, 0, condition_offset, 48, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        names.extend_from_slice(name);
+        names.push(0);
+    }
+    bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&names);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
 fn environment() -> PreparedScriptEnvironment {
     let sid = 17;
     let record = ScriptRecord {
@@ -686,6 +727,44 @@ fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
         0
     );
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
+
+#[test]
+fn active_map_condition_can_arm_and_read_later_procedure_without_committing() {
+    let mut environment = environment();
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: None,
+    };
+    for (expected, ready, retained_flags) in [
+        (1, vec![1_usize], 0_i32),
+        (2, vec![], 0x02_i32),
+    ] {
+        *environment.scripts.runtime.vm_mut(1).unwrap() =
+            synthetic_vm_with_followup_condition(expected);
+        let plan = environment
+            .scripts
+            .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+            .unwrap()[0];
+        let mut sessions = DetachedMapEventSessions::new();
+        sessions.begin_planned(&environment, &plan).unwrap();
+        let candidate = environment
+            .preview_active_due_frame_reads_bounded(&sessions, &plan, clock, 0, 5)
+            .unwrap();
+        assert_eq!(candidate.ready, ready);
+        assert_eq!(candidate.procedures[0].flags, 0x02);
+        assert_eq!(candidate.procedures[1].flags, retained_flags);
+        assert_eq!(candidate.procedures[1].condition_offset, 28);
+        assert_eq!(candidate.condition_terminations.len(), 2);
+        assert!(candidate.data_stack.is_empty());
+        assert!(sessions.get(1).unwrap().is_active());
+        let installed = environment.scripts.runtime.vm(1).unwrap();
+        assert_eq!(installed.runtime_procedures()[0].flags, 0x02);
+        assert_eq!(installed.runtime_procedures()[1].flags, 0);
+        assert_eq!(installed.runtime_procedures()[1].condition_offset, 0);
+        assert!(installed.stack().is_empty());
+        assert_eq!(installed.pc(), 0);
+    }
 }
 
 #[test]
