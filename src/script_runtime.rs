@@ -445,6 +445,39 @@ mod tests {
     }
 
     #[test]
+    fn live_style_dispatch_callbacks_can_influence_later_condition_checks() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, vm(0x02, 0, 19)).unwrap();
+        runtime.register(2, vm(0x02, 0, 19)).unwrap();
+        let gate = Rc::new(Cell::new(false));
+        let evaluate_gate = Rc::clone(&gate);
+        let dispatch_gate = Rc::clone(&gate);
+        let result = runtime
+            .dispatch_due_with(
+                100,
+                move |id, _, offset| {
+                    assert_eq!(offset, 19);
+                    Ok(Some(id == 2 || evaluate_gate.get()))
+                },
+                move |id, _, vm| {
+                    assert_eq!(vm.runtime_procedures()[0].flags, 0);
+                    if id == 2 {
+                        dispatch_gate.set(true);
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].program_id, 2);
+        assert_eq!(result[1].program_id, 1);
+        assert!(gate.get());
+    }
+
+    #[test]
     fn host_dispatch_failure_preserves_consumed_event_and_skips_later_program() {
         let mut runtime = ScriptRuntime::new();
         runtime.register(1, vm(0x01, 1, 0)).unwrap();
