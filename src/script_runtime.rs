@@ -5,7 +5,7 @@
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_vm::{ScriptValue, ScriptVm};
+use crate::script_vm::{PreviewedDueProcedurePoll, ScriptValue, ScriptVm};
 use std::collections::VecDeque;
 use std::io;
 
@@ -44,6 +44,14 @@ pub struct PlannedLocalActionFrame {
 pub struct DueProcedure {
     pub program_id: u64,
     pub procedure_index: usize,
+}
+
+/// One immutable program's speculative CE doEvents selection and frame.
+/// Entries follow pinned CE newest-registered-program-first list order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewedProgramDuePoll {
+    pub program_id: u64,
+    pub candidate: PreviewedDueProcedurePoll,
 }
 
 #[derive(Debug, Clone)]
@@ -168,6 +176,45 @@ impl ScriptRuntime {
             }
         }
         Ok(ready)
+    }
+
+    /// Read one bounded, sequential CE condition poll from each installed
+    /// .INT program in source list order (newest registered first).
+    ///
+    /// Each program owns its independent data/return stacks and scheduler
+    /// entries. Earlier conditions in the SAME program may affect later
+    /// entries; no candidate changes cross between programs. The adapter
+    /// receives each immutable program ID so the caller can select an exact
+    /// read-only native source. Its host effects MUST be pure: this method
+    /// cannot roll back external effects. All registered VMs, program order
+    /// and game state remain untouched on success or failure.
+    ///
+    /// No procedure is executed, no CE callbacks run and imported/external
+    /// program side effects are unavailable. Suspending doEvents yields an
+    /// empty observation and does not invoke the native adapter.
+    pub fn preview_program_due_polls_with_host_bounded(
+        &self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        native: &mut impl FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Vec<PreviewedProgramDuePoll>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut candidates = Vec::with_capacity(self.programs.len());
+        for program in &self.programs {
+            let id = program.id;
+            let candidate = program.vm.preview_due_procedure_poll_with_host_bounded(
+                now_millis,
+                max_steps_per_condition,
+                &mut |opcode, stack| native(id, opcode, stack),
+            )?;
+            candidates.push(PreviewedProgramDuePoll {
+                program_id: id,
+                candidate,
+            });
+        }
+        Ok(candidates)
     }
 
     /// Resolve one of CE's fixed 24 built-in script action slots to the
@@ -571,6 +618,101 @@ mod tests {
         bytes.extend_from_slice(b"main\0");
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn detached_sequential_program_polls_obey_ce_list_order_and_preserve_all_vms() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, condition_vm(1)).unwrap();
+        runtime.register(2, vm(0x01, 10, 0)).unwrap();
+        runtime.register(3, condition_vm(0)).unwrap();
+        let polls = runtime
+            .preview_program_due_polls_with_host_bounded(11, 2, &mut |_, _, _| {
+                panic!("these synthetic core-only programs require no native host")
+            })
+            .unwrap();
+        assert_eq!(
+            polls.iter().map(|p| p.program_id).collect::<Vec<_>>(),
+            [3, 2, 1]
+        );
+        assert!(polls[0].candidate.ready.is_empty());
+        assert_eq!(polls[1].candidate.ready, [0]);
+        assert_eq!(polls[2].candidate.ready, [0]);
+        assert_eq!(polls[0].candidate.procedures[0].flags, 0x02);
+        assert_eq!(polls[1].candidate.procedures[0].flags, 0);
+        assert_eq!(polls[2].candidate.procedures[0].flags, 0);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0x01);
+        assert_eq!(runtime.vm(3).unwrap().runtime_procedures()[0].flags, 0x02);
+
+        // A late condition error rejects the whole observation without
+        // consuming even an earlier ready candidate.
+        assert!(runtime
+            .preview_program_due_polls_with_host_bounded(11, 1, &mut |_, _, _| {
+                panic!("no game-native invocation in core-only conditions")
+            })
+            .is_err());
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0x01);
+        runtime.set_suspended(true);
+        assert!(runtime
+            .preview_program_due_polls_with_host_bounded(11, 2, &mut |_, _, _| {
+                panic!("CE suspended program should never call native host")
+            })
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn detached_program_polls_route_native_reads_by_program_id() {
+        // The native adapter must be selected by exact script instance ID;
+        // no MAP/game-global writes and no live callback is permitted.
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x80C3_u16.to_be_bytes()); // map_var
+        bytes[28..30].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, 0x02, 0, 20, 0, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let program = ScriptProgram::decode(&bytes).unwrap();
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(4, ScriptVm::new(program.clone())).unwrap();
+        runtime.register(9, ScriptVm::new(program)).unwrap();
+        let mut seen = Vec::new();
+        let polls = runtime
+            .preview_program_due_polls_with_host_bounded(1, 3, &mut |id, opcode, stack| {
+                assert_eq!(opcode, 0x80C3);
+                assert_eq!(stack.pop(), Some(ScriptValue::Int(0)));
+                seen.push(id);
+                stack.push(ScriptValue::Int(if id == 9 { 1 } else { 0 }));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(seen, [9, 4]);
+        assert_eq!(polls[0].candidate.ready, [0]);
+        assert!(polls[1].candidate.ready.is_empty());
+        for id in [4, 9] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
+            assert!(vm.stack().is_empty());
+            assert_eq!(vm.pc(), 0);
+        }
+
+        assert!(runtime
+            .preview_program_due_polls_with_host_bounded(1, 3, &mut |id, _, stack| {
+                assert_eq!(stack.pop(), Some(ScriptValue::Int(0)));
+                if id == 4 {
+                    return Err(super::invalid("read-only script-native missing"));
+                }
+                stack.push(ScriptValue::Int(1));
+                Ok(())
+            })
+            .is_err());
+        assert_eq!(runtime.vm(9).unwrap().runtime_procedures()[0].flags, 0x02);
     }
 
     #[test]
