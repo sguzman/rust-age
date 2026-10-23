@@ -1,0 +1,15 @@
+exit_0 EXIT 0
+exit_1 EXIT 1
+exit_2 EXIT -1
+exit_3 EXIT -2147483648
+exit_4 EXIT 2147483647
+exit_program_0 EXIT_PROGRAM 0
+exit_program_1 EXIT_PROGRAM 1
+exit_program_2 EXIT_PROGRAM -1
+exit_program_3 EXIT_PROGRAM -2147483648
+exit_program_4 EXIT_PROGRAM 2147483647
+stop_program_0 STOP_PROGRAM 0
+stop_program_1 STOP_PROGRAM 1
+stop_program_2 STOP_PROGRAM -1
+stop_program_3 STOP_PROGRAM -2147483648
+stop_program_4 STOP_PROGRAM 2147483647
