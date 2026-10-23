@@ -129,7 +129,9 @@ where
     let mut reverse = Vec::new();
     while node.tile != from && reverse.len() < ROTATION_CAP {
         reverse.push(node.rotation);
-        node = *closed.iter().find(|parent| parent.tile == node.parent_tile)?;
+        node = *closed
+            .iter()
+            .find(|parent| parent.tile == node.parent_tile)?;
     }
     reverse.reverse();
     Some(reverse)
@@ -149,7 +151,9 @@ mod tests {
         let mut current = start;
         let mut visited = vec![start];
         for &rotation in rotations {
-            current = view.move_in_direction(current, usize::from(rotation), 1).unwrap();
+            current = view
+                .move_in_direction(current, usize::from(rotation), 1)
+                .unwrap();
             visited.push(current);
         }
         visited
@@ -165,15 +169,24 @@ mod tests {
     #[test]
     fn neighboring_tiles_use_original_rotation_order() {
         let map = view();
-        assert_eq!(make_path(&map, 20099, 20098, true, false, |_| true), Some(vec![1]));
-        assert_eq!(make_path(&map, 20099, 20099, true, false, |_| true), Some(vec![]));
+        assert_eq!(
+            make_path(&map, 20099, 20098, true, false, |_| true),
+            Some(vec![1])
+        );
+        assert_eq!(
+            make_path(&map, 20099, 20099, true, false, |_| true),
+            Some(vec![])
+        );
     }
 
     #[test]
     fn occupied_destination_respects_original_flag() {
         let map = view();
         assert_eq!(make_path(&map, 20099, 20098, true, true, |_| false), None);
-        assert_eq!(make_path(&map, 20099, 20098, true, false, |_| false), Some(vec![1]));
+        assert_eq!(
+            make_path(&map, 20099, 20098, true, false, |_| false),
+            Some(vec![1])
+        );
     }
 
     #[test]
@@ -193,7 +206,10 @@ mod tests {
         let map = view();
         assert_eq!(make_path(&map, -1, 20098, true, false, |_| true), None);
         assert_eq!(make_path(&map, 20099, 40000, true, false, |_| true), None);
-        assert_eq!(make_path(&map, 20099, 20100, true, false, |_| false), Some(vec![3]));
+        assert_eq!(
+            make_path(&map, 20099, 20100, true, false, |_| false),
+            Some(vec![3])
+        );
         assert_eq!(make_path(&map, 20099, 30000, true, false, |_| false), None);
     }
 }
