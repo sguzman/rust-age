@@ -247,9 +247,7 @@ impl ScriptVm {
                 if evaluate_condition(index, procedure.condition_offset)? == Some(true) {
                     ready.push(index);
                 }
-            } else if procedure.flags & 0x01 != 0
-                && (procedure.event_time as u32) < now_millis
-            {
+            } else if procedure.flags & 0x01 != 0 && (procedure.event_time as u32) < now_millis {
                 ready.push(index);
             }
         }
@@ -1155,7 +1153,9 @@ mod tests {
         vm.runtime_procedures[1].condition_offset = 24;
         assert!(vm
             .take_due_procedures_with(100, |_, _| {
-                Err(std::io::Error::other("synthetic condition evaluator failed"))
+                Err(std::io::Error::other(
+                    "synthetic condition evaluator failed",
+                ))
             })
             .is_err());
         assert_eq!(vm.runtime_procedures[0].flags, 0x01);

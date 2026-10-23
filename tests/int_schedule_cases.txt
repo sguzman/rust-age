@@ -12,3 +12,9 @@ poll_after poll_at 0 2 2751 750
 poll_conditional poll_at 2 -1 -1 0
 poll_unsigned poll_at 0 -1 -1 0
 poll_pre_wrap poll_at 0 -1 5000 0
+poll_cond_true poll_when 0 77 1 0
+poll_cond_false poll_when 8 77 0 0
+poll_cond_abort poll_when 1 -5 -1 0
+poll_both_true poll_both 8 2 1 500
+poll_both_false poll_both 1 2 0 500
+poll_both_abort poll_both 0 2 -1 500

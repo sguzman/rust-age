@@ -37,13 +37,18 @@ fn run(
     now: i32,
 ) -> Result<String, Box<dyn Error>> {
     let mut code = Vec::new();
-    if matches!(operation, "at" | "both" | "cancel" | "poll_at") {
+    if matches!(operation, "at" | "both" | "cancel" | "poll_at" | "poll_both") {
         push_int(&mut code, first); // seconds before procedure index
         push_int(&mut code, 0);
         opcode(&mut code, 0x8006);
     }
-    if matches!(operation, "when" | "both") {
-        push_int(&mut code, if operation == "both" { second } else { first });
+    if matches!(operation, "when" | "both" | "poll_when" | "poll_both") {
+        let offset = match operation {
+            "both" => second,
+            "poll_both" => 33,
+            _ => first,
+        };
+        push_int(&mut code, offset);
         push_int(&mut code, 0);
         opcode(&mut code, 0x8007);
     }
@@ -60,6 +65,14 @@ fn run(
     vm.run_bounded(16)?;
     if operation == "poll_at" {
         vm.take_due_timed_procedures(second as u32);
+    } else if matches!(operation, "poll_when" | "poll_both") {
+        vm.take_due_procedures_with(second as u32, |_, _| {
+            Ok(match second {
+                1 => Some(true),
+                0 => Some(false),
+                _ => None,
+            })
+        })?;
     }
     let proc = vm.runtime_procedures()[0];
     Ok(format!(
