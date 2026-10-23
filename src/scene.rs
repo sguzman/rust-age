@@ -82,7 +82,10 @@ impl PreparedScriptEnvironment {
             .iter()
             .filter(|entry| entry.instance_id == Some(planned.instance_id));
         let entry = candidates.next().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE planned script instance missing")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE planned script instance missing",
+            )
         })?;
         if candidates.next().is_some()
             || entry.binding.script_id != planned.script_id
@@ -98,17 +101,20 @@ impl PreparedScriptEnvironment {
             .scripts
             .runtime
             .resolve_action(planned.instance_id, planned.action)?;
-        if procedure.is_none_or(|procedure| {
-            procedure.procedure_index != planned.procedure_index
-        }) {
+        if procedure.is_none_or(|procedure| procedure.procedure_index != planned.procedure_index) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE planned script procedure mismatch",
             ));
         }
-        let owner = self.owner_for_instance(planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE planned script owner unresolved")
-        })?;
+        let owner = self
+            .owner_for_instance(planned.instance_id)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned script owner unresolved",
+                )
+            })?;
         let mut event = DetachedScriptEvent::new(owner);
         event.begin_action(
             planned.action,

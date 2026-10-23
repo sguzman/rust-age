@@ -2,8 +2,8 @@
 use rust_age::collision::ObjectKey;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
-use rust_age::script_event_state::DetachedScriptEvent;
 use rust_age::script_clock::ScriptGameClock;
+use rust_age::script_event_state::DetachedScriptEvent;
 use rust_age::script_native_vars::ScriptClockContext;
 use rust_age::script_object_binding::MapObjectReadBindings;
 use rust_age::script_owner_binding::ScriptOwnerResolution;
@@ -55,7 +55,9 @@ fn key(value: i32) -> Option<ObjectKey> {
 }
 
 fn probe(parts: &[&str]) -> Result<String, Box<dyn Error>> {
-    let values = parts[1..].iter().map(|s| s.parse::<i32>())
+    let values = parts[1..]
+        .iter()
+        .map(|s| s.parse::<i32>())
         .collect::<Result<Vec<_>, _>>()?;
     let [source, target, owner, fixed, action] = values.as_slice() else {
         return Err("bad event fields".into());
