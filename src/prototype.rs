@@ -138,7 +138,7 @@ pub enum PrototypeBody {
         head_fid: i32,
         ai_packet: i32,
         team: i32,
-        data: CritterData,
+        data: Box<CritterData>,
     },
     Scenery {
         light: LightFields,
@@ -235,7 +235,7 @@ impl Prototype {
                     head_fid,
                     ai_packet,
                     team,
-                    data,
+                    data: Box::new(data),
                 }
             }
             ObjectKind::Scenery => {
