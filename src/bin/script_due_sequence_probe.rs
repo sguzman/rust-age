@@ -81,7 +81,10 @@ fn simulate(mode: &str, operand: i32, expected: i32, now: u32) -> Result<String,
         return Err("original CE interpreter changed during detached poll".into());
     }
     let poll = result?;
-    let mask = poll.ready.iter().fold(0_u32, |mask, index| mask | 1 << index);
+    let mask = poll
+        .ready
+        .iter()
+        .fold(0_u32, |mask, index| mask | 1 << index);
     Ok(format!(
         "S:{mask}:{}:{}:{}:{}",
         poll.procedures[0].flags,
