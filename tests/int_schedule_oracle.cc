@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     int32_t flags, first, second, now;
     while (in >> label >> operation >> flags >> first >> second >> now) {
         Procedure p{flags, 0, 0};
-        if (operation == "at" || operation == "both" || operation == "cancel") {
+        if (operation == "at" || operation == "both" || operation == "cancel" || operation == "poll_at") {
             p.event_time = static_cast<int32_t>(
                 uint32_t(now) + uint32_t(first) * uint32_t(1000));
             p.flags |= 0x01;
@@ -34,6 +34,14 @@ int main(int argc, char** argv) {
             p.flags = 0;
             p.event_time = 0;
             p.condition_offset = 0;
+        }
+        if (operation == "poll_at") {
+            // CE doEvents: conditional takes priority and time must be
+            // strictly greater than the unsigned scheduled timestamp.
+            if ((p.flags & 0x02) == 0 && (p.flags & 0x01) != 0 &&
+                uint32_t(p.event_time) < uint32_t(second)) {
+                p.flags = 0;
+            }
         }
         std::cout << label << " " << p.flags << ","
                   << p.event_time << "," << p.condition_offset << "\n";

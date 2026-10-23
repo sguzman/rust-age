@@ -7,3 +7,8 @@ both_flags both 8 2 37 500
 both_overlap both 3 -4 79 900
 cancel_timed cancel 8 5 0 1234
 cancel_all all 20 0 0 0
+poll_exact poll_at 0 2 2750 750
+poll_after poll_at 0 2 2751 750
+poll_conditional poll_at 2 -1 -1 0
+poll_unsigned poll_at 0 -1 -1 0
+poll_pre_wrap poll_at 0 -1 5000 0

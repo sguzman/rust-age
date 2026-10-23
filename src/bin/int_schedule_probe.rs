@@ -37,7 +37,7 @@ fn run(
     now: i32,
 ) -> Result<String, Box<dyn Error>> {
     let mut code = Vec::new();
-    if matches!(operation, "at" | "both" | "cancel") {
+    if matches!(operation, "at" | "both" | "cancel" | "poll_at") {
         push_int(&mut code, first); // seconds before procedure index
         push_int(&mut code, 0);
         opcode(&mut code, 0x8006);
@@ -58,6 +58,9 @@ fn run(
     let mut vm = ScriptVm::new(make_program(&code, flags)?);
     vm.set_clock_millis(now);
     vm.run_bounded(16)?;
+    if operation == "poll_at" {
+        vm.take_due_timed_procedures(second as u32);
+    }
     let proc = vm.runtime_procedures()[0];
     Ok(format!(
         "{},{},{}",
