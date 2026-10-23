@@ -1,7 +1,9 @@
 //! Explicit-clock, bounded Fallout 1 CE game-time native opcode subset.
 //! Pinned src/int/support/intextra.cc op_game_time (0x80EA),
 //! op_game_time_in_seconds (0x80EB), op_game_ticks (0x80F2),
-//! and op_game_time_hour (0x80F6, using game/scripts.cc game_time_hour).
+//! op_game_time_hour (0x80F6), and op_get_month/day (0x8118/0x8119).
+//! Date conversion follows pinned src/game/scripts.cc game_time_date:
+//! 365-day years starting December 5, 2161; no leap-day adjustment.
 //! No wall clock, event scheduler, actor callback, or game loop runs here.
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
@@ -10,6 +12,8 @@ pub const GAME_TIME_OPCODE: u16 = 0x80EA;
 pub const GAME_TIME_IN_SECONDS_OPCODE: u16 = 0x80EB;
 pub const GAME_TICKS_OPCODE: u16 = 0x80F2;
 pub const GAME_TIME_HOUR_OPCODE: u16 = 0x80F6;
+pub const GET_MONTH_OPCODE: u16 = 0x8118;
+pub const GET_DAY_OPCODE: u16 = 0x8119;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -24,13 +28,41 @@ pub struct ScriptGameClock {
 }
 
 impl ScriptGameClock {
+    /// Original CE game_time_date arithmetic, including its fixed 365-day
+    /// year and December origin. This deliberately does not substitute a
+    /// real Gregorian calendar, leap years, or wall-clock timestamps.
+    /// The returned values are (month 1..12, day 1..31, year).
+    pub fn date(self) -> (i32, i32, i32) {
+        let elapsed_days = self.ticks / 864_000 + 4;
+        let mut year = elapsed_days / 365 + 2161;
+        let mut month = 11_usize; // CE starts on December 5.
+        let mut day = elapsed_days % 365;
+        const DAYS_IN_MONTH: [i32; 12] = [
+            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        ];
+        loop {
+            let days = DAYS_IN_MONTH[month];
+            if day < days {
+                break;
+            }
+            day -= days;
+            month += 1;
+            if month == 12 {
+                year += 1;
+                month = 0;
+            }
+        }
+        (month as i32 + 1, day + 1, year)
+    }
+
     /// Detached original CE native stack operation: time reads push a
     /// 32-bit integer, and game_ticks pops signed seconds, clamps negative
     /// values to zero, then multiplies by ten. This Rust safety boundary
     /// rejects overflowing multiplication rather than exposing C++ UB.
     pub fn apply_opcode(&self, opcode: u16, stack: &mut Vec<ScriptValue>) -> io::Result<()> {
         match opcode {
-            GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TIME_HOUR_OPCODE => {
+            GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TIME_HOUR_OPCODE
+            | GET_MONTH_OPCODE | GET_DAY_OPCODE => {
                 if stack.len() >= MAX_STACK_VALUES {
                     return Err(invalid("CE game-time result exceeds bounded stack"));
                 }
@@ -42,6 +74,8 @@ impl ScriptGameClock {
                     GAME_TIME_HOUR_OPCODE => {
                         100 * ((self.ticks / 600) / 60 % 24) + (self.ticks / 600) % 60
                     }
+                    GET_MONTH_OPCODE => self.date().0,
+                    GET_DAY_OPCODE => self.date().1,
                     _ => unreachable!(),
                 };
                 stack.push(ScriptValue::Int(value));
@@ -75,7 +109,7 @@ impl ScriptGameClock {
 mod tests {
     use super::{
         ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-        GAME_TIME_OPCODE,
+        GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};
@@ -113,6 +147,26 @@ mod tests {
                 .apply_opcode(GAME_TIME_HOUR_OPCODE, &mut stack)
                 .unwrap();
             assert_eq!(stack, [ScriptValue::Int(expected)], "ticks {ticks}");
+        }
+    }
+
+    #[test]
+    fn ce_date_uses_fixed_december_origin_without_leap_years() {
+        for (ticks, date) in [
+            (0, (12, 5, 2161)),
+            (264_600, (12, 5, 2161)),
+            (26 * 864_000, (12, 31, 2161)),
+            (27 * 864_000, (1, 1, 2162)),
+            (31 * 864_000, (1, 5, 2162)),
+            (365 * 864_000, (12, 5, 2162)),
+            (-864_000, (12, 4, 2161)),
+        ] {
+            let clock = ScriptGameClock { ticks };
+            assert_eq!(clock.date(), date, "ticks {ticks}");
+            let mut stack = Vec::new();
+            clock.apply_opcode(GET_MONTH_OPCODE, &mut stack).unwrap();
+            clock.apply_opcode(GET_DAY_OPCODE, &mut stack).unwrap();
+            assert_eq!(stack, [ScriptValue::Int(date.0), ScriptValue::Int(date.1)]);
         }
     }
 
