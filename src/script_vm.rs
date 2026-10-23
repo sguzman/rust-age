@@ -365,6 +365,29 @@ impl ScriptVm {
                     return Err(invalid("CE procedure argument count mismatch"));
                 }
             }
+            0x28 => {
+                // CE op_lookup_string_proc searches index 1 onward, never
+                // the main procedure at zero. Dynamic strings require the
+                // interpreter's mutable string heap and remain unsupported.
+                let name = match self.pop()? {
+                    ScriptValue::StaticString(offset) => {
+                        let offset = usize::try_from(offset)
+                            .map_err(|_| invalid("negative CE static string offset"))?;
+                        self.program.static_string(offset)?
+                    }
+                    ScriptValue::DynamicString(_) => {
+                        return Err(invalid("CE dynamic script strings not implemented"));
+                    }
+                    _ => return Err(invalid("CE named procedure needs a string operand")),
+                };
+                let index = self
+                    .program
+                    .find_callable_procedure(name)?
+                    .ok_or_else(|| invalid("CE named procedure not found"))?;
+                let index = i32::try_from(index)
+                    .map_err(|_| invalid("CE procedure index exceeds i32"))?;
+                self.push(ScriptValue::Int(index))?;
+            }
             0x29 => {
                 self.frame_pointer = self.pop_return_int()?;
             }
@@ -795,6 +818,66 @@ mod tests {
         opcode(&mut code, 0x8005);
         let mut vm = ScriptVm::new(fixture_with_procedure(&code, 20, 0x04, 0));
         assert!(vm.run_bounded(5).is_err());
+    }
+
+    /// Invented INT layout with a main procedure, a second procedure, and
+    /// one original static-string-table entry. No game assets are required.
+    fn named_procedure_fixture(instructions: &[u8], query: &[u8]) -> ScriptProgram {
+        assert!(instructions.len() <= 42);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..instructions.len()].copy_from_slice(instructions);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        let first = b"main\0";
+        let second = b"start\0";
+        for (offset, body) in [(4_i32, 18_i32), (4 + first.len() as i32, 26)] {
+            for field in [offset, 0, 0, 0, body, 0] {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&((first.len() + second.len()) as i32).to_be_bytes());
+        bytes.extend_from_slice(first);
+        bytes.extend_from_slice(second);
+        bytes.extend_from_slice(&((query.len() + 1) as i32).to_be_bytes());
+        bytes.extend_from_slice(query);
+        bytes.push(0);
+        ScriptProgram::decode(&bytes).unwrap()
+    }
+
+    #[test]
+    fn ce_lookup_procedure_opcode_uses_static_strings_and_skips_main() {
+        let mut code = Vec::new();
+        opcode(&mut code, 0x9001); // PUSH static string pool offset
+        code.extend_from_slice(&0_i32.to_be_bytes());
+        opcode(&mut code, 0x8028); // LOOKUP_PROCEDURE_BY_NAME
+        opcode(&mut code, 0x8011); // STOP
+        let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"StArT"));
+        assert_eq!(vm.run_bounded(8).unwrap(), 3);
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
+        let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"main"));
+        assert!(vm.run_bounded(8).is_err());
+    }
+
+    #[test]
+    fn ce_lookup_procedure_opcode_rejects_unsupported_or_bad_strings() {
+        let mut code = Vec::new();
+        opcode(&mut code, 0x9801); // PUSH dynamic string handle
+        code.extend_from_slice(&0_i32.to_be_bytes());
+        opcode(&mut code, 0x8028);
+        let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"start"));
+        assert!(vm.run_bounded(4).is_err());
+
+        let mut code = Vec::new();
+        opcode(&mut code, 0x9001);
+        code.extend_from_slice(&(-1_i32).to_be_bytes());
+        opcode(&mut code, 0x8028);
+        let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"start"));
+        assert!(vm.run_bounded(4).is_err());
+
+        let mut code = Vec::new();
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8028);
+        let mut vm = ScriptVm::new(named_procedure_fixture(&code, b"start"));
+        assert!(vm.run_bounded(4).is_err());
     }
 
     #[test]

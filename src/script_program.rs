@@ -167,6 +167,18 @@ impl ScriptProgram {
         Ok(None)
     }
 
+    /// CE op_lookup_string_proc intentionally skips procedure zero (main).
+    /// This is distinct from interpretFindProcedure, which includes main.
+    /// It returns only the matching index; no procedure is invoked.
+    pub fn find_callable_procedure(&self, name: &[u8]) -> io::Result<Option<usize>> {
+        for index in 1..self.procedures.len() {
+            if self.procedure_name(index)?.eq_ignore_ascii_case(name) {
+                return Ok(Some(index));
+            }
+        }
+        Ok(None)
+    }
+
     pub fn procedure_name(&self, index: usize) -> io::Result<&[u8]> {
         let entry = self
             .procedures
@@ -251,6 +263,15 @@ mod tests {
         assert_eq!(program.find_procedure(b"MAIN").unwrap(), Some(0));
         assert_eq!(program.find_procedure(b"fOo").unwrap(), Some(1));
         assert_eq!(program.find_procedure(b"not_a_proc").unwrap(), None);
+    }
+
+    #[test]
+    fn ce_lookup_procedure_by_name_skips_main_but_normal_lookup_does_not() {
+        let program = ScriptProgram::decode(&fixture()).unwrap();
+        assert_eq!(program.find_procedure(b"MAIN").unwrap(), Some(0));
+        assert_eq!(program.find_callable_procedure(b"mAiN").unwrap(), None);
+        assert_eq!(program.find_callable_procedure(b"FOO").unwrap(), Some(1));
+        assert_eq!(program.find_callable_procedure(b"absent").unwrap(), None);
     }
 
     #[test]
