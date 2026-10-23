@@ -134,6 +134,12 @@ jobs:
           /tmp/rust-age-ce-due-sequence tests/script_due_sequence_cases.txt > /tmp/rust-age-ce-due-sequence.txt
           cargo run --quiet --bin script_due_sequence_probe > /tmp/rust-age-rust-due-sequence.txt
           diff -u /tmp/rust-age-ce-due-sequence.txt /tmp/rust-age-rust-due-sequence.txt
+      - name: Compare CE C++ and Rust sequential CALL_WHEN and CANCEL mutations
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_due_mutation_oracle.cc -o /tmp/rust-age-ce-due-mutation
+          /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
+          cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
+          diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
       - name: Compare CE C++ and Rust conditional EXIT versus STOP flags
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_termination_oracle.cc -o /tmp/rust-age-ce-termination
