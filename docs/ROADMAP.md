@@ -89,9 +89,9 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 💥 T903 — Port criticals, deaths and animations — `░░░░░░░░░░ 0%`
 - 🔬 T904 — Differential fixed-seed combat scenarios — `░░░░░░░░░░ 0%`
 
-### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 2%`
+### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 3%`
 
-- ⏰ T1001 — Port time, rest and random encounters — `█░░░░░░░░░ 9%`
+- ⏰ T1001 — Port time, rest and random encounters — `█░░░░░░░░░ 10%`
 - 🚶 T1002 — Port world travel and location state — `░░░░░░░░░░ 0%`
 - 🎭 T1003 — Port NPC schedule, hostility and reputation — `░░░░░░░░░░ 0%`
 - 🏁 T1004 — Port endings, fail states and victory conditions — `░░░░░░░░░░ 0%`
