@@ -15,6 +15,23 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 
+/// Source-derived, READ-ONLY local CE executeProc/setupCall frame
+/// preflight. It is neither a live stack frame nor executable bytecode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlannedLocalActionFrame {
+    pub program_id: u64,
+    pub action: usize,
+    pub procedure_index: usize,
+    pub body_offset: usize,
+    /// Current unmodified VM program counter, saved by setupCall.
+    pub saved_pc: usize,
+    /// CE executeProc calls setupCall(program, address, 20).
+    pub return_marker: i32,
+    /// setupCall pushes an integer zero on the data stack.
+    pub argument_marker: i32,
+    pub critical: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DueProcedure {
     pub program_id: u64,
@@ -168,6 +185,49 @@ impl ScriptRuntime {
         )
     }
 
+    /// Inspect CE's local executeProc setupCall prerequisites without
+    /// modifying the registered program or dispatching an action. Rejects
+    /// imported procedures and parameterized calls, unsupported by the
+    /// local bounded interpreter. Body byte must start with a CE opcode.
+    pub fn inspect_local_action_frame(
+        &self,
+        program_id: u64,
+        action: usize,
+    ) -> io::Result<Option<PlannedLocalActionFrame>> {
+        let Some(proc) = self.resolve_action(program_id, action)? else {
+            return Ok(None);
+        };
+        let vm = self
+            .vm(program_id)
+            .ok_or_else(|| invalid("CE local action script instance missing"))?;
+        let entry = vm
+            .runtime_procedures()
+            .get(proc.procedure_index)
+            .ok_or_else(|| invalid("CE local action procedure index missing"))?;
+        if entry.flags & 0x04 != 0 {
+            return Err(invalid("CE imported local action has no Rust host"));
+        }
+        if entry.argument_count != 0 {
+            return Err(invalid("CE local action arguments are not supported"));
+        }
+        let body_offset = usize::try_from(entry.body_offset)
+            .map_err(|_| invalid("CE local action has negative body offset"))?;
+        let instruction = vm.program.word_at(body_offset)?;
+        if instruction & 0x8000 == 0 {
+            return Err(invalid("CE local action body is not a valid opcode"));
+        }
+        Ok(Some(PlannedLocalActionFrame {
+            program_id,
+            action,
+            procedure_index: proc.procedure_index,
+            body_offset,
+            saved_pc: vm.pc(),
+            return_marker: 20,
+            argument_marker: 0,
+            critical: entry.flags & 0x10 != 0,
+        }))
+    }
+
     /// Opt-in host dispatch of one resolved CE built-in action, independent
     /// of the timed/conditional event scheduler. A missing script action
     /// returns false; any callback is supplied explicitly by the caller.
@@ -270,7 +330,7 @@ impl ScriptRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::{DueProcedure, ScriptRuntime};
+    use super::{DueProcedure, PlannedLocalActionFrame, ScriptRuntime};
     use crate::script_program::ScriptProgram;
     use crate::script_vm::ScriptVm;
 
@@ -284,6 +344,72 @@ mod tests {
         bytes.extend_from_slice(b"main\0");
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn local_action_vm(flags: i32, argument_count: i32, body_offset: i32) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..22].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, flags, 0, 0, body_offset, argument_count],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&15_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn local_action_frame_matches_ce_setup_call_without_mutating_vm() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(7, local_action_vm(0x10, 0, 20)).unwrap();
+        let original = runtime.vm(7).unwrap().clone();
+        let frame = runtime.inspect_local_action_frame(7, 1).unwrap();
+        assert_eq!(
+            frame,
+            Some(PlannedLocalActionFrame {
+                program_id: 7,
+                action: 1,
+                procedure_index: 1,
+                body_offset: 20,
+                saved_pc: 0,
+                return_marker: 20,
+                argument_marker: 0,
+                critical: true,
+            })
+        );
+        assert_eq!(runtime.inspect_local_action_frame(7, 23).unwrap(), None);
+        assert!(runtime.inspect_local_action_frame(88, 1).is_err());
+        assert!(runtime.inspect_local_action_frame(7, 24).is_err());
+        assert_eq!(runtime.vm(7).unwrap().pc(), original.pc());
+        assert_eq!(runtime.vm(7).unwrap().stack(), original.stack());
+        assert_eq!(
+            runtime.vm(7).unwrap().return_stack(),
+            original.return_stack()
+        );
+        assert!(!runtime.vm(7).unwrap().halted());
+    }
+
+    #[test]
+    fn unsupported_ce_local_action_entries_fail_before_frame_setup() {
+        for (flags, args, body) in [
+            (0x04, 0, 20),  // Imported/external CE procedure.
+            (0x00, 1, 20),  // Nonzero argument count.
+            (0x00, 0, -1),  // Negative body pointer.
+            (0x00, 0, 300), // Outside .INT file.
+            (0x00, 0, 22),  // Uninitialized byte, no opcode marker.
+        ] {
+            let mut runtime = ScriptRuntime::new();
+            runtime.register(1, local_action_vm(flags, args, body)).unwrap();
+            assert!(runtime.inspect_local_action_frame(1, 1).is_err());
+            assert_eq!(runtime.vm(1).unwrap().pc(), 0);
+            assert!(runtime.vm(1).unwrap().stack().is_empty());
+        }
     }
 
     #[test]
