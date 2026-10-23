@@ -445,6 +445,48 @@ mod tests {
     }
 
     #[test]
+    fn sandbox_effect_summary_counts_pointer_tag_changes_and_lazy_allocations() {
+        let bound = fixture();
+        let baseline = bound
+            .script_local_state(&MapVariables {
+                globals: vec![5],
+                locals: vec![10, 11],
+            })
+            .unwrap();
+        let unchanged = baseline.change_summary_since(&baseline).unwrap();
+        assert_eq!(unchanged.map_globals_changed, 0);
+        assert_eq!(unchanged.local_slots_changed, 0);
+        assert_eq!(unchanged.newly_allocated_slots, 0);
+        assert_eq!(unchanged.script_ranges_changed, 0);
+
+        let mut preview = baseline.clone();
+        preview.write_global_typed(0, ScriptValue::Pointer(25)).unwrap();
+        preview.write_typed(1, 0, ScriptValue::Pointer(33)).unwrap();
+        preview.write_typed(2, 0, ScriptValue::Int(-7)).unwrap();
+        let summary = preview.change_summary_since(&baseline).unwrap();
+        assert_eq!(summary.map_globals_changed, 1);
+        assert_eq!(summary.local_slots_changed, 4);
+        assert_eq!(summary.newly_allocated_slots, 3);
+        assert_eq!(summary.script_ranges_changed, 1);
+        assert_eq!(preview.read_global_typed(0).unwrap(), ScriptValue::Pointer(25));
+        assert_eq!(
+            baseline.read_global_typed(0).unwrap(),
+            ScriptValue::Int(5)
+        );
+        assert_eq!(baseline.range(2).unwrap().offset, None);
+        assert_eq!(baseline.locals(), [10, 11]);
+
+        let incompatible = bound
+            .script_local_state(&MapVariables {
+                globals: vec![5, 8],
+                locals: vec![10, 11],
+            })
+            .unwrap();
+        assert!(preview.change_summary_since(&incompatible).is_err());
+        assert!(baseline.change_summary_since(&preview).is_err());
+    }
+
+    #[test]
     fn readonly_saved_local_peek_keeps_lazy_state_and_pointer_tags_intact() {
         let bound = fixture();
         let mut state = bound
