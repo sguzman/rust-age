@@ -47,7 +47,13 @@ fn simulate(
     bytes[..code.len()].copy_from_slice(&code);
     bytes.extend_from_slice(&[0_u8; 12]);
     let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
-    let steps = if mode == "FLAGS" { 4 } else if mode == "VALUE_EXIT" { 7 } else { 6 };
+    let steps = if mode == "FLAGS" {
+        4
+    } else if mode == "VALUE_EXIT" {
+        7
+    } else {
+        6
+    };
     for _ in 0..steps {
         vm.step()?;
     }
