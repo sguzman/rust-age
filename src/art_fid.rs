@@ -71,11 +71,14 @@ mod tests {
     #[test]
     fn identifies_all_direct_ce_art_directories() {
         let categories = [
-            "items", "scenery", "walls", "tiles", "misc", "intrface",
-            "inven", "backgrnd", "skilldex",
+            "items", "scenery", "walls", "tiles", "misc", "intrface", "inven", "backgrnd",
+            "skilldex",
         ];
         for (n, type_id) in [0_u32, 2, 3, 4, 5, 6, 7, 9, 10].iter().enumerate() {
-            assert_eq!(ArtFid(type_id << 24).direct_category().unwrap(), categories[n]);
+            assert_eq!(
+                ArtFid(type_id << 24).direct_category().unwrap(),
+                categories[n]
+            );
         }
         assert!(ArtFid(0x0100_0000).direct_category().is_err());
         assert!(ArtFid(0x0800_0000).direct_category().is_err());

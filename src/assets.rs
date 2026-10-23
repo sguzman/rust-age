@@ -144,7 +144,10 @@ impl GameAssets {
             return Ok(None);
         };
         if name.is_empty() || name == "." {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "empty art filename"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "empty art filename",
+            ));
         }
         Ok(Some(format!("art/{directory}/{name}")))
     }
