@@ -1,0 +1,10 @@
+ordinary|OTHER:\nX=9\nGAME_GLOBAL_VARS:\n// ignored\n\nA = 12 ; comment\nB=-3junk\nNO_EQUALS\n
+empty|GAME_GLOBAL_VARS:\n
+missing|OTHER:\nA=7\n
+signed|GAME_GLOBAL_VARS:\nA=+21\nB=-19\nC=bad\n
+comments|GAME_GLOBAL_VARS:\n//foo\n\nA=1\nB=2;tail\n
+crlf|GAME_GLOBAL_VARS:\r\nA=10\r\nB=-5\r\n
+next_section|GAME_GLOBAL_VARS:\nA=1\nOTHER:\nB=2\n
+prefix16|OTHER:\nA=4\nGAME_GLOBAL_VARS_extra\nC=9\n
+extremes|GAME_GLOBAL_VARS:\nMAX=2147483647\nMIN=-2147483648\n
+spaces|GAME_GLOBAL_VARS:\nA=  - 3\nB= +2junk\nC=0\n

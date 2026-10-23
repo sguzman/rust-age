@@ -74,6 +74,12 @@ jobs:
           /tmp/rust-age-ce-native-bytecode tests/native_bytecode_cases.txt > /tmp/rust-age-ce-native-bytecode.txt
           cargo run --quiet --bin native_bytecode_probe > /tmp/rust-age-rust-native-bytecode.txt
           diff -u /tmp/rust-age-ce-native-bytecode.txt /tmp/rust-age-rust-native-bytecode.txt
+      - name: Compare CE C++ and Rust vault13.gam global default parsing
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/game_global_defaults_oracle.cc -o /tmp/rust-age-ce-gvar-defaults
+          /tmp/rust-age-ce-gvar-defaults tests/game_global_defaults_cases.txt > /tmp/rust-age-ce-gvar-defaults.txt
+          cargo run --quiet --bin game_global_defaults_probe > /tmp/rust-age-rust-gvar-defaults.txt
+          diff -u /tmp/rust-age-ce-gvar-defaults.txt /tmp/rust-age-rust-gvar-defaults.txt
       - name: Compare CE C++ and Rust game-global quest flag opcodes
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/game_global_oracle.cc -o /tmp/rust-age-ce-game-globals
