@@ -142,10 +142,11 @@ fn main() {
                 .and_then(|bytes| {
                     let header = MapHeader::decode(&bytes)?;
                     let squares = header.decode_squares(&bytes)?;
-                    Ok((header, squares))
+                    let scripts = squares.decode_scripts(&bytes)?;
+                    Ok((header, squares, scripts))
                 });
             match result {
-                Ok((header, squares)) => {
+                Ok((header, squares, (scripts, object_offset))) => {
                     println!(
                         "Fallout 1 map: {}",
                         String::from_utf8_lossy(header.name_bytes())
@@ -161,7 +162,9 @@ fn main() {
                             .count()
                     );
                     println!("Original scripts begin at byte {}", squares.scripts_offset);
-                    println!("Scripts/objects not yet decoded; game not playable.");
+                    println!("Serialized script records: {}", scripts.script_count());
+                    println!("Original objects begin at byte {object_offset}");
+                    println!("Script bytecode and objects are not decoded; game not playable.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
             }
