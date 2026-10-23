@@ -1,7 +1,9 @@
 //! Synthetic CE MAP lifecycle plan -> installed VM -> inert event metadata.
 //! These are invented script and object records; no game procedure executes.
+use rust_age::collision::ObjectKey;
 use rust_age::map::MapVariables;
-use rust_age::object_tables::ObjectTables;
+use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
+use rust_age::object_tables::{MapObject, ObjectTables};
 use rust_age::scene::{DetachedMapEventSessions, PreparedScriptEnvironment};
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
 use rust_age::script_data::{ScriptRecord, ScriptTables};
@@ -177,5 +179,107 @@ fn isolated_map_event_sessions_retain_fixed_parameter_and_reject_stale_actions()
     assert!(sessions.begin_planned(&environment, &stale).is_err());
     assert!(!sessions.get(1).unwrap().is_active());
     assert_eq!(sessions.get(1).unwrap().invocation().fixed_parameter(), 1);
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
+
+#[test]
+fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
+    let mut environment = environment();
+    let object = |id, sid, tile| MapObject {
+        record: ObjectRecord {
+            header: ObjectHeader {
+                id,
+                tile,
+                x: 0,
+                y: 0,
+                screen_x: 0,
+                screen_y: 0,
+                frame: 0,
+                rotation: 0,
+                fid: 1,
+                flags: 0,
+                elevation: 0,
+                pid: 0x0300_0001,
+                cid: -1,
+                light_distance: 0,
+                light_intensity: 0,
+                serialized_outline: 0,
+                script_id: sid,
+                field_80: 0,
+            },
+            inventory_length: 0,
+            inventory_capacity: 0,
+            update: ObjectUpdate::Generic {
+                flags: 0,
+                subtype_fields: vec![],
+            },
+        },
+        inventory: vec![],
+    };
+    let objects = ObjectTables {
+        elevations: [
+            vec![object(77, 17, 20099), object(77, -1, 20100)],
+            vec![],
+            vec![],
+        ],
+        total_objects: 2,
+        bytes_consumed: 0,
+    };
+    let scripts = ScriptTables {
+        categories: [
+            vec![ScriptRecord {
+                script_id: 17,
+                next: -1,
+                subtype: vec![],
+                flags: 0,
+                script_index: 0,
+                program_token: -1,
+                owner_id: 77,
+                local_variable_offset: -1,
+                local_variable_count: 0,
+                remaining: [0; 8],
+            }],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        ],
+        bytes_consumed: 0,
+    };
+    let queries = MapObjectReadBindings::from_tables(&objects).unwrap();
+    environment.script_owners = MapScriptOwners::from_map(&scripts, &objects, &queries).unwrap();
+    environment.object_queries = queries;
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut sessions = DetachedMapEventSessions::new();
+    sessions
+        .set_objs(
+            &environment,
+            1,
+            Some(ObjectKey {
+                elevation: 0,
+                ordinal: 1,
+            }),
+            None,
+        )
+        .unwrap();
+    let started = sessions.begin_planned(&environment, &plan).unwrap();
+    assert_eq!(started.source_handle(), 2);
+    assert_eq!(started.target_handle(), 1);
+    sessions.finish(1).unwrap();
+    let resumed = sessions
+        .begin_planned(
+            &environment,
+            &rust_age::script_lifecycle::PlannedMapAction {
+                external_parameter: None,
+                ..plan
+            },
+        )
+        .unwrap();
+    assert_eq!(resumed.source_handle(), 0);
+    assert_eq!(resumed.target_handle(), 1);
+    assert_eq!(resumed.invocation().fixed_parameter(), 1);
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
