@@ -104,6 +104,12 @@ jobs:
           /tmp/rust-age-ce-object-read tests/script_object_read_cases.txt > /tmp/rust-age-ce-object-read.txt
           cargo run --quiet --bin script_object_read_probe > /tmp/rust-age-rust-object-read.txt
           diff -u /tmp/rust-age-ce-object-read.txt /tmp/rust-age-rust-object-read.txt
+      - name: Compare CE C++ and Rust source-target object event queries
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_event_obj_oracle.cc -o /tmp/rust-age-ce-event-obj
+          /tmp/rust-age-ce-event-obj tests/script_event_obj_cases.txt > /tmp/rust-age-ce-event-obj.txt
+          cargo run --quiet --bin script_event_obj_probe > /tmp/rust-age-rust-event-obj.txt
+          diff -u /tmp/rust-age-ce-event-obj.txt /tmp/rust-age-rust-event-obj.txt
       - name: Compare CE C++ and Rust nonspatial self-obj binding
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_self_obj_oracle.cc -o /tmp/rust-age-ce-self-obj
