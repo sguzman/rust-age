@@ -1,0 +1,15 @@
+saved0 r 1 0 0
+saved1 r 1 1 0
+saved_write w 1 1 31
+saved_bad r 1 2 0
+saved_neg w 1 -1 4
+lazy_read r 2 0 0
+lazy_second r 2 1 0
+lazy_last r 2 2 0
+lazy_write w 2 1 -5
+lazy_beyond r 2 3 0
+system r 3 0 0
+system_write w 3 0 2
+empty r 4 0 0
+empty_write w 4 0 7
+not_found r 999 0 0
