@@ -40,20 +40,19 @@ impl StaticScene {
         let header = MapHeader::decode(bytes)?;
         let variables = header.decode_variables(bytes)?;
         let squares = header.decode_squares(bytes)?;
-        let (scripts, objects, bytes_consumed) =
-            squares.decode_objects_with(bytes, |pid| {
-                let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::NotFound,
-                        format!("missing original prototype {pid:#010X}"),
-                    )
-                })?;
-                Ok(match proto.body {
-                    PrototypeBody::Item { item_type, .. } => Some(item_type),
-                    PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
-                    _ => None,
-                })
+        let (scripts, objects, bytes_consumed) = squares.decode_objects_with(bytes, |pid| {
+            let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("missing original prototype {pid:#010X}"),
+                )
             })?;
+            Ok(match proto.body {
+                PrototypeBody::Item { item_type, .. } => Some(item_type),
+                PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
+                _ => None,
+            })
+        })?;
         let collision = CollisionIndex::from_map(&objects);
         Ok(Self {
             header,
@@ -99,10 +98,8 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "rust-age-scene-{}-{stamp}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("rust-age-scene-{}-{stamp}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
         fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
@@ -125,7 +122,10 @@ mod tests {
         assert_eq!(scene.objects.total_objects, 0);
         assert_eq!(scene.bytes_consumed, bytes.len());
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
-        assert_eq!(scene.route(&view, 20099, 20098, 0, None, true), Some(vec![1]));
+        assert_eq!(
+            scene.route(&view, 20099, 20098, 0, None, true),
+            Some(vec![1])
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }
