@@ -5,7 +5,9 @@
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_vm::{PreviewedDueProcedurePoll, PreviewedLocalActionVmFrame, ScriptValue, ScriptVm};
+use crate::script_vm::{
+    PreviewedDueProcedurePoll, PreviewedLocalActionVmFrame, ScriptValue, ScriptVm,
+};
 use std::collections::VecDeque;
 use std::io;
 
@@ -321,8 +323,11 @@ impl ScriptRuntime {
         let vm = self
             .vm(program_id)
             .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
-        let candidate =
-            vm.preview_local_action_frame_with_host_bounded(frame.procedure_index, max_steps, native)?;
+        let candidate = vm.preview_local_action_frame_with_host_bounded(
+            frame.procedure_index,
+            max_steps,
+            native,
+        )?;
         Ok(Some(PreviewedLocalAction {
             frame,
             returned: candidate.returned,
@@ -345,9 +350,15 @@ impl ScriptRuntime {
         let vm = self
             .vm(program_id)
             .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
-        let candidate =
-            vm.preview_local_action_frame_with_host_bounded(binding.procedure_index, max_steps, native)?;
-        Ok(Some(PreviewedBoundLocalActionVmFrame { binding, candidate }))
+        let candidate = vm.preview_local_action_frame_with_host_bounded(
+            binding.procedure_index,
+            max_steps,
+            native,
+        )?;
+        Ok(Some(PreviewedBoundLocalActionVmFrame {
+            binding,
+            candidate,
+        }))
     }
 
     /// Inspect a source-verified action's complete frame using core opcodes
