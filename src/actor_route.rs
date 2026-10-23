@@ -42,15 +42,17 @@ impl ActorRoute {
         let from = collision
             .tile_of(actor)
             .ok_or_else(|| invalid("actor is missing from CE collision state"))?;
-        Ok(make_path(view, from, destination, not_in_combat, true, |tile| {
-            collision.is_passable(view, tile, actor.elevation, Some(actor))
-        })
-        .map(|directions| Self {
-            key: actor,
-            current_tile: from,
-            directions,
-            cursor: 0,
-        }))
+        Ok(
+            make_path(view, from, destination, not_in_combat, true, |tile| {
+                collision.is_passable(view, tile, actor.elevation, Some(actor))
+            })
+            .map(|directions| Self {
+                key: actor,
+                current_tile: from,
+                directions,
+                cursor: 0,
+            }),
+        )
     }
 
     pub fn current_tile(&self) -> i32 {
@@ -182,7 +184,10 @@ mod tests {
                 rotation: 1
             }
         );
-        assert_eq!(route.advance(&view, &mut collision).unwrap(), ActorStep::Finished);
+        assert_eq!(
+            route.advance(&view, &mut collision).unwrap(),
+            ActorStep::Finished
+        );
         assert_eq!(collision.tile_of(actor), Some(20097));
         assert_eq!(collision.tile_of(obstacle), Some(20097));
         assert_eq!(route.remaining_steps(), 0);
