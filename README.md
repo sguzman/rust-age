@@ -6,7 +6,7 @@
 
 **Project color:** `#E05B4C` · `oklch(64% 0.17 29)` — [perceptual choice](docs/COLOR.md).
 
-> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder, palette tables, and original configuration/localized MSG readers. Only an offline indexed framebuffer and PPM sprite preview exist; no playable renderer, game loop or script interpreter exists.
+> **Not playable yet.** This foundation currently provides a basic installation-path checker, a DAT archive index and extractor, master/critter patch-overlay lookup, and an FRM sprite decoder, palette tables, and original configuration/localized MSG readers. The project has offline framebuffer/PPM and optional read-only SDL2 map/sprite previews, static MAP object/route diagnostics, and an isolated **partial**, bounded interpreter with synthetic differential tests. There is no playable game loop, engine-connected script interpreter, or verified gameplay parity.
 
 ## Source and operating model
 
@@ -70,7 +70,7 @@ Choose a real FRM path from your own game installation. Use Left/Right to switch
 
 ## Progress and issues
 
-[📍 Roadmap](docs/ROADMAP.md) · [🔢 Progress ledger](docs/progress.json) · [🧩 C++→Rust port matrix](docs/PORT_MATRIX.md) · [📋 GitHub tracking queue](docs/ISSUES.md).
+[🧠 Interpreter status](docs/INTERPRETER.md) · [📍 Roadmap](docs/ROADMAP.md) · [🔢 Progress ledger](docs/progress.json) · [🧩 C++→Rust port matrix](docs/PORT_MATRIX.md) · [📋 GitHub tracking queue](docs/ISSUES.md).
 
 Milestone/phase progress is aggregated from atomic tasks. Completed tasks disappear from progress reports, but their evidence remains in the ledger. No percentage is a claim that the game is playable.
 

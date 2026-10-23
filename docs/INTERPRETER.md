@@ -1,0 +1,18 @@
+# 🧠 Fallout 1 CE interpreter integration status
+
+**Non-playable, source-level subset.** The reference is the pinned [Fallout 1 CE interpreter](https://github.com/alexbatalov/fallout1-ce/blob/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b/src/int/intrpret.cc) and [script engine](https://github.com/alexbatalov/fallout1-ce/blob/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b/src/game/scripts.cc), under the [original derivative license](../LICENSE). No commercial game scripts or data are committed.
+
+## Implemented and verified slices
+
+- `src/script_program.rs` parses the 42-byte .INT preamble, six-field procedure records, encoded identifier and static-string tables, and named procedure lookup. Ordinary CE `interpretFindProcedure` includes index 0; opcode `0x8028` searches from index 1 and excludes `main`. The fixed 24 built-in action slots are mapped by `src/script_procedures.rs`.
+- `src/script_binding.rs` resolves serialized MAP script records through `scripts.lst` to optional installed .INT program metadata, caching repeated indices and retaining missing-program diagnostics. `--inspect-map-procedures` and `--inspect-script-index` are **read-only** commands, never game script execution.
+- `src/script_vm.rs` supports a bounded subset of CE numeric, stack, branch, local-frame and procedure operations. Original .INT program records remain immutable; a separate runtime table stores procedure flags, timed calls, condition offsets and cancellation.
+- CE `op_call_at` consumes the index before the delay and stores **milliseconds**; `op_call_condition` stores a bytecode offset. `doEvents` checks the conditional flag before timed flags. Timed triggers compare their signed stored milliseconds **as unsigned** and require `event_time < now`, not equality.
+- `take_due_timed_procedures` selects only timed events. `take_due_procedures_with` also asks a supplied host condition evaluator for `Some(true)`, `Some(false)`, or `None` (evaluation did not complete). A successful true/elapsed event clears its *runtime* flags and yields its procedure index; it does **not** invoke the procedure, change world state or call Fallout's engine. Host errors leave runtime flags unchanged in this Rust subset (explicit safety guarantee, not asserted upstream behavior).
+- CI checks Rust tests, lint/format and independent C++ versus Rust *adapted* reference decisions over invented numeric, procedure lookup and scheduler/polling cases. These are not a full compiled upstream CE executable oracle, and do not prove real-game parity.
+
+## Remaining gates
+
+Actual CE conditional expression execution with interpreter stack/flag restoration; imported/exported procedures and external variables; game-specific opcodes and callbacks; schedule-to-engine dispatch; persistent script VM and map/quest state; verified interaction with original legally supplied Fallout 1 content. Full playable Linux compatibility remains a later milestone, and Fallout 2 is out of scope until it passes.
+
+For task percentages and acceptance evidence, use [the machine-readable progress ledger](progress.json) rather than treating this document as a gameplay-completion claim.
