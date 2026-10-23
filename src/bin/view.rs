@@ -88,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         texture
             .with_lock(None, |pixels, pitch| {
-                for (y, src) in indexed.indices().chunks_exact(WIDTH).enumerate() {
+                for (y, src) in indexed.indices().as_chunks::<WIDTH>().0.iter().enumerate() {
                     let row = &mut pixels[y * pitch..y * pitch + WIDTH * 3];
                     for (x, index) in src.iter().enumerate() {
                         let offset = x * 3;
