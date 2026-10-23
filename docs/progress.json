@@ -268,8 +268,8 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 28,
-              "evidence": "Bounded typed ScriptVm with numeric/branch operations, separate data/return stack, frame/global local fetch/store, local CALL/POP_RETURN and argument checks; independent C++ subset oracle; core CI tested. External/imported procedures, VM scheduler and original save state pending."
+              "progress": 32,
+              "evidence": "Bounded CE typed ScriptVm with numeric/branch operations, data/return stacks, local/global frames, local calls, named procedure lookup (0x8028), and runtime-only CALL_AT/CALL_WHEN/CANCEL/CANCEL_ALL procedure flags, timestamps and conditions. Synthetic Rust tests and scheduling parity oracle pass core CI; external procedures, actual script callbacks and persistent VM state pending."
             },
             {
               "id": "T603",
@@ -281,8 +281,8 @@
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 6,
-              "evidence": "Independent C++ adapted numeric CE subset oracle and Rust execution probe for 16 invented bytecode fixtures, byte-for-byte compared by CI. No compiled CE interpreter golden test or original game scripts yet."
+              "progress": 9,
+              "evidence": "CI compares independent adapted C++ and Rust outputs for invented numeric interpreter bytecode, named procedure lookup (including case-folding/duplicates/main exclusion), and nine timed/conditional/cancel metadata cases. No real compiled CE interpreter or original game script golden tests yet."
             }
           ]
         },
