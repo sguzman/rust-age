@@ -16,6 +16,7 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
+use crate::game_globals::GameGlobalState;
 use crate::script_locals::MapScriptLocals;
 use std::io;
 
@@ -29,6 +30,16 @@ pub struct StaticScene {
     pub collision: CollisionIndex,
     /// End of the serialized map object's section, for format inspection.
     pub bytes_consumed: usize,
+}
+
+/// Owned, unstarted CE script environment: per-record VMs and MAP-local
+/// slots are separate from game-wide GAME_GLOBAL_VARS. A missing installed
+/// vault13.gam remains None; no quest default is invented.
+#[derive(Debug, Clone)]
+pub struct PreparedScriptEnvironment {
+    pub scripts: BoundScriptRuntime,
+    pub map_locals: MapScriptLocals,
+    pub game_globals: Option<GameGlobalState>,
 }
 
 impl StaticScene {
@@ -106,6 +117,23 @@ impl StaticScene {
         Ok((scripts, locals))
     }
 
+    /// Prepare installed MAP scripts, their mutable MAP slots and separate
+    /// game-wide quest defaults as owned Rust state. This is a read/decode
+    /// boundary only: no procedure, native opcode, timer or world update
+    /// is executed by this function.
+    pub fn unstarted_script_environment(
+        &self,
+        assets: &mut GameAssets,
+    ) -> io::Result<PreparedScriptEnvironment> {
+        let (scripts, map_locals) = self.unstarted_script_state(assets)?;
+        let game_globals = assets.game_global_defaults()?;
+        Ok(PreparedScriptEnvironment {
+            scripts,
+            map_locals,
+            game_globals,
+        })
+    }
+
     /// CE-style numeric route through the initial static object collision.
     /// The caller supplies a viewport and the actor's current identity.
     /// Door scripts and moving blockers are not handled here.
@@ -144,6 +172,8 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
         fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
+        fs::create_dir_all(root.join("data")).unwrap();
+        fs::write(root.join("data").join("VAULT13.GAM"), b"GAME_GLOBAL_VARS:\nA=7\nB=-13\n").unwrap();
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&19_i32.to_be_bytes());
         bytes.extend_from_slice(b"TEST.MAP\0\0\0\0\0\0\0\0");
@@ -168,6 +198,14 @@ mod tests {
         assert_eq!(locals.globals(), [12, -8]);
         assert_eq!(locals.locals(), [99]);
         assert_eq!(scene.variables.locals, [99]); // no mutation of MAP
+        let environment = scene.unstarted_script_environment(&mut assets).unwrap();
+        assert!(environment.scripts.runtime.is_empty());
+        assert_eq!(environment.map_locals.globals(), [12, -8]);
+        assert_eq!(environment.map_locals.locals(), [99]);
+        assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
+        assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
+        fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
+        assert!(scene.unstarted_script_environment(&mut assets).unwrap().game_globals.is_none());
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
         assert_eq!(
             scene.route(&view, 20099, 20098, 0, None, true),
