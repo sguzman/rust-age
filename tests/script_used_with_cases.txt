@@ -1,0 +1,12 @@
+normal 42 17
+null 0 17
+pid_zero 42 0
+pid_negative 42 -5
+pid_min 42 -2147483648
+pid_max 42 2147483647
+null_pid_zero 0 0
+null_pid_negative 0 -13
+item_pid 42 1
+critter_pid 42 16777217
+wall_pid 42 50331649
+high_pid 42 83886081
