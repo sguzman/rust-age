@@ -27,7 +27,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() != 4 {
         eprintln!("Usage: rust-age-view /path/to/Fallout <master|critter> <FRM path>");
-        eprintln!("Controls: Left/Right = frame, Up/Down = direction, Space = play/pause, Escape = quit.");
+        eprintln!(
+            "Controls: Left/Right = frame, Up/Down = direction, Space = play/pause, Escape = quit."
+        );
         std::process::exit(2);
     }
     let bank = match arguments[2].as_str() {
@@ -84,7 +86,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let frames = &frm.frames[direction];
         if playing {
-            frame_index = (base_frame + timeline.frame_at(animation_origin.elapsed())) % frames.len();
+            frame_index =
+                (base_frame + timeline.frame_at(animation_origin.elapsed())) % frames.len();
         } else {
             frame_index %= frames.len();
         }
@@ -136,7 +139,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     animation_origin = Instant::now();
                     playing = true;
                 }
-            },
+            }
             Some(Event::KeyDown {
                 keycode: Some(Keycode::Right),
                 repeat: false,
@@ -144,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }) => {
                 playing = false;
                 frame_index = (frame_index + 1) % frames.len();
-            },
+            }
             Some(Event::KeyDown {
                 keycode: Some(Keycode::Left),
                 repeat: false,
@@ -152,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }) => {
                 playing = false;
                 frame_index = (frame_index + frames.len() - 1) % frames.len();
-            },
+            }
             Some(Event::KeyDown {
                 keycode: Some(Keycode::Up),
                 repeat: false,
