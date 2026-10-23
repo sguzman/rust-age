@@ -164,3 +164,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Bounded CE numeric and branch opcode coverage
 
 The isolated `ScriptVm` now also implements numeric comparisons (EQ, NE, LE, GE, LT, GT), integer MOD, boolean AND/OR/NOT, integer bitwise AND/OR/XOR/NOT, and the original stack-consumption pattern of IF/WHILE. For static tests the interpreter retains CE integer operand order and distinguishes raw-bit NOT from `ProgramValue::isEmpty` branch conditions. String coercion, floating bitwise coercion, external pointer logic and full procedure call stacks remain explicitly unsupported.
+
+## Synthetic CE numeric interpreter differential suite
+
+`tests/int_numeric_cases.txt` holds invented short CE-style opcodes (no game data). `tests/int_numeric_oracle.cc` independently implements the pinned C++ numeric/stack semantics; `src/bin/int_numeric_probe.rs` executes the same cases with Rust `ScriptVm`. CI compares their typed stack results and rejects errors, including integer overflow promotion, negative MOD, boolean flow and conditional branches. This is **not** a compiled original CE interpreter oracle or proof that all game scripts execute; it is a differential regression fixture for the supported numeric subset.

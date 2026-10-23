@@ -32,6 +32,12 @@ jobs:
           /tmp/rust-age-ce-path > /tmp/rust-age-ce-path.txt
           cargo run --quiet --bin path_probe > /tmp/rust-age-rust-path.txt
           diff -u /tmp/rust-age-ce-path.txt /tmp/rust-age-rust-path.txt
+      - name: Compare CE C++ and Rust numeric interpreter decisions
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/int_numeric_oracle.cc -o /tmp/rust-age-ce-int
+          /tmp/rust-age-ce-int tests/int_numeric_cases.txt > /tmp/rust-age-ce-int.txt
+          cargo run --quiet --bin int_numeric_probe > /tmp/rust-age-rust-int.txt
+          diff -u /tmp/rust-age-ce-int.txt /tmp/rust-age-rust-int.txt
       - run: python3 tools/render_roadmap.py --check
       - run: python3 tools/render_port_matrix.py --check
 
