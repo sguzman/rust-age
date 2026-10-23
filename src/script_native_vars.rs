@@ -12,6 +12,10 @@ use crate::script_clock::{
     GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
 };
 use crate::script_locals::MapScriptLocals;
+use crate::script_object_read::{
+    apply_object_read_opcode, ScriptObjectSnapshot, ELEVATION_OPCODE, OBJ_ART_FID_OPCODE,
+    OBJ_PID_OPCODE, TILE_NUM_OPCODE,
+};
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
 
@@ -291,10 +295,18 @@ pub struct ScriptClockContext {
     pub last_visit_ticks: Option<i32>,
 }
 
-/// Same isolated, bounded native subset, additionally accepting the original
-/// serialized MAP's lastVisitTime. Supplying None refuses the MAP-dependent
-/// op_days_since_visited; Some(0) explicitly represents no previous visit.
-/// This does not inspect or mutate the live world or schedule a MAP event.
+/// Read-only native context for caller-owned game-clock/MAP and object
+/// snapshots. None rejects all object-query opcodes, even a null-pointer
+/// operand; Some(&[]) explicitly permits their original null fallbacks.
+#[derive(Debug, Clone, Copy)]
+pub struct ScriptNativeSnapshot<'a> {
+    pub clock: ScriptClockContext,
+    pub objects: Option<&'a [ScriptObjectSnapshot]>,
+}
+
+/// Existing detached script-state/clock host. It continues to reject all
+/// object-query natives unless a caller chooses the stronger, explicit
+/// run_invocation_with_native_snapshot_bounded entry point.
 pub fn run_invocation_with_clock_and_visit_bounded(
     vm: &mut ScriptVm,
     instance_id: u64,
@@ -302,6 +314,33 @@ pub fn run_invocation_with_clock_and_visit_bounded(
     globals: &mut GameGlobalState,
     invocation: &mut ScriptInvocationState,
     context: ScriptClockContext,
+    max_steps: usize,
+) -> io::Result<usize> {
+    run_invocation_with_native_snapshot_bounded(
+        vm,
+        instance_id,
+        locals,
+        globals,
+        invocation,
+        ScriptNativeSnapshot {
+            clock: context,
+            objects: None,
+        },
+        max_steps,
+    )
+}
+
+/// Execute bounded synthetic INT traces combining script state, fixed
+/// clock/MAP visit reads and four immutable object properties. A caller
+/// explicitly supplies each object snapshot; nothing touches engine memory,
+/// dispatches a script event or mutates a game map.
+pub fn run_invocation_with_native_snapshot_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    invocation: &mut ScriptInvocationState,
+    snapshot: ScriptNativeSnapshot<'_>,
     max_steps: usize,
 ) -> io::Result<usize> {
     vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
@@ -320,15 +359,23 @@ pub fn run_invocation_with_clock_and_visit_bounded(
         | GAME_TICKS_OPCODE
         | GAME_TIME_HOUR_OPCODE
         | GET_MONTH_OPCODE
-        | GET_DAY_OPCODE => context.clock.apply_opcode(opcode, stack),
-        DAYS_SINCE_VISITED_OPCODE => context.clock.apply_visit_opcode(
-            context
+        | GET_DAY_OPCODE => snapshot.clock.clock.apply_opcode(opcode, stack),
+        DAYS_SINCE_VISITED_OPCODE => snapshot.clock.clock.apply_visit_opcode(
+            snapshot
+                .clock
                 .last_visit_ticks
                 .ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
             opcode,
             stack,
         ),
-        _ => Err(invalid("unrecognized CE script-state or game-clock opcode")),
+        object_opcode
+            @ (TILE_NUM_OPCODE | ELEVATION_OPCODE | OBJ_PID_OPCODE | OBJ_ART_FID_OPCODE) => {
+            let objects = snapshot
+                .objects
+                .ok_or_else(|| invalid("CE object snapshots not provided"))?;
+            apply_object_read_opcode(objects, object_opcode, stack)
+        }
+        _ => Err(invalid("unrecognized CE script-state, clock or object opcode")),
     })
 }
 
@@ -337,6 +384,7 @@ mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
+        run_invocation_with_native_snapshot_bounded, ScriptNativeSnapshot,
         run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
         ScriptInvocationState, FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
         SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
@@ -349,6 +397,7 @@ mod tests {
         GAME_TIME_IN_SECONDS_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_list::ScriptRunInfo;
+    use crate::script_object_read::{ScriptObjectSnapshot, TILE_NUM_OPCODE};
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
     use crate::script_vm::{ScriptValue, ScriptVm};
@@ -752,6 +801,69 @@ mod tests {
         assert_eq!(stack, [ScriptValue::Pointer(-20)]);
         assert_eq!(state.range(2).unwrap().offset, Some(2));
         assert_eq!(state.locals(), [10, 11, 0, 0, 0]);
+    }
+
+    #[test]
+    fn explicit_object_host_combines_game_globals_and_read_only_tile_queries() {
+        let mut code = Vec::new();
+        op(&mut code, 0xE001);
+        code.extend_from_slice(&77_i32.to_be_bytes());
+        op(&mut code, TILE_NUM_OPCODE);
+        int(&mut code, 0);
+        op(&mut code, 0x80C5);
+        op(&mut code, 0x8039);
+        op(&mut code, 0x8011);
+
+        let mut vm = program(&code);
+        let mut locals = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[7]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        let objects = [ScriptObjectSnapshot {
+            handle: 77,
+            tile: 20_100,
+            elevation: 2,
+            pid: 17,
+            fid: 123,
+        }];
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: None,
+        };
+        assert_eq!(
+            run_invocation_with_native_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                &mut invocation,
+                ScriptNativeSnapshot {
+                    clock,
+                    objects: Some(&objects),
+                },
+                9,
+            )
+            .unwrap(),
+            6
+        );
+        assert!(vm.halted());
+        assert_eq!(vm.stack(), [ScriptValue::Int(20_107)]);
+        assert_eq!(globals.values(), [7]);
+
+        // The prior clock-only host must not silently authorize object
+        // natives without an explicit immutable object snapshot.
+        let mut vm = program(&code);
+        assert!(run_invocation_with_clock_and_visit_bounded(
+            &mut vm,
+            1,
+            &mut locals,
+            &mut globals,
+            &mut invocation,
+            clock,
+            9,
+        )
+        .is_err());
+        assert_eq!(vm.pc(), 6);
+        assert_eq!(vm.stack(), [ScriptValue::Pointer(77)]);
     }
 
     #[test]
