@@ -30,6 +30,7 @@ pub mod scene;
 pub mod script_binding;
 pub mod script_data;
 pub mod script_lifecycle;
+pub mod script_locals;
 pub mod script_list;
 pub mod script_procedures;
 pub mod script_program;
