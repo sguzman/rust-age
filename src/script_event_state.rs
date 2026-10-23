@@ -183,12 +183,20 @@ fn check_handle(objects: &MapObjectReadBindings, handle: i32) -> io::Result<()> 
 mod tests {
     use super::DetachedScriptEvent;
     use crate::collision::ObjectKey;
+    use crate::game_globals::GameGlobalState;
+    use crate::map::MapVariables;
+    use crate::script_binding::BoundScriptRuntime;
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
     use crate::script_clock::ScriptGameClock;
-    use crate::script_native_vars::ScriptClockContext;
+    use crate::script_native_vars::{
+        run_invocation_with_event_snapshot_bounded, ScriptClockContext,
+    };
     use crate::script_object_binding::MapObjectReadBindings;
     use crate::script_owner_binding::ScriptOwnerResolution;
+    use crate::script_program::ScriptProgram;
+    use crate::script_runtime::ScriptRuntime;
+    use crate::script_vm::{ScriptValue, ScriptVm};
 
     fn keys() -> MapObjectReadBindings {
         let object = |id, sid, tile| MapObject {
@@ -282,6 +290,71 @@ mod tests {
         assert_eq!(event.snapshot(&objects, clock()).unwrap().source, Some(0));
         assert_eq!(event.snapshot(&objects, clock()).unwrap().target, Some(1));
         assert_eq!(event.invocation().fixed_parameter(), 19);
+    }
+
+    #[test]
+    fn detached_event_metadata_feeds_bounded_int_and_preserves_cleanup_rules() {
+        let objects = keys();
+        let mut event = DetachedScriptEvent::new(owner());
+        event.set_objs(&objects, Some(key(1)), None).unwrap();
+        event.begin_action(6, Some(19), &objects).unwrap();
+        let snapshot = event.snapshot(&objects, clock()).unwrap();
+
+        // Native self_obj, source_obj, game action and overrides share one
+        // explicitly bounded INT trace; the caller controls the lifecycle.
+        let ops = [
+            0x80BD_u16, // source_obj
+            0x80D4,     // tile_num
+            0x80BC,     // self_obj
+            0x8100,     // obj_pid
+            0x8039,     // add
+            0x80C7,     // script_action
+            0x8039,     // add
+            0x80B9,     // script_overrides
+            0x8011,     // stop
+        ];
+        let mut program = vec![0_u8; 42];
+        for (index, opcode) in ops.iter().enumerate() {
+            program[index * 2..index * 2 + 2].copy_from_slice(&opcode.to_be_bytes());
+        }
+        program.extend_from_slice(&[0_u8; 12]);
+        let mut vm = ScriptVm::new(ScriptProgram::decode(&program).unwrap());
+        let state = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![],
+        };
+        let mut locals = state
+            .script_local_state(&MapVariables {
+                globals: vec![],
+                locals: vec![],
+            })
+            .unwrap();
+        let mut globals = GameGlobalState::from_initial_values(&[]).unwrap();
+        assert_eq!(
+            run_invocation_with_event_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                event.active_invocation_mut().unwrap(),
+                snapshot,
+                12,
+            )
+            .unwrap(),
+            9
+        );
+        assert!(vm.halted());
+        assert_eq!(vm.stack(), [ScriptValue::Int(20100 + 0x0300_0001 + 6)]);
+        assert!(event.invocation().overrides());
+        event.finish_action().unwrap();
+        assert_eq!(event.source_handle(), 0);
+        assert_eq!(event.target_handle(), 1);
+        event.begin_action(23, None, &objects).unwrap();
+        assert!(!event.invocation().overrides()); // CE resets for next action
+        assert_eq!(event.invocation().fixed_parameter(), 19);
+        let second = event.snapshot(&objects, clock()).unwrap();
+        assert_eq!(second.source, Some(0));
+        assert_eq!(second.target, Some(1));
     }
 
     #[test]
