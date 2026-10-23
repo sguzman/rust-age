@@ -176,11 +176,7 @@ impl EventQueue {
     /// when a handler's integer return value is nonzero. The supplied time
     /// is sampled only once; a handler must not advance time implicitly.
     /// To enqueue from a handler, use pop_due and dispatch externally.
-    pub fn process_due(
-        &mut self,
-        now: i32,
-        mut handler: impl FnMut(&QueueEvent) -> i32,
-    ) -> i32 {
+    pub fn process_due(&mut self, now: i32, mut handler: impl FnMut(&QueueEvent) -> i32) -> i32 {
         while let Some(event) = self.pop_due(now) {
             let result = handler(&event);
             if result != 0 {
@@ -207,10 +203,18 @@ mod tests {
     fn ce_timestamps_are_ascending_and_equal_time_events_stay_fifo() {
         let mut queue = EventQueue::new();
         assert_eq!(queue.next_time(), 0);
-        queue.add(100, 10, EventType::Script, actor(1), vec![1]).unwrap();
-        queue.add(100, 5, EventType::Poison, actor(2), vec![2]).unwrap();
-        queue.add(100, 10, EventType::Drug, actor(3), vec![3]).unwrap();
-        queue.add(100, -5, EventType::Sneak, actor(4), vec![4]).unwrap();
+        queue
+            .add(100, 10, EventType::Script, actor(1), vec![1])
+            .unwrap();
+        queue
+            .add(100, 5, EventType::Poison, actor(2), vec![2])
+            .unwrap();
+        queue
+            .add(100, 10, EventType::Drug, actor(3), vec![3])
+            .unwrap();
+        queue
+            .add(100, -5, EventType::Sneak, actor(4), vec![4])
+            .unwrap();
         assert_eq!(queue.len(), 4);
         assert_eq!(queue.next_time(), 95);
         assert!(queue.pop_due(94).is_none());
@@ -227,13 +231,22 @@ mod tests {
     fn ce_handler_nonzero_stops_due_processing_and_preserves_rest() {
         let mut queue = EventQueue::new();
         for number in 0..3 {
-            queue.add(0, 0, EventType::Script, actor(number), vec![number as u8]).unwrap();
+            queue
+                .add(0, 0, EventType::Script, actor(number), vec![number as u8])
+                .unwrap();
         }
         let mut processed = Vec::new();
-        assert_eq!(queue.process_due(0, |event| {
-            processed.push(event.payload[0]);
-            if processed.len() == 2 { 1 } else { 0 }
-        }), 1);
+        assert_eq!(
+            queue.process_due(0, |event| {
+                processed.push(event.payload[0]);
+                if processed.len() == 2 {
+                    1
+                } else {
+                    0
+                }
+            }),
+            1
+        );
         assert_eq!(processed, [0, 1]);
         assert_eq!(queue.len(), 1);
         assert_eq!(queue.pop_due(0).unwrap().payload, vec![2]);
@@ -242,7 +255,9 @@ mod tests {
     #[test]
     fn removal_by_owner_type_and_ce_map_leave_flags() {
         let mut queue = EventQueue::new();
-        queue.add(20, 1, EventType::Poison, actor(1), vec![]).unwrap();
+        queue
+            .add(20, 1, EventType::Poison, actor(1), vec![])
+            .unwrap();
         queue.add(20, 1, EventType::Drug, actor(1), vec![]).unwrap();
         queue.add(20, 2, EventType::Drug, actor(2), vec![]).unwrap();
         queue.add(20, 3, EventType::Drug, None, vec![]).unwrap();
@@ -250,7 +265,10 @@ mod tests {
         assert_eq!(queue.remove_owner_type(actor(1), EventType::Drug), 1);
         assert!(!queue.find(actor(1), EventType::Drug));
         assert_eq!(queue.remove_owner(actor(1)), 1);
-        assert_eq!(queue.clear_type_where(EventType::Drug, |event| event.owner == actor(2)), 1);
+        assert_eq!(
+            queue.clear_type_where(EventType::Drug, |event| event.owner == actor(2)),
+            1
+        );
         assert_eq!(queue.len(), 1);
         assert_eq!(queue.remove_owner(None), 1);
         assert!(!EventType::Poison.participates_in_map_cleanup());
@@ -264,6 +282,8 @@ mod tests {
         assert_eq!(EventType::from_ce_index(12), Some(EventType::MapUpdate));
         assert_eq!(EventType::from_ce_index(13), None);
         assert_eq!(EventType::from_ce_index(-1), None);
-        assert!(EventQueue::new().add(i32::MAX, 1, EventType::Script, None, vec![]).is_err());
+        assert!(EventQueue::new()
+            .add(i32::MAX, 1, EventType::Script, None, vec![])
+            .is_err());
     }
 }
