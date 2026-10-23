@@ -116,3 +116,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Original object collision and multhex semantics (pure index)
 
 `src/collision.rs` ports CE `obj_blocking_at` rules: only critter/scenery/wall FIDs block; hidden and `OBJECT_NO_BLOCK` actors are ignored; direct-tile occupants are checked before neighboring `OBJECT_MULTIHEX` occupants; current actor identity is excluded by per-elevation ordinal. The index is constructed from deserialized top-level MAP records, not nested inventory. A synthetic route test composes this index with the pure CE pathfinder. Door usability, runtime actor state, dynamic movement and collision updates remain pending.
+
+## Differential CE C++ path oracle
+
+`tests/path_oracle.cc` isolates the pinned CE `make_path_func` search under synthetic tile/blocker cases and `src/bin/path_probe.rs` emits the corresponding Rust sequences. CI compiles the C++ oracle and performs a byte-for-byte comparison to prevent subtle changes to tie ordering, turning cost, edge handling or route reconstruction. This verifies only the fixed numeric cases, not runtime collision, doors or gameplay motion.
