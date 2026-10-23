@@ -119,7 +119,9 @@ impl MapScriptLocals {
             || self.pointers.len() != self.locals.len()
             || baseline.pointers.len() != baseline.locals.len()
         {
-            return Err(invalid("CE sandbox snapshots have incompatible MAP layouts"));
+            return Err(invalid(
+                "CE sandbox snapshots have incompatible MAP layouts",
+            ));
         }
         for (id, base) in &baseline.instances {
             let now = self
@@ -151,7 +153,9 @@ impl MapScriptLocals {
             .instances
             .iter()
             .filter(|(id, before)| {
-                self.instances.get(id).is_some_and(|after| after.offset != before.offset)
+                self.instances
+                    .get(id)
+                    .is_some_and(|after| after.offset != before.offset)
             })
             .count();
         Ok(MapScriptChangeSummary {
