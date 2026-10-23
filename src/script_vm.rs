@@ -224,6 +224,41 @@ impl ScriptVm {
         ready
     }
 
+    /// Poll both branches of pinned CE doEvents without executing a game
+    /// procedure. A conditional flag always takes priority, even when the
+    /// procedure is also timed and its scheduled time has elapsed.
+    ///
+    /// The caller evaluates each condition at its original INT byte offset.
+    /// Some(true) means a nonzero condition result; Some(false) keeps the
+    /// procedure armed; None means condition evaluation did not complete
+    /// (CE PROGRAM_FLAG_0x04), so it must remain armed. No callbacks run for
+    /// purely timed procedures. All flag updates are applied only after
+    /// successful evaluation of the whole poll, preventing partial state
+    /// changes if the host reports an error. Actual script execution and
+    /// CE's interpreter stack side effects are not implemented here.
+    pub fn take_due_procedures_with(
+        &mut self,
+        now_millis: u32,
+        mut evaluate_condition: impl FnMut(usize, i32) -> io::Result<Option<bool>>,
+    ) -> io::Result<Vec<usize>> {
+        let mut ready = Vec::new();
+        for (index, procedure) in self.runtime_procedures.iter().enumerate() {
+            if procedure.flags & 0x02 != 0 {
+                if evaluate_condition(index, procedure.condition_offset)? == Some(true) {
+                    ready.push(index);
+                }
+            } else if procedure.flags & 0x01 != 0
+                && (procedure.event_time as u32) < now_millis
+            {
+                ready.push(index);
+            }
+        }
+        for index in &ready {
+            self.runtime_procedures[*index].flags = 0;
+        }
+        Ok(ready)
+    }
+
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
         let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
         self.runtime_procedures
@@ -1065,6 +1100,75 @@ mod tests {
         assert_eq!(vm.runtime_procedures()[0].event_time, -1000);
         assert!(vm.take_due_timed_procedures(10_000).is_empty());
         assert_eq!(vm.take_due_timed_procedures(u32::MAX), [0]);
+    }
+
+    #[test]
+    fn ce_conditional_poll_has_priority_and_preserves_false_conditions() {
+        let mut vm = ScriptVm::new(named_procedure_fixture(&[], b"condition"));
+        vm.runtime_procedures[0].flags = 0x03; // conditional and timed
+        vm.runtime_procedures[0].event_time = 10;
+        vm.runtime_procedures[0].condition_offset = 77;
+        vm.runtime_procedures[1].flags = 0x09; // exported and timed
+        vm.runtime_procedures[1].event_time = 99;
+        let original = vm.program.procedures().to_vec();
+        let mut called = Vec::new();
+        let ready = vm
+            .take_due_procedures_with(100, |index, offset| {
+                called.push((index, offset));
+                Ok(Some(false))
+            })
+            .unwrap();
+        assert_eq!(called, [(0, 77)]);
+        assert_eq!(ready, [1]);
+        assert_eq!(vm.runtime_procedures[0].flags, 0x03);
+        assert_eq!(vm.runtime_procedures[1].flags, 0);
+        assert_eq!(vm.runtime_procedures[1].event_time, 99);
+        assert_eq!(vm.program.procedures(), original);
+
+        assert!(vm
+            .take_due_procedures_with(u32::MAX, |_, _| Ok(None))
+            .unwrap()
+            .is_empty());
+        assert_eq!(vm.runtime_procedures[0].flags, 0x03);
+        assert_eq!(
+            vm.take_due_procedures_with(0, |_, offset| {
+                assert_eq!(offset, 77);
+                Ok(Some(true))
+            })
+            .unwrap(),
+            [0]
+        );
+        assert_eq!(vm.runtime_procedures[0].flags, 0);
+        assert_eq!(vm.runtime_procedures[0].condition_offset, 77);
+        assert!(vm
+            .take_due_procedures_with(u32::MAX, |_, _| Ok(Some(true)))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn ce_conditional_host_error_does_not_partially_consume_events() {
+        let mut vm = ScriptVm::new(named_procedure_fixture(&[], b"unused"));
+        vm.runtime_procedures[0].flags = 0x01;
+        vm.runtime_procedures[0].event_time = 1;
+        vm.runtime_procedures[1].flags = 0x02;
+        vm.runtime_procedures[1].condition_offset = 24;
+        assert!(vm
+            .take_due_procedures_with(100, |_, _| {
+                Err(std::io::Error::other("synthetic condition evaluator failed"))
+            })
+            .is_err());
+        assert_eq!(vm.runtime_procedures[0].flags, 0x01);
+        assert_eq!(vm.runtime_procedures[1].flags, 0x02);
+        assert_eq!(
+            vm.take_due_procedures_with(100, |index, offset| {
+                assert_eq!((index, offset), (1, 24));
+                Ok(Some(true))
+            })
+            .unwrap(),
+            [0, 1]
+        );
+        assert!(vm.runtime_procedures.iter().all(|entry| entry.flags == 0));
     }
 
     #[test]
