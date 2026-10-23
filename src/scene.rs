@@ -18,6 +18,7 @@ use crate::script_binding::{
 };
 use crate::script_data::ScriptTables;
 use crate::script_locals::MapScriptLocals;
+use crate::script_object_binding::MapObjectReadBindings;
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -40,6 +41,8 @@ pub struct PreparedScriptEnvironment {
     pub scripts: BoundScriptRuntime,
     pub map_locals: MapScriptLocals,
     pub game_globals: Option<GameGlobalState>,
+    /// Inert decoded object-query values with snapshot-local handles.
+    pub object_queries: MapObjectReadBindings,
     /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
     /// Zero indicates no recorded visit; no gameplay time is advanced.
     pub map_last_visit_ticks: i32,
@@ -82,6 +85,12 @@ impl StaticScene {
             collision,
             bytes_consumed,
         })
+    }
+
+    /// Construct immutable native object reads from top-level MAP objects.
+    /// Serialized object IDs may repeat; handles use ObjectKey identity.
+    pub fn object_query_snapshot(&self) -> io::Result<MapObjectReadBindings> {
+        MapObjectReadBindings::from_tables(&self.objects)
     }
 
     /// Read-only association between each serialized MAP script and its
@@ -134,6 +143,7 @@ impl StaticScene {
             scripts,
             map_locals,
             game_globals,
+            object_queries: self.object_query_snapshot()?,
             map_last_visit_ticks: self.header.last_visit_time,
         })
     }
@@ -208,6 +218,7 @@ mod tests {
         assert_eq!(scene.variables.locals, [99]); // no mutation of MAP
         let environment = scene.unstarted_script_environment(&mut assets).unwrap();
         assert!(environment.scripts.runtime.is_empty());
+        assert!(environment.object_queries.snapshots().is_empty());
         assert_eq!(environment.map_locals.globals(), [12, -8]);
         assert_eq!(environment.map_locals.locals(), [99]);
         assert_eq!(

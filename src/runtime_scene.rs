@@ -7,6 +7,7 @@ use crate::actor_route::{ActorRoute, ActorStep};
 use crate::collision::ObjectKey;
 use crate::hex::HexViewport;
 use crate::scene::StaticScene;
+use crate::script_object_binding::MapObjectReadBindings;
 use std::io;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -27,6 +28,12 @@ impl RuntimeScene {
     /// existing read-only object preview without a separate sprite model.
     pub fn snapshot(&self) -> &StaticScene {
         &self.snapshot
+    }
+
+    /// Refresh caller-owned native object data after route/movement updates.
+    /// Previously returned snapshots retain their earlier property values.
+    pub fn object_query_snapshot(&self) -> io::Result<MapObjectReadBindings> {
+        self.snapshot.object_query_snapshot()
     }
 
     pub fn plan_actor(
@@ -217,6 +224,24 @@ mod tests {
             world.advance_actor(&view, &mut route).unwrap(),
             ActorStep::Finished
         );
+    }
+
+    #[test]
+    fn native_object_snapshots_refresh_after_actor_route_movement() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let mut world = scene();
+        let actor = ObjectKey { elevation: 0, ordinal: 0 };
+        let before = world.object_query_snapshot().unwrap();
+        let handle = before.handle_for(actor).unwrap();
+        assert_eq!(before.snapshots()[0].tile, 20099);
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        assert!(matches!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Moved { tile: 20098, .. }));
+        let after = world.object_query_snapshot().unwrap();
+        assert_eq!(after.handle_for(actor), Some(handle));
+        assert_eq!(after.key_for(handle), Some(actor));
+        assert_eq!(after.snapshots()[0].tile, 20098);
+        assert_eq!(before.snapshots()[0].tile, 20099);
+        assert_eq!(after.snapshots()[1].tile, 20100);
     }
 
     #[test]
