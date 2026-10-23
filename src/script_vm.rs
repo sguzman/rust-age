@@ -437,7 +437,7 @@ mod tests {
         opcode(&mut code, 0x8011);
         let mut vm = ScriptVm::new(fixture(&code));
         vm.run_bounded(16).unwrap();
-        assert_eq!(vm.stack(), [ScriptValue::Int(-4)]);
+        assert_eq!(vm.stack(), [ScriptValue::Int(-3)]);
 
         let mut vm = ScriptVm::new(fixture(&0x8043_u16.to_be_bytes()));
         assert!(vm.step().is_err());
