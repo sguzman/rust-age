@@ -5,8 +5,8 @@
 //! scr_find_obj_from_program synthesizes an owner for unowned spatial scripts.
 //! We never synthesize engine objects or dereference serialized addresses.
 use crate::collision::ObjectKey;
-use crate::script_binding::BoundScriptRuntime;
 use crate::object_tables::ObjectTables;
+use crate::script_binding::BoundScriptRuntime;
 use crate::script_data::ScriptTables;
 use crate::script_object_binding::MapObjectReadBindings;
 use std::collections::BTreeMap;
@@ -168,9 +168,9 @@ impl MapScriptOwners {
 mod tests {
     use super::{MapScriptOwners, ScriptOwnerResolution};
     use crate::collision::ObjectKey;
-    use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
+    use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_data::{ScriptRecord, ScriptTables};
     use crate::script_object_binding::MapObjectReadBindings;
     use crate::script_runtime::ScriptRuntime;
@@ -358,10 +358,7 @@ mod tests {
         };
         let bound = BoundScriptRuntime {
             runtime: ScriptRuntime::new(),
-            entries: vec![
-                mk(3, 0x0300_0001, Some(12)),
-                mk(4, 0x0400_0001, Some(19)),
-            ],
+            entries: vec![mk(3, 0x0300_0001, Some(12)), mk(4, 0x0400_0001, Some(19))],
         };
         assert_eq!(
             owners.resolution_for_instance(&bound, 12),
@@ -374,10 +371,7 @@ mod tests {
         assert_eq!(owners.resolution_for_instance(&bound, 0), None);
         let duplicate = BoundScriptRuntime {
             runtime: ScriptRuntime::new(),
-            entries: vec![
-                mk(3, 0x0300_0001, Some(12)),
-                mk(4, 0x0400_0001, Some(12)),
-            ],
+            entries: vec![mk(3, 0x0300_0001, Some(12)), mk(4, 0x0400_0001, Some(12))],
         };
         assert_eq!(owners.resolution_for_instance(&duplicate, 12), None);
         let wrong_sid = BoundScriptRuntime {
