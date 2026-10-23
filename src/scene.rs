@@ -20,6 +20,7 @@ use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
+use crate::script_native_vars::{apply_readonly_event_native_opcode, ScriptClockContext};
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::PlannedLocalActionFrame;
@@ -123,6 +124,50 @@ impl PreparedScriptEnvironment {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE local action frame changed during read-only preview",
+            ));
+        }
+        Ok(preview.returned)
+    }
+
+    /// Preview only supported CE object, event and clock READ opcodes
+    /// inside the local procedure, using a cloned installed VM and a pure
+    /// native adapter. No global/local state writes, overrides, timers,
+    /// gameplay callbacks, or live CE event dispatch can occur.
+    pub fn preview_planned_event_reads_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<Option<ScriptValue>> {
+        let frame = self.local_frame_for_planned(planned)?;
+        let event = self.detached_event_for_planned(planned)?;
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        let preview = self
+            .scripts
+            .runtime
+            .preview_local_action_with_host_bounded(
+                planned.instance_id,
+                planned.action,
+                max_steps,
+                &mut |opcode, stack| {
+                    apply_readonly_event_native_opcode(
+                        snapshot,
+                        event.invocation(),
+                        opcode,
+                        stack,
+                    )
+                },
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE read-only local action missing after preflight",
+                )
+            })?;
+        if preview.frame != frame {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE read-only local action frame changed during preview",
             ));
         }
         Ok(preview.returned)

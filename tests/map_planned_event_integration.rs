@@ -5,6 +5,9 @@ use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
 use rust_age::scene::{DetachedMapEventSessions, PreparedScriptEnvironment};
+use rust_age::script_clock::ScriptGameClock;
+use rust_age::script_native_vars::ScriptClockContext;
+use rust_age::script_vm::ScriptValue;
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
 use rust_age::script_data::{ScriptRecord, ScriptTables};
 use rust_age::script_lifecycle::MapLifecyclePhase;
@@ -15,10 +18,14 @@ use rust_age::script_runtime::ScriptRuntime;
 use rust_age::script_vm::ScriptVm;
 
 fn synthetic_vm() -> ScriptVm {
+    synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0x21])
+}
+
+fn synthetic_vm_with_body(body: &[u8]) -> ScriptVm {
+    assert!(body.len() <= 22);
     let names: [&[u8]; 2] = [b"main", b"map_enter_p_proc"];
     let mut bytes = vec![0_u8; 42];
-    bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
-    bytes[22..24].copy_from_slice(&0x8021_u16.to_be_bytes());
+    bytes[20..20 + body.len()].copy_from_slice(body);
     bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
     let mut strings = Vec::new();
     for name in names {
@@ -313,5 +320,50 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
     assert_eq!(resumed.source_handle(), 0);
     assert_eq!(resumed.target_handle(), 1);
     assert_eq!(resumed.invocation().fixed_parameter(), 1);
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
+
+#[test]
+fn planned_script_readonly_native_preview_can_read_null_owner_but_not_mutate() {
+    let mut environment = environment();
+    let mut runtime = ScriptRuntime::new();
+    // POP arg marker; self_obj -> NULL; tile_num(NULL) -> -1; return value.
+    runtime
+        .register(
+            1,
+            synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xBC, 0x80, 0xD4, 0x80, 0x25]),
+        )
+        .unwrap();
+    environment.scripts.runtime = runtime;
+    let action = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: None,
+    };
+    assert_eq!(
+        environment
+            .preview_planned_event_reads_bounded(&action, clock, 5)
+            .unwrap(),
+        Some(ScriptValue::Int(-1))
+    );
+    // Without the explicit pure native adapter, all game-native reads fail.
+    assert!(environment
+        .preview_planned_local_core_bounded(&action, 5)
+        .is_err());
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert!(environment.scripts.runtime.vm(1).unwrap().stack().is_empty());
+
+    let mut denying = ScriptRuntime::new();
+    // POP; script_overrides (a write); POP_FLAGS_EXIT
+    denying
+        .register(1, synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0xB9, 0x80, 0x21]))
+        .unwrap();
+    environment.scripts.runtime = denying;
+    assert!(environment
+        .preview_planned_event_reads_bounded(&action, clock, 5)
+        .is_err());
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
