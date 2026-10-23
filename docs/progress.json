@@ -275,15 +275,15 @@
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 11,
-              "evidence": "CI-tested Rust ScriptRuntime handles CE per-program event ordering, condition/time eligibility, host callback dispatch and 24-slot action resolution. The StaticScene unstarted_script_runtime pathway decodes original MAP->scripts.lst->INT records into independent registered VMs but triggers NO procedures, callbacks, quest logic or map lifecycle. Native game opcode engine and persistence remain outstanding."
+              "progress": 13,
+              "evidence": "Core CI tests CE 24-action lookup and opt-in source-order host dispatch; read-only MAP lifecycle plans START, ENTER, UPDATE and EXIT from real installed INT metadata, without running game procedures. Map flags and first-visit parameter preserved in plans. Native game opcodes/world updates absent."
             },
             {
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 17,
-              "evidence": "CI checks adapted independent C++/Rust decisions for numeric core bytecode, name lookups, 15 string/pointer cases, 20 scheduling/conditional cases, 7 program-list traversal cases and 8 local interrupt return-stack cases. Synthetic parity only; real compiled CE executable/golden-game tests remain absent."
+              "progress": 19,
+              "evidence": "CI passes adapted C++/Rust synthetic numeric, string/pointer, name, scheduling, interrupt and program-order comparisons plus 11 MAP lifecycle and 15 MAP-local integer cases. No original compiled CE executable or real-game golden tests yet."
             }
           ]
         },
@@ -302,14 +302,15 @@
               "id": "T702",
               "emoji": "🚩",
               "name": "Port map scripts, spatial triggers and timers",
-              "progress": 15,
-              "evidence": "CI-tested MAP script SID/category/run-info lookup, scripts.lst flags, resolved INT built-in actions and optional per-record unstarted Rust VM installation. Missing INTs and absent index entries remain explicit, repeated INT references produce separate VMs. No production map triggers, time callbacks, local/global state mutation or real-game parity."
+              "progress": 19,
+              "evidence": "CI-tested MAP/scripts.lst/INT per-record unstarted VM loading, original SIDs/categories/run flags, 24 built-in action names, read-only MAP lifecycle planning, Linux CLI integration and 11 adapted C++ ordering cases. No actual triggers, world updates or execution."
             },
             {
               "id": "T703",
               "emoji": "🧮",
               "name": "Port global/local state and quest flags",
-              "progress": 0
+              "progress": 7,
+              "evidence": "CI-tested Rust-owned MAP-local integer array, original saved offsets and declared counts, lazy zero-filled allocation, per-instance bounds and unchanged MAP source; 15 adapted C++/Rust synthetic local cases. Pointer locals, global/quest flags, save state and native opcode integration pending."
             },
             {
               "id": "T704",

@@ -1,8 +1,9 @@
 //! Immutable CE MAP script-to-program name binding.
 //!
 //! This joins serialized MAP script records and scripts/scripts.lst by their
-//! original lower-24-bit index. It cannot instantiate or execute scripts.
-//! Map-local variable allocation, triggers and VM lifecycle come later.
+//! original lower-24-bit index. It can instantiate isolated, unstarted Rust
+//! VMs without script execution; local storage lives in script_locals.rs.
+//! Native engine callbacks and real gameplay lifecycle remain unported.
 use crate::assets::GameAssets;
 use crate::script_data::ScriptTables;
 use crate::script_list::ScriptRunInfo;

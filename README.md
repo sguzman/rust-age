@@ -24,6 +24,7 @@ cargo run -- --inspect-dat /path/to/Fallout/master.dat
 cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
 cargo run -- --inspect-map /path/to/Fallout maps/example.map
 cargo run -- --inspect-map-procedures /path/to/Fallout maps/example.map
+cargo run -- --inspect-map-lifecycle /path/to/Fallout maps/example.map enter MAP_SID MAP_FLAGS # read-only
 cargo run -- --inspect-map-scripts /path/to/Fallout maps/example.map
 cargo run -- --inspect-int /path/to/Fallout scripts/example.int
 cargo run -- --inspect-script-index /path/to/Fallout 0 # prints escaped procedure names, metadata and CE action bindings
