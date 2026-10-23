@@ -17,15 +17,21 @@ fn invalid(message: &'static str) -> io::Error {
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> io::Result<u16> {
+    let end = offset
+        .checked_add(2)
+        .ok_or_else(|| invalid("CE opcode offset overflow"))?;
     let data = bytes
-        .get(offset..offset + 2)
+        .get(offset..end)
         .ok_or_else(|| invalid("truncated CE interpreter opcode"))?;
     Ok(u16::from_be_bytes([data[0], data[1]]))
 }
 
 fn read_i32(bytes: &[u8], offset: usize) -> io::Result<i32> {
+    let end = offset
+        .checked_add(4)
+        .ok_or_else(|| invalid("CE interpreter i32 offset overflow"))?;
     let data = bytes
-        .get(offset..offset + 4)
+        .get(offset..end)
         .ok_or_else(|| invalid("truncated CE interpreter i32"))?;
     Ok(i32::from_be_bytes([data[0], data[1], data[2], data[3]]))
 }
