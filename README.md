@@ -23,6 +23,7 @@ cargo run -- --verify-installation /path/to/Fallout
 cargo run -- --inspect-dat /path/to/Fallout/master.dat
 cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
 cargo run -- --inspect-map /path/to/Fallout maps/example.map
+cargo run -- --inspect-map-scripts /path/to/Fallout maps/example.map
 cargo run -- --inspect-int /path/to/Fallout scripts/example.int
 cargo run -- --inspect-script-index /path/to/Fallout 0
 cargo run -- --inspect-map-route /path/to/Fallout maps/example.map 20099 20098

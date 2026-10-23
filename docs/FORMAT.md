@@ -192,3 +192,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## Static MAP script-to-INT index binding
 
 `src/script_binding.rs` walks the five CE MAP script categories, preserving record position, SID, owner and local-variable table offsets. The original `scripts.lst` lower-24-bit script index maps each record to an installed `.INT` name and its `map_init`, `map_exit`, `local_vars` declarations. Absent rows, missing scripts and `-1` indices remain visibly unresolved; no program is invented. `StaticScene::script_bindings` exposes the index for diagnostics. Tested with synthetic category mixtures; no startup scheduling or bytecode execution.
+
+## Linux MAP-to-INT script binding inspector
+
+`rust-age --inspect-map-scripts <installation> maps/<file>.map` prints each serialized map script's category, ordinal, SID, positional `scripts.lst` row, resolved `.INT` basename, CE `map_init/map_exit` declarations and local-variable offsets/counts. No VM callbacks or map scripts run. A synthetic Linux CLI smoke test verifies the joined result without commercial game assets.

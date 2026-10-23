@@ -20,6 +20,7 @@ fn usage() {
     println!("       rust-age --inspect-dat /path/to/master.dat");
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
+    println!("       rust-age --inspect-map-scripts /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --inspect-int /path/to/Fallout scripts/example.int");
@@ -191,6 +192,41 @@ fn main() {
                     println!("Prototype data inspection only; no gameplay object instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 prototype: {error}")),
+            }
+        }
+        [_, flag, directory, path] if flag == "--inspect-map-scripts" => {
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let scene = StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                scene.script_bindings(&mut assets)
+            })();
+            match result {
+                Ok(bindings) => {
+                    println!("Original MAP script bindings: {}", bindings.len());
+                    for entry in bindings {
+                        let path = entry.path.as_deref().unwrap_or("(unresolved)");
+                        let flags = entry.run_info.unwrap_or_default();
+                        println!(
+                            "  [{}:{}] SID {:#010X}, script index {} -> {}",
+                            entry.category,
+                            entry.ordinal,
+                            entry.script_id as u32,
+                            entry.script_index,
+                            path
+                        );
+                        println!(
+                            "    map_init={} map_exit={} list_local_vars={:?} map_local_offset={} map_local_count={}",
+                            flags.map_init,
+                            flags.map_exit,
+                            flags.local_variables,
+                            entry.local_variable_offset,
+                            entry.local_variable_count
+                        );
+                    }
+                    println!("Script names and flags only; no Fallout script has executed.");
+                }
+                Err(error) => fail(format!("Cannot inspect Fallout 1 MAP scripts: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map" => {
