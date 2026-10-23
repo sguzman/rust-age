@@ -251,8 +251,7 @@ impl ScriptRuntime {
         let vm = self
             .vm(program_id)
             .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
-        let returned =
-            vm.preview_local_action_core_bounded(frame.procedure_index, max_steps)?;
+        let returned = vm.preview_local_action_core_bounded(frame.procedure_index, max_steps)?;
         Ok(Some(PreviewedLocalAction { frame, returned }))
     }
 
@@ -447,10 +446,7 @@ mod tests {
         let mut bytes = vec![0_u8; 42];
         bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
-        for fields in [
-            [4_i32, 0, 0, 0, 20, 0],
-            [9_i32, 0, 0, 0, 20, 0],
-        ] {
+        for fields in [[4_i32, 0, 0, 0, 20, 0], [9_i32, 0, 0, 0, 20, 0]] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }

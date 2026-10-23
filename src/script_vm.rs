@@ -436,9 +436,7 @@ impl ScriptVm {
                 };
                 // setupCall's no-argument marker must have been consumed
                 // by the script before the return operation.
-                if probe.pop()? != ScriptValue::Int(0)
-                    || probe.pop()? != ScriptValue::Pointer(0)
-                {
+                if probe.pop()? != ScriptValue::Int(0) || probe.pop()? != ScriptValue::Pointer(0) {
                     return Err(invalid("CE local action host frame is not balanced"));
                 }
                 let _saved_flags = probe.pop_int()?;
@@ -455,7 +453,9 @@ impl ScriptVm {
                 return Err(invalid("CE local action stopped without a return"));
             }
         }
-        Err(invalid("CE local action preview instruction budget exhausted"))
+        Err(invalid(
+            "CE local action preview instruction budget exhausted",
+        ))
     }
 
     pub fn preview_local_interrupt_bounded(
