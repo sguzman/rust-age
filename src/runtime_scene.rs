@@ -230,12 +230,21 @@ mod tests {
     fn native_object_snapshots_refresh_after_actor_route_movement() {
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
         let mut world = scene();
-        let actor = ObjectKey { elevation: 0, ordinal: 0 };
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
         let before = world.object_query_snapshot().unwrap();
         let handle = before.handle_for(actor).unwrap();
         assert_eq!(before.snapshots()[0].tile, 20099);
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
-        assert!(matches!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Moved { tile: 20098, .. }));
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            world.advance_actor(&view, &mut route).unwrap(),
+            ActorStep::Moved { tile: 20098, .. }
+        ));
         let after = world.object_query_snapshot().unwrap();
         assert_eq!(after.handle_for(actor), Some(handle));
         assert_eq!(after.key_for(handle), Some(actor));

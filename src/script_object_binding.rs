@@ -28,7 +28,9 @@ impl MapObjectReadBindings {
         let mut handles = BTreeMap::new();
         for (elevation, objects) in tables.elevations.iter().enumerate() {
             for (ordinal, object) in objects.iter().enumerate() {
-                let ordinal_handle = snapshots.len().checked_add(1)
+                let ordinal_handle = snapshots
+                    .len()
+                    .checked_add(1)
                     .ok_or_else(|| invalid("CE object handle count overflow"))?;
                 let handle = i32::try_from(ordinal_handle)
                     .map_err(|_| invalid("CE object handle exceeds signed i32"))?;
@@ -45,7 +47,11 @@ impl MapObjectReadBindings {
                 handles.insert(key, handle);
             }
         }
-        Ok(Self { snapshots, keys, handles })
+        Ok(Self {
+            snapshots,
+            keys,
+            handles,
+        })
     }
 
     pub fn snapshots(&self) -> &[ScriptObjectSnapshot] {
@@ -165,7 +171,9 @@ mod tests {
         assert!(bindings.snapshots().is_empty());
         assert_eq!(bindings.handle_for(key(0, 0)), None);
         let mut unknown = vec![ScriptValue::Pointer(1)];
-        assert!(apply_object_read_opcode(bindings.snapshots(), TILE_NUM_OPCODE, &mut unknown).is_err());
+        assert!(
+            apply_object_read_opcode(bindings.snapshots(), TILE_NUM_OPCODE, &mut unknown).is_err()
+        );
         assert_eq!(unknown, [ScriptValue::Pointer(1)]);
         let mut null = vec![ScriptValue::Pointer(0)];
         apply_object_read_opcode(bindings.snapshots(), TILE_NUM_OPCODE, &mut null).unwrap();
