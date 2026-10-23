@@ -213,7 +213,8 @@ mod tests {
             ScriptValue::Int(0),
             ScriptValue::Int(0),
         ];
-        let result = apply_tile_contains_obj_pid(&objects, TILE_CONTAINS_OBJ_PID_OPCODE, &mut invalid);
+        let result =
+            apply_tile_contains_obj_pid(&objects, TILE_CONTAINS_OBJ_PID_OPCODE, &mut invalid);
         assert!(result.is_err());
         assert_eq!(invalid[0], ScriptValue::Pointer(1));
     }
