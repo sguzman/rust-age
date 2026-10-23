@@ -116,6 +116,12 @@ jobs:
           /tmp/rust-age-ce-local-globals tests/script_local_globals_cases.txt > /tmp/rust-age-ce-local-globals.txt
           cargo run --quiet --bin script_local_globals_probe > /tmp/rust-age-rust-local-globals.txt
           diff -u /tmp/rust-age-ce-local-globals.txt /tmp/rust-age-rust-local-globals.txt
+      - name: Compare CE C++ and Rust detached MAP-global conditions
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_condition_read_oracle.cc -o /tmp/rust-age-ce-condition-read
+          /tmp/rust-age-ce-condition-read tests/script_condition_read_cases.txt > /tmp/rust-age-ce-condition-read.txt
+          cargo run --quiet --bin script_condition_read_probe > /tmp/rust-age-rust-condition-read.txt
+          diff -u /tmp/rust-age-ce-condition-read.txt /tmp/rust-age-rust-condition-read.txt
       - name: Compare CE C++ and Rust detached local procedure returns
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_local_return_oracle.cc -o /tmp/rust-age-ce-local-return
