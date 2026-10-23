@@ -45,6 +45,10 @@ fn simulate(
     }
     let mut bytes = vec![0_u8; 42];
     bytes[..code.len()].copy_from_slice(&code);
+    if mode != "FLAGS" && (address == 36 || address == 40) {
+        let target = address as usize;
+        bytes[target..target + 2].copy_from_slice(&0x8011_u16.to_be_bytes());
+    }
     bytes.extend_from_slice(&[0_u8; 12]);
     let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
     let steps = if mode == "FLAGS" {

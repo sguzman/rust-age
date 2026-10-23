@@ -913,7 +913,10 @@ impl ScriptVm {
             };
             let target = usize::try_from(address)
                 .map_err(|_| invalid("negative CE local POP_FLAGS return address"))?;
-            self.program.word_at(target)?;
+            let first_word = self.program.word_at(target)?;
+            if first_word & 0x8000 == 0 {
+                return Err(invalid("CE local POP_FLAGS return target is not an opcode"));
+            }
             Some(target)
         } else {
             None
@@ -1741,7 +1744,16 @@ mod tests {
         }
         opcode(&mut code, opcode_value);
         assert!(code.len() <= 42);
-        ScriptVm::new(fixture(&code))
+        let mut bytes = vec![0_u8; 42];
+        bytes[..code.len()].copy_from_slice(&code);
+        // Synthetic CE return-to-opcode destinations for the supported
+        // no-host examples. Remaining data-only offsets must fail closed.
+        if opcode_value != 0x801F && (address == 36 || address == 40) {
+            let target = address as usize;
+            bytes[target..target + 2].copy_from_slice(&0x8011_u16.to_be_bytes());
+        }
+        bytes.extend_from_slice(&[0_u8; 12]);
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
     }
 
     #[test]
@@ -1765,6 +1777,11 @@ mod tests {
             assert!(vm.stack().is_empty());
             assert!(vm.return_stack().is_empty());
             assert_eq!(vm.modeled_program_low_flags(), flags as u16);
+            vm.step().unwrap(); // resumed CE STOP_PROGRAM at PC 36
+            assert_eq!(vm.pc(), 38);
+            assert!(vm.halted());
+            assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::StopProgram));
+            assert_eq!(vm.modeled_program_low_flags(), 0x08 | flags as u16);
 
             // POP_FLAGS_EXIT returns to the C++ interpret caller.
             let mut vm = local_return_fixture(flags, 0x8021, 0, 0, 0, 36);
@@ -1797,6 +1814,7 @@ mod tests {
                 (0, 1, 0, 36),
                 (0, 0, 8, 36),
                 (0, 0, 0, -1),
+                (0, 0, 0, 32), // in file, but points to non-opcode data
                 (0, 0, 0, 600),
             ] {
                 if opcode_value == 0x801F && address != 36 {

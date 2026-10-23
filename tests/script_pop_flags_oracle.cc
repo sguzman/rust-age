@@ -20,10 +20,11 @@ int main(int argc, char** argv) {
         const bool isExit = mode == "EXIT";
         const bool isValue = mode == "VALUE_EXIT";
         if (!isFlags && !isReturn && !isExit && !isValue) return 2;
-        // Safe original-CE subset for no host state. Return target is
-        // checked within the synthetic INT program (42+12 bytes).
+        // Safe original-CE subset for no host state. The invented INT
+        // fixtures place actual STOP_PROGRAM opcodes ONLY at byte 36 and 40.
+        // Other in-bounds data addresses deliberately fail closed.
         if ((flags != 0 && flags != 0x80) || window != 0 || wait != 0 ||
-            (!isFlags && (address < 0 || address >= 54))) {
+            (!isFlags && address != 36 && address != 40)) {
             std::cout << name << " ERR\n";
             continue;
         }
