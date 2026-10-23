@@ -47,13 +47,24 @@ fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
         source: Some(0),
         target: Some(0),
     };
+    // CE IF pops the condition; when false it jumps to byte 32,
+    // otherwise it drops the destination and executes the true arm.
     let mut code = Vec::new();
-    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH false-arm address
+    code.extend_from_slice(&32_i32.to_be_bytes());
+    code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH MAP index
     code.extend_from_slice(&index.to_be_bytes());
-    code.extend_from_slice(&0x80C3_u16.to_be_bytes());
-    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&0x80C3_u16.to_be_bytes()); // map_var
+    code.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH expected value
     code.extend_from_slice(&wanted.to_be_bytes());
-    code.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]);
+    code.extend_from_slice(&[0x80, 0x33, 0x80, 0x2F]); // EQUAL; IF
+    code.extend_from_slice(&0xC001_u16.to_be_bytes()); // true
+    code.extend_from_slice(&1_i32.to_be_bytes());
+    code.extend_from_slice(&0x8011_u16.to_be_bytes()); // STOP
+    assert_eq!(code.len(), 32);
+    code.extend_from_slice(&0xC001_u16.to_be_bytes()); // false
+    code.extend_from_slice(&0_i32.to_be_bytes());
+    code.extend_from_slice(&0x8011_u16.to_be_bytes());
     let mut bytes = vec![0_u8; 42];
     bytes[..code.len()].copy_from_slice(&code);
     bytes.extend_from_slice(&1_i32.to_be_bytes());
@@ -65,7 +76,7 @@ fn probe(parts: &[&str]) -> Result<bool, Box<dyn Error>> {
     bytes.extend_from_slice(&0_i32.to_be_bytes());
     let vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
     let invocation = ScriptInvocationState::installed();
-    let result = vm.preview_condition_with_host_bounded(0, 5, &mut |opcode, stack| {
+    let result = vm.preview_condition_with_host_bounded(0, 8, &mut |opcode, stack| {
         apply_readonly_event_native_with_vars(
             snapshot,
             &invocation,

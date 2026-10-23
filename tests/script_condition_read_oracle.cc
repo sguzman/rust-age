@@ -1,5 +1,5 @@
 // GPL-2.0-or-later. Independent invented C++ oracle adapted from pinned
-// Fallout 1 CE MAP-global bounds/read and integer EQUAL opcode semantics.
+// Fallout 1 CE MAP-global bounds/read, integer EQUAL and IF branch semantics.
 // These are synthetic values, not tests against compiled original gameplay.
 #include <fstream>
 #include <iostream>
