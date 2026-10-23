@@ -37,6 +37,24 @@ impl ScriptValue {
         }
     }
 
+
+    /// CE op_not tests the raw 32-bit union field, not floating point equality.
+    fn raw_zero(self) -> bool {
+        match self {
+            Self::Int(value) | Self::StaticString(value) | Self::DynamicString(value) | Self::Pointer(value) => value == 0,
+            Self::Float(value) => value.to_bits() == 0,
+        }
+    }
+
+    /// CE ProgramValue::isEmpty powers IF and WHILE and tests numeric zero.
+    fn is_empty(self) -> bool {
+        match self {
+            Self::Float(value) => value == 0.0,
+            Self::Int(value) | Self::StaticString(value) | Self::Pointer(value) => value == 0,
+            Self::DynamicString(_) => true, // CE isEmpty has no dynamic string case.
+        }
+    }
+
     fn as_float(self) -> io::Result<f32> {
         match self {
             Self::Int(value) => Ok(value as f32),
@@ -86,6 +104,32 @@ fn numeric_binary(
         Arithmetic::Divide => left / right,
     };
     Ok(ScriptValue::Float(result))
+}
+
+
+fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> io::Result<bool> {
+    if let (ScriptValue::Int(a), ScriptValue::Int(b)) = (left, right) {
+        return Ok(match operation {
+            0x33 => a == b,
+            0x34 => a != b,
+            0x35 => a <= b,
+            0x36 => a >= b,
+            0x37 => a < b,
+            0x38 => a > b,
+            _ => return Err(invalid("unsupported CE comparison")),
+        });
+    }
+    let a = left.as_float()?;
+    let b = right.as_float()?;
+    Ok(match operation {
+        0x33 => a == b,
+        0x34 => a != b,
+        0x35 => a <= b,
+        0x36 => a >= b,
+        0x37 => a < b,
+        0x38 => a > b,
+        _ => return Err(invalid("unsupported CE comparison")),
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +183,17 @@ impl ScriptVm {
         }
     }
 
+
+    fn jump(&mut self, destination: i32) -> io::Result<()> {
+        let target = usize::try_from(destination)
+            .map_err(|_| invalid("negative CE jump address"))?;
+        if target >= self.program.file_len() {
+            return Err(invalid("CE jump address outside program"));
+        }
+        self.pc = target;
+        Ok(())
+    }
+
     pub fn step(&mut self) -> io::Result<()> {
         if self.halted {
             return Ok(());
@@ -163,12 +218,7 @@ impl ScriptVm {
             }
             0x04 => {
                 let dest = self.pop_int()?;
-                let dest =
-                    usize::try_from(dest).map_err(|_| invalid("negative CE jump address"))?;
-                if dest >= self.program.file_len() {
-                    return Err(invalid("CE jump address outside program"));
-                }
-                self.pc = dest;
+                self.jump(dest)?;
             }
             0x0E | 0x10 | 0x11 => {
                 // EXIT, EXIT_PROGRAM and STOP_PROGRAM have distinct CE
@@ -188,6 +238,66 @@ impl ScriptVm {
                 let value = self.pop()?;
                 self.push(value)?;
                 self.push(value)?;
+            }
+
+            0x2F => {
+                // IF discards condition, then consumes either branch target
+                // (false case) or the remaining unneeded value (true case).
+                if self.pop()?.is_empty() {
+                    let dest = self.pop_int()?;
+                    self.jump(dest)?;
+                } else {
+                    self.pop()?;
+                }
+            }
+            0x30 => {
+                // WHILE retains the branch target when true (CE behavior).
+                if self.pop()?.is_empty() {
+                    let dest = self.pop_int()?;
+                    self.jump(dest)?;
+                }
+            }
+            0x33..=0x38 => {
+                let right = self.pop()?;
+                let left = self.pop()?;
+                let result = numeric_comparison(left, right, opcode & 0x03FF)?;
+                self.push(ScriptValue::Int(i32::from(result)))?;
+            }
+            0x3D => {
+                let divisor = self.pop_int()?;
+                let dividend = self.pop_int()?;
+                let result = dividend
+                    .checked_rem(divisor)
+                    .ok_or_else(|| invalid("CE integer MOD by zero or overflow"))?;
+                self.push(ScriptValue::Int(result))?;
+            }
+            0x3E | 0x3F => {
+                let right = self.pop()?;
+                let left = self.pop()?;
+                let truth = if opcode & 0x03FF == 0x3E {
+                    !left.raw_zero() && !right.raw_zero()
+                } else {
+                    !left.raw_zero() || !right.raw_zero()
+                };
+                self.push(ScriptValue::Int(i32::from(truth)))?;
+            }
+            0x40..=0x42 => {
+                let right = self.pop_int()?;
+                let left = self.pop_int()?;
+                let value = match opcode & 0x03FF {
+                    0x40 => left & right,
+                    0x41 => left | right,
+                    _ => left ^ right,
+                };
+                self.push(ScriptValue::Int(value))?;
+            }
+            0x43 => {
+                let value = self.pop_int()?;
+                self.push(ScriptValue::Int(!value))?;
+            }
+            0x45 => {
+                let value = self.pop()?;
+                self.push(ScriptValue::Int(i32::from(value.raw_zero())))?;
             }
             0x39..=0x3C => {
                 let right = self.pop()?;
@@ -296,6 +406,58 @@ mod tests {
         let mut vm = ScriptVm::new(fixture(&code));
         vm.run_bounded(8).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Float(3.0)]);
+    }
+
+
+    #[test]
+    fn comparisons_and_boolean_arithmetic_follow_original_operand_order() {
+        let mut code = Vec::new();
+        push_int(&mut code, 3);
+        push_int(&mut code, 7);
+        opcode(&mut code, 0x8037); // LESS THAN
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x803F); // OR
+        push_int(&mut code, 1);
+        opcode(&mut code, 0x8033); // EQUAL
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(16).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(1)]);
+    }
+
+    #[test]
+    fn integer_modulo_bitops_and_not_follow_ce() {
+        let mut code = Vec::new();
+        push_int(&mut code, -11);
+        push_int(&mut code, 4);
+        opcode(&mut code, 0x803D); // MOD: -11 remainder 4
+        push_int(&mut code, -1);
+        opcode(&mut code, 0x8042); // XOR
+        opcode(&mut code, 0x8043); // BNOT
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(16).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(-4)]);
+
+        let mut vm = ScriptVm::new(fixture(&0x8043_u16.to_be_bytes()));
+        assert!(vm.step().is_err());
+    }
+
+    #[test]
+    fn conditional_branch_uses_ce_popped_target_and_while_stack_rule() {
+        let mut code = Vec::new();
+        push_int(&mut code, 32);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x802F); // IF: empty -> jump to offset 32
+        opcode(&mut code, 0x804C); // deliberately unsupported, skipped
+        while code.len() < 32 {
+            opcode(&mut code, 0x8000);
+        }
+        push_int(&mut code, 123);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture(&code));
+        vm.run_bounded(12).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(123)]);
     }
 
     #[test]

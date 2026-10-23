@@ -160,3 +160,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## First bounded CE typed-stack interpreter slice
 
 `src/script_vm.rs` now executes only an explicitly allowlisted subset of original core instructions against synthetic `.INT` program bytes: typed integer/float/string-reference PUSH, stack POP/DUP/SWAP, numeric ADD/SUB/MUL/DIV, NEGATE/FLOOR, JUMP, NOOP and isolated stop/exit. This keeps CE's high-bit opcode dispatch and 10-bit handler index, original 0xC001 integer and 0xA001 float push tags, stack operand order, integer-add overflow promotion, and bound-checked file offsets. Each test has a step budget; unknown opcodes error instead of silently succeeding. Exit/stop lifecycle, external/native operations, callbacks, procedures, save state, and game integration are **not implemented**, so this is not yet a usable script VM.
+
+## Bounded CE numeric and branch opcode coverage
+
+The isolated `ScriptVm` now also implements numeric comparisons (EQ, NE, LE, GE, LT, GT), integer MOD, boolean AND/OR/NOT, integer bitwise AND/OR/XOR/NOT, and the original stack-consumption pattern of IF/WHILE. For static tests the interpreter retains CE integer operand order and distinguishes raw-bit NOT from `ProgramValue::isEmpty` branch conditions. String coercion, floating bitwise coercion, external pointer logic and full procedure call stacks remain explicitly unsupported.
