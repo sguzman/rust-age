@@ -130,11 +130,19 @@ pub struct ScriptInvocationState {
 
 impl ScriptInvocationState {
     pub fn installed() -> Self {
-        Self { present: true, action: 0, overrides: false }
+        Self {
+            present: true,
+            action: 0,
+            overrides: false,
+        }
     }
 
     pub fn missing() -> Self {
-        Self { present: false, action: 0, overrides: false }
+        Self {
+            present: false,
+            action: 0,
+            overrides: false,
+        }
     }
 
     /// CE exec_script_proc returns -1 when the SID cannot be found.
@@ -386,17 +394,25 @@ mod tests {
         let mut invocation = ScriptInvocationState::installed();
         assert!(invocation.begin_action(15));
         let mut first = program(&code);
-        assert_eq!(run_invocation_subset_bounded(
-            &mut first, 1, &mut map, &mut globals, &mut invocation, 5,
-        ).unwrap(), 3);
+        assert_eq!(
+            run_invocation_subset_bounded(
+                &mut first,
+                1,
+                &mut map,
+                &mut globals,
+                &mut invocation,
+                5,
+            )
+            .unwrap(),
+            3
+        );
         assert_eq!(first.stack(), [ScriptValue::Int(15)]);
         assert!(invocation.overrides());
         assert!(invocation.begin_action(23));
         assert!(!invocation.overrides());
         let mut next = program(&code);
-        run_invocation_subset_bounded(
-            &mut next, 1, &mut map, &mut globals, &mut invocation, 5,
-        ).unwrap();
+        run_invocation_subset_bounded(&mut next, 1, &mut map, &mut globals, &mut invocation, 5)
+            .unwrap();
         assert_eq!(next.stack(), [ScriptValue::Int(23)]);
         assert!(invocation.overrides());
     }
@@ -412,9 +428,7 @@ mod tests {
         let mut map = fixture();
         let mut globals = GameGlobalState::from_initial_values(&[8]).unwrap();
         let mut vm = program(&code);
-        run_invocation_subset_bounded(
-            &mut vm, 1, &mut map, &mut globals, &mut state, 5,
-        ).unwrap();
+        run_invocation_subset_bounded(&mut vm, 1, &mut map, &mut globals, &mut state, 5).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Int(0)]);
         assert!(!state.overrides());
         let mut ungated = program(&code);
