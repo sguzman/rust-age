@@ -434,8 +434,7 @@ fn cloned_map_and_game_global_reads_use_immutable_values_and_deny_writes() {
             locals: vec![],
         })
         .unwrap();
-    environment.game_globals =
-        Some(GameGlobalState::from_initial_values(&[27]).unwrap());
+    environment.game_globals = Some(GameGlobalState::from_initial_values(&[27]).unwrap());
     let mut runtime = ScriptRuntime::new();
     // POP argument marker; PUSH index zero; map_var; PUSH index zero;
     // global_var; ADD; POP_FLAGS_RETURN_VAL_EXIT.

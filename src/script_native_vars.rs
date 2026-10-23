@@ -528,15 +528,16 @@ pub fn apply_readonly_event_native_with_vars(
                 return Err(invalid("CE read-only variable stack exceeds bound"));
             }
             let value = if opcode == MAP_VAR_OPCODE {
-                map.read_global_typed(index)
-                    .unwrap_or(ScriptValue::Int(-1))
+                map.read_global_typed(index).unwrap_or(ScriptValue::Int(-1))
             } else {
                 ScriptValue::Int(
                     game.ok_or_else(|| invalid("CE game globals not supplied"))?
                         .read(index),
                 )
             };
-            *stack.last_mut().ok_or_else(|| invalid("CE variable stack empty"))? = value;
+            *stack
+                .last_mut()
+                .ok_or_else(|| invalid("CE variable stack empty"))? = value;
             Ok(())
         }
         _ => apply_readonly_event_native_opcode(snapshot, invocation, opcode, stack),
