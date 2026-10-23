@@ -329,8 +329,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir()
-            .join(format!("rust-age-map-object-{}-{stamp}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "rust-age-map-object-{}-{stamp}",
+            std::process::id()
+        ));
         let proto_dir = root.join("data").join("proto").join("items");
         fs::create_dir_all(&proto_dir).unwrap();
         fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
@@ -349,12 +351,12 @@ mod tests {
 
         let mut map = header(2 | 4 | 8, 0, 0); // no square elevations
         map.extend_from_slice(&[0_u8; 5 * 4]); // five empty script types
-        for value in [1_i32, 1] { // total, elevation zero
+        for value in [1_i32, 1] {
+            // total, elevation zero
             map.extend_from_slice(&value.to_be_bytes());
         }
         for value in [
-            123_i32, 20099, 0, 0, 0, 0, 0, 2, 1, 0, 0, 1,
-            0, 0, 0, 0, -1, -1,
+            123_i32, 20099, 0, 0, 0, 0, 0, 2, 1, 0, 0, 1, 0, 0, 0, 0, -1, -1,
         ] {
             map.extend_from_slice(&value.to_be_bytes());
         }
@@ -364,12 +366,15 @@ mod tests {
         }
 
         let mut assets = GameAssets::open(&root).unwrap();
-        let squares = MapHeader::decode(&map).unwrap().decode_squares(&map).unwrap();
+        let squares = MapHeader::decode(&map)
+            .unwrap()
+            .decode_squares(&map)
+            .unwrap();
         let (scripts, objects, end) = squares
             .decode_objects_with(&map, |pid| {
-                let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
-                    std::io::Error::from(std::io::ErrorKind::NotFound)
-                })?;
+                let proto = assets
+                    .prototype_by_pid(pid)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
                 Ok(match proto.body {
                     PrototypeBody::Item { item_type, .. } => Some(item_type),
                     PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
