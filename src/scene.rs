@@ -202,8 +202,54 @@ impl PreparedScriptEnvironment {
         clock: ScriptClockContext,
         max_steps: usize,
     ) -> io::Result<PreviewedSandboxAction> {
-        let frame = self.local_frame_for_planned(planned)?;
         let event = self.detached_event_for_planned(planned)?;
+        self.preview_event_sandbox_inner(planned, &event, clock, max_steps)
+    }
+
+    /// Run the speculative CE action against a previously established
+    /// detached script event. The event must match the same verified MAP
+    /// plan and remain active; speculative overrides, globals and locals
+    /// are discarded separately from the real event session.
+    pub fn preview_active_sandbox_bounded(
+        &self,
+        sessions: &DetachedMapEventSessions,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<PreviewedSandboxAction> {
+        let _ = self.local_frame_for_planned(planned)?;
+        let event = sessions.get(planned.instance_id).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE sandbox active event session missing",
+            )
+        })?;
+        let action = i32::try_from(planned.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE sandbox action exceeds i32")
+        })?;
+        if !event.is_active()
+            || event.invocation().action() != action
+            || Some(event.owner_resolution()) != self.owner_for_instance(planned.instance_id)
+            || planned
+                .external_parameter
+                .is_some_and(|fixed| event.invocation().fixed_parameter() != fixed)
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active sandbox event does not match verified plan",
+            ));
+        }
+        self.preview_event_sandbox_inner(planned, event, clock, max_steps)
+    }
+
+    fn preview_event_sandbox_inner(
+        &self,
+        planned: &PlannedMapAction,
+        event: &DetachedScriptEvent,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<PreviewedSandboxAction> {
+        let frame = self.local_frame_for_planned(planned)?;
         let snapshot = event.snapshot(&self.object_queries, clock)?;
         let mut map_locals = self.map_locals.clone();
         let mut game_globals = self.game_globals.clone();
