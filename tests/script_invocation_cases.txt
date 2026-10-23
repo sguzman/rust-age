@@ -6,3 +6,7 @@ missing_action 0 23 read
 negative_action 1 -1 read
 override_only 1 16 override
 zero_action 1 0 read
+fixed_first 1 15 fixed_first
+fixed_revisit 1 15 fixed_revisit
+fixed_missing 0 15 fixed_missing
+fixed_sum 1 15 fixed_sum

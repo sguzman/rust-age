@@ -3,8 +3,8 @@ use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::script_binding::BoundScriptRuntime;
 use rust_age::script_native_vars::{
-    run_invocation_subset_bounded, ScriptInvocationState, SCRIPT_ACTION_OPCODE,
-    SCRIPT_OVERRIDES_OPCODE,
+    run_invocation_subset_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
+    SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
 };
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
@@ -13,11 +13,18 @@ use std::error::Error;
 
 fn probe(present: bool, action: i32, kind: &str) -> Result<String, Box<dyn Error>> {
     let mut code = Vec::new();
+    if kind.starts_with("fixed_") {
+        code.extend_from_slice(&FIXED_PARAM_OPCODE.to_be_bytes());
+    }
     if kind == "override" || kind == "override_read" {
         code.extend_from_slice(&SCRIPT_OVERRIDES_OPCODE.to_be_bytes());
     }
     if kind == "read" || kind == "override_read" {
         code.extend_from_slice(&SCRIPT_ACTION_OPCODE.to_be_bytes());
+    }
+    if kind == "fixed_sum" {
+        code.extend_from_slice(&SCRIPT_ACTION_OPCODE.to_be_bytes());
+        code.extend_from_slice(&0x8039_u16.to_be_bytes());
     }
     code.extend_from_slice(&0x8011_u16.to_be_bytes());
 
@@ -31,6 +38,9 @@ fn probe(present: bool, action: i32, kind: &str) -> Result<String, Box<dyn Error
         ScriptInvocationState::missing()
     };
     invocation.begin_action(action);
+    if kind == "fixed_first" || kind == "fixed_sum" || kind == "fixed_missing" {
+        invocation.set_fixed_parameter(1);
+    }
     let bound = BoundScriptRuntime {
         runtime: ScriptRuntime::new(),
         entries: vec![],

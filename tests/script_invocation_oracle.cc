@@ -27,12 +27,21 @@ int main(int argc, char** argv) {
     while (input >> name >> present >> action >> kind) {
         Invocation current{present != 0, 0, false};
         current.begin(action);
+        int fixedParam = 0;
+        if (kind == "fixed_first" || kind == "fixed_sum" || kind == "fixed_missing") {
+            if (current.present) fixedParam = 1;
+        }
         std::vector<unsigned short> code;
+        if (kind.rfind("fixed_", 0) == 0) code.push_back(0x80F7);
         if (kind == "override" || kind == "override_read") {
             code.push_back(0x80B9);
         }
         if (kind == "read" || kind == "override_read") {
             code.push_back(0x80C7);
+        }
+        if (kind == "fixed_sum") {
+            code.push_back(0x80C7);
+            code.push_back(0x8039);
         }
         code.push_back(0x8011);
         std::vector<int> stack;
@@ -45,6 +54,12 @@ int main(int argc, char** argv) {
                 current.overrides = true;
             } else if (op == 0x80C7) {
                 stack.push_back(current.present ? current.action : 0);
+            } else if (op == 0x80F7) {
+                stack.push_back(current.present ? fixedParam : 0);
+            } else if (op == 0x8039) {
+                int right = stack.back(); stack.pop_back();
+                int left = stack.back(); stack.pop_back();
+                stack.push_back(left + right);
             } else if (op == 0x8011) {
                 break;
             }
