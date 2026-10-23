@@ -19,7 +19,7 @@ use crate::script_binding::{
 use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
-use crate::script_locals::MapScriptLocals;
+use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
 use crate::script_native_vars::{
     apply_map_variable_opcode, apply_readonly_event_native_opcode,
     apply_readonly_event_native_with_vars, ScriptClockContext, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
@@ -70,6 +70,52 @@ pub struct PreviewedSandboxAction {
     pub map_locals: MapScriptLocals,
     pub game_globals: Option<GameGlobalState>,
     pub overrides: bool,
+    baseline_map: MapScriptLocals,
+    baseline_game_globals: Option<GameGlobalState>,
+}
+
+/// An inspection-only description of speculative script changes. No engine
+/// state can be modified by constructing, reading or discarding this value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SandboxEffectSummary {
+    pub map: MapScriptChangeSummary,
+    pub quest_globals_changed: usize,
+    pub overrides: bool,
+}
+
+impl PreviewedSandboxAction {
+    /// Compare the hypothetical post-action state against its own exact
+    /// pre-action snapshot; never infer changes from other MAP instances.
+    pub fn effects(&self) -> io::Result<SandboxEffectSummary> {
+        let map = self.map_locals.change_summary_since(&self.baseline_map)?;
+        let quest_globals_changed = match (&self.baseline_game_globals, &self.game_globals) {
+            (None, None) => 0,
+            (Some(before), Some(after)) if before.values().len() == after.values().len() => before
+                .values()
+                .iter()
+                .zip(after.values())
+                .filter(|(left, right)| left != right)
+                .count(),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE sandbox quest-global layout changed",
+                ));
+            }
+        };
+        Ok(SandboxEffectSummary {
+            map,
+            quest_globals_changed,
+            overrides: self.overrides,
+        })
+    }
+
+    /// Explicitly CONSUME and discard this preview. Only the read-only
+    /// summary survives. There is deliberately no commit/apply method:
+    /// gameplay script dispatch and persistence remain unimplemented.
+    pub fn discard(self) -> io::Result<SandboxEffectSummary> {
+        self.effects()
+    }
 }
 
 impl PreparedScriptEnvironment {
@@ -161,6 +207,8 @@ impl PreparedScriptEnvironment {
         let snapshot = event.snapshot(&self.object_queries, clock)?;
         let mut map_locals = self.map_locals.clone();
         let mut game_globals = self.game_globals.clone();
+        let baseline_map = map_locals.clone();
+        let baseline_game_globals = game_globals.clone();
         let mut invocation = *event.invocation();
         let preview = self
             .scripts
@@ -211,6 +259,8 @@ impl PreparedScriptEnvironment {
             map_locals,
             game_globals,
             overrides: invocation.overrides(),
+            baseline_map,
+            baseline_game_globals,
         })
     }
 

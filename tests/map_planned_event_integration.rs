@@ -523,6 +523,13 @@ fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests(
     assert!(sandbox.overrides);
     assert_eq!(sandbox.map_locals.globals(), [19]);
     assert_eq!(sandbox.game_globals.as_ref().unwrap().values(), [3]);
+    let effects = sandbox.effects().unwrap();
+    assert_eq!(effects.map.map_globals_changed, 1);
+    assert_eq!(effects.map.local_slots_changed, 0);
+    assert_eq!(effects.map.newly_allocated_slots, 0);
+    assert_eq!(effects.quest_globals_changed, 0);
+    assert!(effects.overrides);
+    assert_eq!(sandbox.discard().unwrap(), effects);
     assert_eq!(environment.map_locals.globals(), [12]);
     assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
@@ -544,6 +551,10 @@ fn planned_mutating_script_state_is_cloned_and_never_committed_to_map_or_quests(
         .unwrap();
     assert_eq!(sandbox.map_locals.globals(), [12]);
     assert_eq!(sandbox.game_globals.as_ref().unwrap().values(), [19]);
+    let effects = sandbox.discard().unwrap();
+    assert_eq!(effects.map.map_globals_changed, 0);
+    assert_eq!(effects.quest_globals_changed, 1);
+    assert!(effects.overrides);
     assert_eq!(environment.game_globals.as_ref().unwrap().values(), [3]);
 
     // Missing originals are never fabricated by the opt-in sandbox.

@@ -98,7 +98,70 @@ impl BoundScriptRuntime {
     }
 }
 
+/// Changes between two Rust-only CE MAP variable snapshots. Each value
+/// counts slots whose complete integer/pointer-tag state differs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MapScriptChangeSummary {
+    pub map_globals_changed: usize,
+    pub local_slots_changed: usize,
+    pub newly_allocated_slots: usize,
+    pub script_ranges_changed: usize,
+}
+
 impl MapScriptLocals {
+    /// Compare detached snapshots without reading or allocating any locals.
+    /// Reject unrelated MAP instance layouts and shrinking storage.
+    pub fn change_summary_since(&self, baseline: &Self) -> io::Result<MapScriptChangeSummary> {
+        if self.globals.len() != baseline.globals.len()
+            || self.global_pointers.len() != baseline.global_pointers.len()
+            || self.instances.len() != baseline.instances.len()
+            || self.locals.len() < baseline.locals.len()
+            || self.pointers.len() != self.locals.len()
+            || baseline.pointers.len() != baseline.locals.len()
+        {
+            return Err(invalid("CE sandbox snapshots have incompatible MAP layouts"));
+        }
+        for (id, base) in &baseline.instances {
+            let now = self
+                .instances
+                .get(id)
+                .ok_or_else(|| invalid("CE sandbox script instance mapping changed"))?;
+            if now.declared != base.declared || now.is_system != base.is_system {
+                return Err(invalid("CE sandbox script declaration changed"));
+            }
+        }
+        let map_globals_changed = self
+            .globals
+            .iter()
+            .zip(&self.global_pointers)
+            .zip(baseline.globals.iter().zip(&baseline.global_pointers))
+            .filter(|((value, tag), (old_value, old_tag))| value != old_value || tag != old_tag)
+            .count();
+        let local_slots_changed = self
+            .locals
+            .iter()
+            .zip(&self.pointers)
+            .enumerate()
+            .filter(|(index, (value, tag))| {
+                baseline.locals.get(*index) != Some(value)
+                    || baseline.pointers.get(*index) != Some(tag)
+            })
+            .count();
+        let script_ranges_changed = baseline
+            .instances
+            .iter()
+            .filter(|(id, before)| {
+                self.instances.get(id).is_some_and(|after| after.offset != before.offset)
+            })
+            .count();
+        Ok(MapScriptChangeSummary {
+            map_globals_changed,
+            local_slots_changed,
+            newly_allocated_slots: self.locals.len() - baseline.locals.len(),
+            script_ranges_changed,
+        })
+    }
+
     pub fn globals(&self) -> &[i32] {
         &self.globals
     }
