@@ -2,7 +2,7 @@
 //! These are invented script and object records; no game procedure executes.
 use rust_age::map::MapVariables;
 use rust_age::object_tables::ObjectTables;
-use rust_age::scene::PreparedScriptEnvironment;
+use rust_age::scene::{DetachedMapEventSessions, PreparedScriptEnvironment};
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
 use rust_age::script_data::{ScriptRecord, ScriptTables};
 use rust_age::script_lifecycle::MapLifecyclePhase;
@@ -135,4 +135,47 @@ fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     ] {
         assert!(env.detached_event_for_planned(&wrong).is_err());
     }
+}
+
+#[test]
+fn isolated_map_event_sessions_retain_fixed_parameter_and_reject_stale_actions() {
+    let environment = environment();
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut sessions = DetachedMapEventSessions::new();
+    assert!(sessions.get(1).is_none());
+    assert!(sessions.finish(1).is_err());
+    assert!(sessions.set_objs(&environment, 999, None, None).is_err());
+
+    sessions.set_objs(&environment, 1, None, None).unwrap();
+    let started = sessions.begin_planned(&environment, &plan).unwrap();
+    assert_eq!(started.invocation().action(), 15);
+    assert_eq!(started.invocation().fixed_parameter(), 1);
+    assert_eq!(started.source_handle(), 0);
+    assert_eq!(started.target_handle(), 0);
+    assert!(sessions.begin_planned(&environment, &plan).is_err());
+    sessions.finish(1).unwrap();
+    assert!(!sessions.get(1).unwrap().is_active());
+
+    // A later action with no fixed-param assignment preserves previous state.
+    let again = rust_age::script_lifecycle::PlannedMapAction {
+        external_parameter: None,
+        ..plan
+    };
+    let state = sessions.begin_planned(&environment, &again).unwrap();
+    assert_eq!(state.invocation().fixed_parameter(), 1);
+    assert_eq!(state.source_handle(), 0);
+    assert_eq!(state.target_handle(), 0);
+    sessions.finish(1).unwrap();
+
+    let stale = rust_age::script_lifecycle::PlannedMapAction {
+        script_id: 42,
+        ..plan
+    };
+    assert!(sessions.begin_planned(&environment, &stale).is_err());
+    assert!(!sessions.get(1).unwrap().is_active());
+    assert_eq!(sessions.get(1).unwrap().invocation().fixed_parameter(), 1);
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
