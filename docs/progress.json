@@ -268,8 +268,8 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 38,
-              "evidence": "CI-tested bounded CE ScriptVm includes typed numeric/stack/control/frame/local-call core; static-string and numeric/text comparison (strcmp byte ordering, CE five-decimal float formatting) plus null-pointer equality; named procedure lookup, timed/conditional schedule/cancel, strict unsigned timed polling, and callback-driven conditional precedence (true/false/incomplete and error-safe updates). Immutable source INT vs mutable runtime metadata. Dynamic strings, full game callbacks and production condition execution remain unimplemented."
+              "progress": 39,
+              "evidence": "CI-tested bounded CE typed interpreter subset including numeric, static-string/number and null-pointer comparisons, stack/control/frame/local-call/name lookup, timed/conditional scheduling and cancellation. New synthetic-only condition bytecode preview has an explicit instruction budget, fresh isolated stacks and rollback on preview error; it can be supplied to source-priority conditional event polling but does not mutate the game world. Full CE conditional stack/flag restoration, callbacks and imported/dynamic-string operations pending."
             },
             {
               "id": "T603",

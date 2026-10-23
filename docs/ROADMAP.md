@@ -61,7 +61,7 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 ### 🔣 P6 — Script interpreter and native opcodes — `███░░░░░░░ 25%`
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
-- ⚙️ T602 — Port interpreter, procedures and interpreter state — `████░░░░░░ 38%`
+- ⚙️ T602 — Port interpreter, procedures and interpreter state — `████░░░░░░ 39%`
 - 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `░░░░░░░░░░ 0%`
 - 🧪 T604 — Golden-script differential tests versus CE — `██░░░░░░░░ 15%`
 
