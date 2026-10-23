@@ -36,6 +36,7 @@ pub mod script_list;
 pub mod script_locals;
 pub mod script_native_vars;
 pub mod script_procedures;
+pub mod script_random;
 pub mod script_program;
 pub mod script_runtime;
 pub mod script_timer;
