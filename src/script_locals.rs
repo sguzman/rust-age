@@ -144,9 +144,9 @@ impl MapScriptLocals {
     /// None means no declared locals; CE get would leave its output untouched.
     pub fn read(&mut self, instance: u64, index: i32) -> io::Result<Option<i32>> {
         match self.slot(instance, index)? {
-            Some(slot) if self.pointers[slot].is_some() => {
-                Err(invalid("CE local contains opaque pointer; typed access required"))
-            }
+            Some(slot) if self.pointers[slot].is_some() => Err(invalid(
+                "CE local contains opaque pointer; typed access required",
+            )),
             Some(slot) => Ok(Some(self.locals[slot])),
             None => Ok(None),
         }
@@ -156,27 +156,23 @@ impl MapScriptLocals {
     /// side table is populated, else a 32-bit integer. Null pointer values
     /// are read as integer zero, mirroring original CE map_set_local_var.
     pub fn read_typed(&mut self, instance: u64, index: i32) -> io::Result<Option<ScriptValue>> {
-        Ok(self.slot(instance, index)?.map(|slot| {
-            match self.pointers[slot] {
+        Ok(self
+            .slot(instance, index)?
+            .map(|slot| match self.pointers[slot] {
                 Some(pointer) => ScriptValue::Pointer(pointer),
                 None => ScriptValue::Int(self.locals[slot]),
-            }
-        }))
+            }))
     }
 
     /// CE map_set_local_var: opaque pointers are stored out-of-band; their
     /// integer MAP slot is zeroed. Non-pointer inputs supported here are
     /// deliberately limited to integer values, not real engine object refs.
-    pub fn write_typed(
-        &mut self,
-        instance: u64,
-        index: i32,
-        value: ScriptValue,
-    ) -> io::Result<()> {
+    pub fn write_typed(&mut self, instance: u64, index: i32, value: ScriptValue) -> io::Result<()> {
         if !matches!(value, ScriptValue::Int(_) | ScriptValue::Pointer(_)) {
             return Err(invalid("unsupported CE MAP local value type"));
         }
-        let slot = self.slot(instance, index)?
+        let slot = self
+            .slot(instance, index)?
             .ok_or_else(|| invalid("CE script local set without declaration"))?;
         match value {
             ScriptValue::Int(number) => {
@@ -289,9 +285,14 @@ mod tests {
             locals: vec![10, 11],
         };
         let mut state = bound.script_local_state(&original).unwrap();
-        state.write_typed(2, 1, ScriptValue::Pointer(0x1234)).unwrap();
+        state
+            .write_typed(2, 1, ScriptValue::Pointer(0x1234))
+            .unwrap();
         assert_eq!(state.locals(), [10, 11, 0, 0, 0]);
-        assert_eq!(state.read_typed(2, 1).unwrap(), Some(ScriptValue::Pointer(0x1234)));
+        assert_eq!(
+            state.read_typed(2, 1).unwrap(),
+            Some(ScriptValue::Pointer(0x1234))
+        );
         assert!(state.read(2, 1).is_err());
         state.write(2, 1, -17).unwrap();
         assert_eq!(state.read_typed(2, 1).unwrap(), Some(ScriptValue::Int(-17)));
