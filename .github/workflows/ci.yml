@@ -98,6 +98,12 @@ jobs:
           /tmp/rust-age-ce-script-clock tests/script_clock_cases.txt > /tmp/rust-age-ce-script-clock.txt
           cargo run --quiet --bin script_clock_probe > /tmp/rust-age-rust-script-clock.txt
           diff -u /tmp/rust-age-ce-script-clock.txt /tmp/rust-age-rust-script-clock.txt
+      - name: Compare CE C++ and Rust game-time advance ordering
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_time_advance_oracle.cc -o /tmp/rust-age-ce-time-advance
+          /tmp/rust-age-ce-time-advance tests/script_time_advance_cases.txt > /tmp/rust-age-ce-time-advance.txt
+          cargo run --quiet --bin script_time_advance_probe > /tmp/rust-age-rust-time-advance.txt
+          diff -u /tmp/rust-age-ce-time-advance.txt /tmp/rust-age-rust-time-advance.txt
       - name: Compare CE C++ and Rust vault13.gam global default parsing
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/game_global_defaults_oracle.cc -o /tmp/rust-age-ce-gvar-defaults
