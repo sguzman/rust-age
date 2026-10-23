@@ -365,7 +365,10 @@ fn main() {
             })();
             match result {
                 Ok(owners) => {
-                    println!("Serialized MAP script-owner diagnostics: {}", owners.entries().len());
+                    println!(
+                        "Serialized MAP script-owner diagnostics: {}",
+                        owners.entries().len()
+                    );
                     for entry in owners.entries() {
                         print!(
                             "  [{}:{}] SID {:#010X}, saved object ID {}: ",
