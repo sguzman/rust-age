@@ -139,6 +139,16 @@ impl ScriptProgram {
         &self.procedures
     }
 
+    /// Original signed 32-bit big-endian immediate at a file offset.
+    /// Exposed for the isolated interpreter core; this does not execute code.
+    pub fn long_at(&self, file_offset: usize) -> io::Result<i32> {
+        read_i32(&self.data, file_offset)
+    }
+
+    pub fn file_len(&self) -> usize {
+        self.data.len()
+    }
+
     /// Original big-endian 16-bit opcode fetch at an absolute file offset.
     pub fn word_at(&self, file_offset: usize) -> io::Result<u16> {
         read_u16(&self.data, file_offset)
