@@ -10,7 +10,7 @@ use rust_age::script_native_vars::{
     ScriptClockContext, ScriptInvocationState, ScriptNativeSnapshot,
 };
 use rust_age::script_object_binding::MapObjectReadBindings;
-use rust_age::script_object_read::{TILE_NUM_OPCODE, OBJ_PID_OPCODE};
+use rust_age::script_object_read::{OBJ_PID_OPCODE, TILE_NUM_OPCODE};
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
@@ -66,14 +66,18 @@ fn serialized_map_objects_feed_only_explicit_read_only_native_vm() {
     let decoded = parsed_objects();
     let original = decoded.clone();
     let bindings = MapObjectReadBindings::from_tables(&decoded).unwrap();
-    let left = bindings.handle_for(rust_age::collision::ObjectKey {
-        elevation: 0,
-        ordinal: 0,
-    }).unwrap();
-    let right = bindings.handle_for(rust_age::collision::ObjectKey {
-        elevation: 0,
-        ordinal: 1,
-    }).unwrap();
+    let left = bindings
+        .handle_for(rust_age::collision::ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        })
+        .unwrap();
+    let right = bindings
+        .handle_for(rust_age::collision::ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        })
+        .unwrap();
     assert_ne!(left, right); // serialized IDs are both 77
 
     let state = BoundScriptRuntime {
