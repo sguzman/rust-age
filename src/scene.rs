@@ -16,6 +16,7 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
+use crate::script_locals::MapScriptLocals;
 use std::io;
 
 #[derive(Debug, Clone)]
@@ -93,6 +94,18 @@ impl StaticScene {
         install_map_scripts(assets, &self.scripts)
     }
 
+    /// Prepare the decoded MAP's attached Rust script instances together
+    /// with independent mutable MAP-local storage. This does not execute
+    /// START, MAP_ENTER, game native opcodes or any background event.
+    pub fn unstarted_script_state(
+        &self,
+        assets: &mut GameAssets,
+    ) -> io::Result<(BoundScriptRuntime, MapScriptLocals)> {
+        let scripts = self.unstarted_script_runtime(assets)?;
+        let locals = scripts.script_local_state(&self.variables)?;
+        Ok((scripts, locals))
+    }
+
     /// CE-style numeric route through the initial static object collision.
     /// The caller supplies a viewport and the actor's current identity.
     /// Door scripts and moving blockers are not handled here.
@@ -149,6 +162,12 @@ mod tests {
         assert_eq!(scene.scripts.script_count(), 0);
         assert_eq!(scene.objects.total_objects, 0);
         assert_eq!(scene.bytes_consumed, bytes.len());
+        let (prepared, locals) = scene.unstarted_script_state(&mut assets).unwrap();
+        assert!(prepared.runtime.is_empty());
+        assert!(prepared.entries.is_empty());
+        assert_eq!(locals.globals(), [12, -8]);
+        assert_eq!(locals.locals(), [99]);
+        assert_eq!(scene.variables.locals, [99]); // no mutation of MAP
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
         assert_eq!(
             scene.route(&view, 20099, 20098, 0, None, true),
