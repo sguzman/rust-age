@@ -184,3 +184,7 @@ The bounded VM now resolves local `CALL` by original 24-byte procedure-table ind
 ## CE script index CLI inspection
 
 `rust-age --inspect-script-index <installation> <zero-based index>` now follows the source list and original patch/DAT bank to display a compiled `.INT` program's path and procedure count without executing it. The synthetic CLI smoke test verifies both direct-file and source-index inspection.
+
+## CE scripts.lst run-info declarations (read-only)
+
+`ScriptList::run_info` ports CE `scr_find_str_run_info` directive discovery after the first `#` comment marker. The case-sensitive `map_init`, `map_exit` and signed `local_vars=` decimal-prefix fields are preserved as data rather than executed. The decimal conversion is bounded to prevent overflow. `GameAssets::script_run_info_by_index` uses the same cached, lower-24-bit indexed list as original program path resolution. Map-init dispatch and local-variable allocation are not yet connected.

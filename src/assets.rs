@@ -161,6 +161,25 @@ impl GameAssets {
         Ok(file.map(|name| format!("scripts/{name}")))
     }
 
+
+    /// Read map_init, map_exit and declared locals from the same cached
+    /// scripts.lst, without constructing a VM or reading .INT bytecode.
+    pub fn script_run_info_by_index(
+        &mut self,
+        script_index: u32,
+    ) -> io::Result<Option<crate::script_list::ScriptRunInfo>> {
+        if self.script_list.is_none() {
+            let Some(bytes) = self.read(Bank::Master, "scripts/scripts.lst")? else {
+                return Ok(None);
+            };
+            self.script_list = Some(ScriptList::parse(&bytes));
+        }
+        match &self.script_list {
+            Some(list) => list.run_info((script_index & 0x00FF_FFFF) as usize),
+            None => Ok(None),
+        }
+    }
+
     /// Decode a script by original index. Execution remains disabled.
     pub fn script_program_by_index(
         &mut self,
