@@ -4,7 +4,7 @@
 //! removeProgList and doEvents. Newly registered programs are visited first;
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
-use crate::script_vm::ScriptVm;
+use crate::script_vm::{ScriptValue, ScriptVm};
 use std::collections::VecDeque;
 use std::io;
 
@@ -142,6 +142,30 @@ impl ScriptRuntime {
             }
         }
         Ok(ready)
+    }
+
+    /// Synthetic-only bounded local interrupt procedure previews for due
+    /// programs. Unlike CE's live scheduler, this diagnostic commits the
+    /// consumed event flags only when every preview succeeds; engine native
+    /// opcodes and real game-world callbacks remain disconnected.
+    pub fn preview_due_local_interrupts(
+        &mut self,
+        now_millis: u32,
+        condition_budget: usize,
+        procedure_budget: usize,
+    ) -> io::Result<Vec<(DueProcedure, ScriptValue)>> {
+        let mut scratch = self.clone();
+        let due = scratch.take_due_preview(now_millis, condition_budget)?;
+        let mut results = Vec::with_capacity(due.len());
+        for entry in due {
+            let vm = scratch
+                .vm(entry.program_id)
+                .ok_or_else(|| invalid("CE ready script instance is missing"))?;
+            let result = vm.preview_local_interrupt_bounded(entry.procedure_index, procedure_budget)?;
+            results.push((entry, result));
+        }
+        *self = scratch;
+        Ok(results)
     }
 
     pub fn take_due_timed(&mut self, now_millis: u32) -> Vec<DueProcedure> {
@@ -282,6 +306,54 @@ mod tests {
         assert!(runtime.take_due_preview(100, 1).is_err());
         assert_eq!(runtime.vm(9).unwrap().runtime_procedures()[0].flags, 0x02);
         assert_eq!(runtime.take_due_preview(100, 3).unwrap()[0].program_id, 9);
+    }
+
+    fn interrupt_vm(condition: i32, value: i32) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&condition.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[30..32].copy_from_slice(&0x801A_u16.to_be_bytes());
+        bytes[32..34].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[34..38].copy_from_slice(&value.to_be_bytes());
+        bytes[38..40].copy_from_slice(&0x8025_u16.to_be_bytes());
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, 0x02, 0, 20, 30, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn interrupt_previews_emit_ordered_values_without_mutating_program_bytes() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, interrupt_vm(1, 51)).unwrap();
+        runtime.register(2, interrupt_vm(1, 72)).unwrap();
+        runtime.register(3, interrupt_vm(0, 10)).unwrap();
+        let original = runtime.vm(1).unwrap().program.clone();
+        let previews = runtime.preview_due_local_interrupts(10, 3, 4).unwrap();
+        assert_eq!(previews.len(), 2);
+        assert_eq!(previews[0].0.program_id, 2);
+        assert_eq!(previews[0].1, crate::script_vm::ScriptValue::Int(72));
+        assert_eq!(previews[1].0.program_id, 1);
+        assert_eq!(previews[1].1, crate::script_vm::ScriptValue::Int(51));
+        assert_eq!(runtime.vm(1).unwrap().program, original);
+        assert_eq!(runtime.vm(3).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert!(runtime.preview_due_local_interrupts(10, 3, 4).unwrap().is_empty());
+    }
+
+    #[test]
+    fn failed_interrupt_preview_rolls_back_earlier_event_consumption() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, interrupt_vm(1, 5)).unwrap();
+        runtime.register(2, interrupt_vm(1, 6)).unwrap();
+        assert!(runtime.preview_due_local_interrupts(10, 3, 2).is_err());
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0x02);
+        assert_eq!(runtime.preview_due_local_interrupts(10, 3, 4).unwrap().len(), 2);
     }
 
     #[test]
