@@ -11,7 +11,9 @@ use crate::map::{MapHeader, MapSquares, MapVariables};
 use crate::object_tables::ObjectTables;
 use crate::pathfinding::make_path;
 use crate::prototype::PrototypeBody;
-use crate::script_binding::{bind_script_procedures, bind_scripts, ScriptBinding, ScriptProcedureBinding};
+use crate::script_binding::{
+    bind_script_procedures, bind_scripts, ScriptBinding, ScriptProcedureBinding,
+};
 use crate::script_data::ScriptTables;
 use std::io;
 

@@ -233,8 +233,7 @@ fn main() {
                             script.script_index,
                             script.path.as_deref().unwrap_or("(unresolved)")
                         );
-                        if let (Some(count), Some(actions)) =
-                            (entry.procedure_count, entry.actions)
+                        if let (Some(count), Some(actions)) = (entry.procedure_count, entry.actions)
                         {
                             println!(
                                 "    INT procedures: {count}, CE action bindings: {} of {}",

@@ -127,10 +127,16 @@ fn reports_ce_map_script_index_and_run_flags_without_executing() {
         stdout.contains("INT procedures: 3, CE action bindings: 2 of 24"),
         "{stdout}"
     );
-    assert!(stdout.contains("action [1] start -> procedure [1]"), "{stdout}");
+    assert!(
+        stdout.contains("action [1] start -> procedure [1]"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("action [15] map_enter_p_proc -> procedure [2]"),
         "{stdout}"
     );
-    assert!(stdout.contains("no Fallout script has executed"), "{stdout}");
+    assert!(
+        stdout.contains("no Fallout script has executed"),
+        "{stdout}"
+    );
 }
