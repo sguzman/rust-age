@@ -39,5 +39,6 @@ pub mod script_procedures;
 pub mod script_program;
 pub mod script_random;
 pub mod script_runtime;
+pub mod script_time_advance;
 pub mod script_timer;
 pub mod script_vm;
