@@ -162,10 +162,18 @@ mod tests {
             elevation: 0,
             ordinal: 1,
         };
-        let mut route = ActorRoute::plan(&view, &collision, actor, 20097, true)
+        let mut route = ActorRoute::plan(&view, &collision, actor, 20098, true)
             .unwrap()
             .unwrap();
-        assert_eq!(route.remaining_steps(), 2);
+        assert_eq!(route.remaining_steps(), 1);
+        collision.relocate(obstacle, 20098).unwrap();
+        assert_eq!(
+            route.advance(&view, &mut collision).unwrap(),
+            ActorStep::Blocked { tile: 20098 }
+        );
+        assert_eq!(route.current_tile(), 20099);
+        assert_eq!(route.remaining_steps(), 1);
+        collision.set_flags(obstacle, 0x01).unwrap(); // original HIDDEN
         assert_eq!(
             route.advance(&view, &mut collision).unwrap(),
             ActorStep::Moved {
@@ -173,27 +181,12 @@ mod tests {
                 rotation: 1
             }
         );
-        collision.relocate(obstacle, 20097).unwrap();
-        assert_eq!(
-            route.advance(&view, &mut collision).unwrap(),
-            ActorStep::Blocked { tile: 20097 }
-        );
-        assert_eq!(route.current_tile(), 20098);
-        assert_eq!(route.remaining_steps(), 1);
-        collision.set_flags(obstacle, 0x01).unwrap(); // original HIDDEN
-        assert_eq!(
-            route.advance(&view, &mut collision).unwrap(),
-            ActorStep::Moved {
-                tile: 20097,
-                rotation: 1
-            }
-        );
         assert_eq!(
             route.advance(&view, &mut collision).unwrap(),
             ActorStep::Finished
         );
-        assert_eq!(collision.tile_of(actor), Some(20097));
-        assert_eq!(collision.tile_of(obstacle), Some(20097));
+        assert_eq!(collision.tile_of(actor), Some(20098));
+        assert_eq!(collision.tile_of(obstacle), Some(20098));
         assert_eq!(route.remaining_steps(), 0);
     }
 

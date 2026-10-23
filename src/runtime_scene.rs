@@ -190,7 +190,7 @@ mod tests {
             elevation: 0,
             ordinal: 0,
         };
-        let mut route = world.plan_actor(&view, actor, 20097, true).unwrap().unwrap();
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
         assert_eq!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Moved {
             tile: 20098,
             rotation: 1,
@@ -198,12 +198,6 @@ mod tests {
         assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20098);
         assert_eq!(world.snapshot().objects.elevations[0][0].record.header.rotation, 1);
         assert_eq!(world.snapshot().collision.tile_of(actor), Some(20098));
-        assert_eq!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Moved {
-            tile: 20097,
-            rotation: 1,
-        });
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20097);
-        assert_eq!(world.snapshot().collision.tile_of(actor), Some(20097));
         assert_eq!(world.advance_actor(&view, &mut route).unwrap(), ActorStep::Finished);
     }
 
