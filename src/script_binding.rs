@@ -6,6 +6,8 @@
 use crate::assets::GameAssets;
 use crate::script_data::ScriptTables;
 use crate::script_list::ScriptRunInfo;
+use crate::script_procedures::build_lookup_table;
+use std::collections::BTreeMap;
 use std::io;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +59,56 @@ pub fn bind_scripts(
     Ok(bindings)
 }
 
+/// Read-only join of original MAP records, scripts.lst and installed INT
+/// procedure tables. An absent or unresolvable program is represented by
+/// None, never by an invented procedure. No script executes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScriptProcedureBinding {
+    pub binding: ScriptBinding,
+    pub procedure_count: Option<usize>,
+    /// CE's original 24 action slots; duplicates preserve their indices.
+    pub actions: Option<[Option<usize>; 24]>,
+}
+
+/// Decode each original script index only once per MAP inspection, even when
+/// several serialized script records share the same installed INT program.
+pub fn bind_script_procedures(
+    assets: &mut GameAssets,
+    tables: &ScriptTables,
+) -> io::Result<Vec<ScriptProcedureBinding>> {
+    let bindings = bind_scripts(assets, tables)?;
+    let mut cache: BTreeMap<u32, Option<(usize, [Option<usize>; 24])>> = BTreeMap::new();
+    let mut resolved = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        let metadata = if binding.script_index >= 0 && binding.path.is_some() {
+            let index = (binding.script_index as u32) & 0x00FF_FFFF;
+            if let Some(entry) = cache.get(&index) {
+                *entry
+            } else {
+                let value = match assets.script_program_by_index(index)? {
+                    Some(program) => {
+                        Some((program.procedures().len(), build_lookup_table(&program)?))
+                    }
+                    None => None,
+                };
+                cache.insert(index, value);
+                value
+            }
+        } else {
+            None
+        };
+        resolved.push(ScriptProcedureBinding {
+            binding,
+            procedure_count: metadata.map(|entry| entry.0),
+            actions: metadata.map(|entry| entry.1),
+        });
+    }
+    Ok(resolved)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::bind_scripts;
+    use super::{bind_script_procedures, bind_scripts};
     use crate::assets::GameAssets;
     use crate::script_data::{ScriptRecord, ScriptTables};
     use std::fs;
@@ -99,6 +148,14 @@ mod tests {
             b"START.ssl # map_init local_vars=3\nEXIT.ssl # map_exit\n",
         )
         .unwrap();
+        // Invented INT with one named procedure. Its body never executes.
+        let mut int_bytes = vec![0_u8; 42];
+        for number in [1_i32, 4, 0, 0, 0, 0, 0, 6] {
+            int_bytes.extend_from_slice(&number.to_be_bytes());
+        }
+        int_bytes.extend_from_slice(b"start\\0");
+        int_bytes.extend_from_slice(&0_i32.to_be_bytes());
+        fs::write(scripts.join("START.int"), int_bytes).unwrap();
         let tables = ScriptTables {
             categories: [
                 vec![record(0, 0), record(1, 20)],
@@ -125,6 +182,15 @@ mod tests {
         assert!(bindings[2].run_info.unwrap().map_exit);
         assert_eq!(bindings[3].script_id, 0x0400_0001);
         assert_eq!(bindings[3].path, None);
+        let detail = bind_script_procedures(&mut assets, &tables).unwrap();
+        assert_eq!(detail.len(), 4);
+        assert_eq!(detail[0].procedure_count, Some(1));
+        assert_eq!(detail[0].actions.unwrap()[1], Some(0));
+        assert_eq!(detail[1].procedure_count, None); // no scripts.lst entry
+        assert_eq!(detail[2].binding.path.as_deref(), Some("scripts/EXIT.int"));
+        assert_eq!(detail[2].procedure_count, None); // missing installed INT
+        assert_eq!(detail[3].procedure_count, None); // negative index
+        assert!(detail[3].actions.is_none());
         fs::remove_dir_all(root).unwrap();
     }
 }
