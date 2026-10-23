@@ -80,7 +80,8 @@ fn synthetic_vm_with_followup_condition(expected_fixed_parameter: i32) -> Script
     let mut second = vec![0x80, 0xF7]; // CE fixed_param native read
     second.extend_from_slice(&0xC001_u16.to_be_bytes());
     second.extend_from_slice(&expected_fixed_parameter.to_be_bytes());
-    second.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]); // EQUAL; STOP
+    // CE EQUAL; STOP_PROGRAM.
+    second.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]);
     // CE stores the procedure table immediately after the 42-byte
     // bytecode header. Do not insert an invented 22-byte padding section.
     let mut bytes = vec![0_u8; 42];
