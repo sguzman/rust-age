@@ -2,7 +2,7 @@
 
 **Source:** [Fallout 1 Community Edition pinned baseline](https://github.com/alexbatalov/fallout1-ce/commit/0609bcfd0ec40ff0571d0f57fab2821eb461dc8b).
 Generated from [`port-matrix.json`](port-matrix.json); do not manually edit this document.
-**Core compilation units:** 108. **Complete:** 0. **Partial:** 13. **Not ported:** 95.
+**Core compilation units:** 108. **Complete:** 0. **Partial:** 14. **Not ported:** 94.
 Partial means a narrow reader/function exists, not that the entire C++ implementation has been replaced.
 The archive is not yet playable; the source matrix is not a gameplay-progress percentage.
 
@@ -66,7 +66,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/perk.cc` | — | ⚪ Not ported |
 | `src/game/pipboy.cc` | — | ⚪ Not ported |
 | `src/game/protinst.cc` | — | ⚪ Not ported |
-| `src/game/proto.cc` | — | ⚪ Not ported |
+| `src/game/proto.cc` | `src/prototype.rs` | 🟡 Partial |
 | `src/game/queue.cc` | — | ⚪ Not ported |
 | `src/game/reaction.cc` | — | ⚪ Not ported |
 | `src/game/roll.cc` | — | ⚪ Not ported |

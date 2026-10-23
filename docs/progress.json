@@ -92,8 +92,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 28,
-              "evidence": "CI-tested FRM decoder plus initial MAP v19 header/square parser in src/map.rs; latest MAP changes awaiting CI and real game data"
+              "progress": 44,
+              "evidence": "FRM decoding, v19 MAP reader, and prototype prefix/item/scenery subtypes in src/frm.rs, src/map.rs and src/prototype.rs. MAP/LST/FRM synthetic pipeline passed CI 39877712951; PRO added tests pending current CI; real game-data parity outstanding."
             }
           ]
         }
@@ -121,22 +121,22 @@
               "id": "T202",
               "emoji": "🧟",
               "name": "Load FRM sprites, directions and animation timing",
-              "progress": 47,
-              "evidence": "FRM decode and keyboard-accessible optional native viewer source in src/bin/view.rs; native viewer CI and real sprite validation pending"
+              "progress": 56,
+              "evidence": "FRM 6-direction decoding, optional native SDL2 sprite browser, user-owned sprite preview. SDL2 build passed CI 39878265184; no automated animation scheduling or real-asset parity."
             },
             {
               "id": "T203",
               "emoji": "💡",
               "name": "Port tile/roof layering, compositing and lighting",
-              "progress": 23,
-              "evidence": "src/framebuffer.rs clip-tested opaque/transparent index blits and offline sprite PPM; passing core unit tests in CI 5508ece; map/roof/lighting not ported"
+              "progress": 40,
+              "evidence": "Clipped indexed blitter with transparency, floor map art ID resolution and static unlit floor PPM image in src/map_preview.rs. Synthetic end-to-end pipeline passed 39877712951; no light interpolation, actual roof layering or objects."
             },
             {
               "id": "T204",
               "emoji": "🪟",
               "name": "Build native Linux window, framebuffer scaling and input loop",
-              "progress": 25,
-              "evidence": "Optional SDL2 native Linux viewer written; binary compile attempted but blocked by unrelated hex lint at earlier ref; latest native build pending"
+              "progress": 48,
+              "evidence": "Native Linux SDL2 diagnostic windows for sprite and MAP floor previews, optional feature in Cargo.toml. SDL2 all-targets Clippy passed CI 39878265184; no playable game event loop or native real-data graphical QA."
             }
           ]
         },
@@ -149,8 +149,8 @@
               "id": "T301",
               "emoji": "🧭",
               "name": "Implement original hex projection and map scrolling",
-              "progress": 46,
-              "evidence": "src/hex.rs ports CE projection, hit mask inverse and parity step with deterministic roundtrip tests; latest integration CI pending"
+              "progress": 60,
+              "evidence": "Source-derived CE hex hit mask, tile projection/inverse, parity movement and square floor/roof projection in src/hex.rs. Rust core tests passed 39877712951; no scrolling or map interaction."
             },
             {
               "id": "T302",
@@ -162,8 +162,8 @@
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 12,
-              "evidence": "src/map.rs MAP version-19 header and static 100x100 per-elevation square layers; tests written but latest CI pending"
+              "progress": 38,
+              "evidence": "Version-19 MAP header, static square layers, tile LST lookup, entry metadata CLI and unlit floor preview. Synthetic MAP/LST/FRM integration CI passed 39877712951; map script/object loading and scene transitions absent."
             },
             {
               "id": "T304",

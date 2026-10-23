@@ -261,8 +261,10 @@
     },
     {
       "source": "src/game/proto.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/prototype.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/queue.cc",
