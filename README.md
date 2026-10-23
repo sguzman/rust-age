@@ -26,7 +26,7 @@ cargo run -- --inspect-map /path/to/Fallout maps/example.map
 cargo run -- --inspect-map-procedures /path/to/Fallout maps/example.map
 cargo run -- --inspect-map-scripts /path/to/Fallout maps/example.map
 cargo run -- --inspect-int /path/to/Fallout scripts/example.int
-cargo run -- --inspect-script-index /path/to/Fallout 0 # also lists built-in CE procedure bindings
+cargo run -- --inspect-script-index /path/to/Fallout 0 # prints escaped procedure names, metadata and CE action bindings
 cargo run -- --inspect-map-route /path/to/Fallout maps/example.map 20099 20098
 # Read-only parser reports square layers, serialized script records and object counts
 cargo run -- --inspect-pro /path/to/Fallout proto/items/example.pro

@@ -268,8 +268,8 @@
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 32,
-              "evidence": "Bounded CE typed ScriptVm with numeric/branch operations, data/return stacks, local/global frames, local calls, named procedure lookup (0x8028), and runtime-only CALL_AT/CALL_WHEN/CANCEL/CANCEL_ALL procedure flags, timestamps and conditions. Synthetic Rust tests and scheduling parity oracle pass core CI; external procedures, actual script callbacks and persistent VM state pending."
+              "progress": 34,
+              "evidence": "Bounded CE typed ScriptVm with numeric and branch opcodes, data/return stacks, frame/global locals, local calls, original-name lookup, CALL_AT/CALL_WHEN/CANCEL/CANCEL_ALL metadata and strict unsigned timed polling. Runtime procedure state remains separate from decoded INT; isolated Rust regressions pass core CI. No condition-expression dispatch, VM persistence, external procedures or gameplay callbacks."
             },
             {
               "id": "T603",
@@ -281,8 +281,8 @@
               "id": "T604",
               "emoji": "🧪",
               "name": "Golden-script differential tests versus CE",
-              "progress": 9,
-              "evidence": "CI compares independent adapted C++ and Rust outputs for invented numeric interpreter bytecode, named procedure lookup (including case-folding/duplicates/main exclusion), and nine timed/conditional/cancel metadata cases. No real compiled CE interpreter or original game script golden tests yet."
+              "progress": 11,
+              "evidence": "Core CI passes adapted C++/Rust numeric opcode decisions, named procedure matching and 14 invented timed/conditional procedure metadata and polling cases, including strict trigger boundaries, unsigned times, conditional precedence and cancellation. This is independent subset parity, NOT original compiled CE interpreter or commercial-game golden parity."
             }
           ]
         },

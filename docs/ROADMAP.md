@@ -55,15 +55,15 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `█░░░░░░░░░ 12%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `█░░░░░░░░░ 13%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
-### 🔣 P6 — Script interpreter and native opcodes — `██░░░░░░░░ 22%`
+### 🔣 P6 — Script interpreter and native opcodes — `██░░░░░░░░ 23%`
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
-- ⚙️ T602 — Port interpreter, procedures and interpreter state — `███░░░░░░░ 32%`
+- ⚙️ T602 — Port interpreter, procedures and interpreter state — `███░░░░░░░ 34%`
 - 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `░░░░░░░░░░ 0%`
-- 🧪 T604 — Golden-script differential tests versus CE — `█░░░░░░░░░ 9%`
+- 🧪 T604 — Golden-script differential tests versus CE — `█░░░░░░░░░ 11%`
 
 ### 📜 P7 — Quests, dialogue and triggers — `░░░░░░░░░░ 3%`
 
