@@ -112,8 +112,8 @@ pub fn run_variable_subset_bounded(
         LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
             apply_map_variable_opcode(locals, instance_id, opcode, stack)
         }
-        GameGlobalStateOpcode @ (0x80C5 | 0x80C6) => {
-            globals.apply_opcode(GameGlobalStateOpcode, stack)
+        game_opcode @ (0x80C5 | 0x80C6) => {
+            globals.apply_opcode(game_opcode, stack)
         }
         _ => Err(invalid("unrecognized CE native variable opcode")),
     })
