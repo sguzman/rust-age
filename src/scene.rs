@@ -186,17 +186,22 @@ impl DetachedMapEventSessions {
                 "CE script event instance unresolved",
             )
         })?;
-        let entry = self
+        // Stage changes before inserting a new session or mutating an
+        // existing one. Invalid ObjectKeys must not leave empty entries.
+        let mut candidate = self
             .sessions
-            .entry(instance_id)
-            .or_insert_with(|| DetachedScriptEvent::new(owner));
-        if entry.owner_resolution() != owner {
+            .get(&instance_id)
+            .copied()
+            .unwrap_or_else(|| DetachedScriptEvent::new(owner));
+        if candidate.owner_resolution() != owner {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE script event session owner changed",
             ));
         }
-        entry.set_objs(&environment.object_queries, source, target)
+        candidate.set_objs(&environment.object_queries, source, target)?;
+        self.sessions.insert(instance_id, candidate);
+        Ok(())
     }
 
     /// Revalidate the exact planned VM/SID/procedure before accessing any
@@ -207,24 +212,32 @@ impl DetachedMapEventSessions {
         environment: &PreparedScriptEnvironment,
         planned: &PlannedMapAction,
     ) -> io::Result<&'a mut DetachedScriptEvent> {
-        let candidate = environment.detached_event_for_planned(planned)?;
-        let owner = candidate.owner_resolution();
-        let entry = self
+        // A planning record alone is insufficient to authorize a detached
+        // action: inspect its actual local CE executeProc body as well.
+        let _ = environment.local_frame_for_planned(planned)?;
+        let owner = environment.owner_for_instance(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE script event owner missing")
+        })?;
+        let mut candidate = self
             .sessions
-            .entry(planned.instance_id)
-            .or_insert_with(|| DetachedScriptEvent::new(owner));
-        if entry.owner_resolution() != owner {
+            .get(&planned.instance_id)
+            .copied()
+            .unwrap_or_else(|| DetachedScriptEvent::new(owner));
+        if candidate.owner_resolution() != owner {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE script event session owner changed",
             ));
         }
-        entry.begin_action(
+        candidate.begin_action(
             planned.action,
             planned.external_parameter,
             &environment.object_queries,
         )?;
-        Ok(entry)
+        self.sessions.insert(planned.instance_id, candidate);
+        self.sessions.get_mut(&planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE script event session missing")
+        })
     }
 
     /// Explicit normal-completion boundary. The source is cleared and the

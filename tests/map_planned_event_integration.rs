@@ -161,6 +161,19 @@ fn isolated_map_event_sessions_retain_fixed_parameter_and_reject_stale_actions()
     assert!(sessions.get(1).is_none());
     assert!(sessions.finish(1).is_err());
     assert!(sessions.set_objs(&environment, 999, None, None).is_err());
+    assert!(sessions.get(999).is_none());
+    assert!(sessions
+        .set_objs(
+            &environment,
+            1,
+            Some(rust_age::collision::ObjectKey {
+                elevation: 0,
+                ordinal: 99,
+            }),
+            None,
+        )
+        .is_err());
+    assert!(sessions.get(1).is_none()); // rejected participant is atomic
 
     sessions.set_objs(&environment, 1, None, None).unwrap();
     let started = sessions.begin_planned(&environment, &plan).unwrap();
@@ -190,6 +203,7 @@ fn isolated_map_event_sessions_retain_fixed_parameter_and_reject_stale_actions()
     assert!(sessions.begin_planned(&environment, &stale).is_err());
     assert!(!sessions.get(1).unwrap().is_active());
     assert_eq!(sessions.get(1).unwrap().invocation().fixed_parameter(), 1);
+    assert!(sessions.get(999).is_none());
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
 
