@@ -37,7 +37,10 @@ fn run(
     now: i32,
 ) -> Result<String, Box<dyn Error>> {
     let mut code = Vec::new();
-    if matches!(operation, "at" | "both" | "cancel" | "poll_at" | "poll_both") {
+    if matches!(
+        operation,
+        "at" | "both" | "cancel" | "poll_at" | "poll_both"
+    ) {
         push_int(&mut code, first); // seconds before procedure index
         push_int(&mut code, 0);
         opcode(&mut code, 0x8006);
