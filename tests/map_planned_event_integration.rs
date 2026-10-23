@@ -463,12 +463,13 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
 fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects() {
     let mut environment = environment();
     let mut body = vec![0x80, 0x1A]; // setupCall argument marker
+    // CALL_AT takes delay in seconds, then the procedure index.
     body.extend_from_slice(&0xC001_u16.to_be_bytes());
-    body.extend_from_slice(&1_i32.to_be_bytes()); // one second delay
+    body.extend_from_slice(&1_i32.to_be_bytes());
     body.extend_from_slice(&0xC001_u16.to_be_bytes());
-    body.extend_from_slice(&1_i32.to_be_bytes()); // map_enter_p_proc
-    // Schedule a local CE procedure, set a speculative script override,
-    // and return without ever touching the installed MAP or script session.
+    body.extend_from_slice(&1_i32.to_be_bytes());
+    // Schedule the MAP procedure and set a speculative script override;
+    // neither writes the installed MAP or the active script session.
     body.extend_from_slice(&[0x80, 0x06, 0x80, 0xB9, 0x80, 0x21]);
     assert_eq!(body.len(), 20);
     environment.scripts.runtime = {
