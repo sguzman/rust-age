@@ -112,7 +112,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 
 | C++ compilation unit | Rust counterpart | Status |
 |---|---|---|
-| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_random.rs` | 🟡 Partial |
+| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_random.rs`, `src/script_time_advance.rs` | 🟡 Partial |
 
 ## src/plib/assoc (1)
 

@@ -481,7 +481,8 @@
         "src/game_globals.rs",
         "src/script_locals.rs",
         "src/script_clock.rs",
-        "src/script_random.rs"
+        "src/script_random.rs",
+        "src/script_time_advance.rs"
       ],
       "status": "partial"
     },
