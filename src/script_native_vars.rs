@@ -227,9 +227,9 @@ pub fn run_invocation_subset_bounded(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_map_variable_opcode, run_variable_subset_bounded, run_with_script_action_bounded,
-        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SET_LOCAL_VAR_OPCODE,
-        SET_MAP_VAR_OPCODE,
+        apply_map_variable_opcode, run_invocation_subset_bounded, run_variable_subset_bounded,
+        run_with_script_action_bounded, ScriptInvocationState, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
+        SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
@@ -373,6 +373,52 @@ mod tests {
         assert!(vm.step_with_variable_host(&mut rejected).is_err());
         assert_eq!(vm.pc(), saved_pc);
         assert_eq!(vm.stack(), saved_stack);
+    }
+
+    #[test]
+    fn ce_script_overrides_reset_at_each_new_invocation() {
+        let mut code = Vec::new();
+        op(&mut code, SCRIPT_OVERRIDES_OPCODE);
+        op(&mut code, SCRIPT_ACTION_OPCODE);
+        op(&mut code, 0x8011);
+        let mut map = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[8]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        assert!(invocation.begin_action(15));
+        let mut first = program(&code);
+        assert_eq!(run_invocation_subset_bounded(
+            &mut first, 1, &mut map, &mut globals, &mut invocation, 5,
+        ).unwrap(), 3);
+        assert_eq!(first.stack(), [ScriptValue::Int(15)]);
+        assert!(invocation.overrides());
+        assert!(invocation.begin_action(23));
+        assert!(!invocation.overrides());
+        let mut next = program(&code);
+        run_invocation_subset_bounded(
+            &mut next, 1, &mut map, &mut globals, &mut invocation, 5,
+        ).unwrap();
+        assert_eq!(next.stack(), [ScriptValue::Int(23)]);
+        assert!(invocation.overrides());
+    }
+
+    #[test]
+    fn missing_sid_leaves_override_unset_and_returns_zero() {
+        let mut code = Vec::new();
+        op(&mut code, SCRIPT_OVERRIDES_OPCODE);
+        op(&mut code, SCRIPT_ACTION_OPCODE);
+        op(&mut code, 0x8011);
+        let mut state = ScriptInvocationState::missing();
+        assert!(!state.begin_action(15));
+        let mut map = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[8]).unwrap();
+        let mut vm = program(&code);
+        run_invocation_subset_bounded(
+            &mut vm, 1, &mut map, &mut globals, &mut state, 5,
+        ).unwrap();
+        assert_eq!(vm.stack(), [ScriptValue::Int(0)]);
+        assert!(!state.overrides());
+        let mut ungated = program(&code);
+        assert!(ungated.step().is_err());
     }
 
     #[test]
