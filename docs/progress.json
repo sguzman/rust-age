@@ -92,8 +92,8 @@
               "id": "T106",
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
-              "progress": 63,
-              "evidence": "CI-tested original MAP header/variables/squares/scripts/objects, PRO/FRM/FID readers and read-only .INT 42-byte program preamble, procedure table, identifiers and static strings; synthetic Linux inspection tests. Original game install and script semantics unverified."
+              "progress": 66,
+              "evidence": "MAP header/variables/squares/scripts/objects plus PRO/FRM/FID and read-only INT decoding. CE scripts.lst index/flags, installed INT action bindings, cached MAP->LST->INT inspection with synthetic CLI fixtures. Actual installation parity, lifecycle and execution pending."
             }
           ]
         }
@@ -261,8 +261,8 @@
               "id": "T601",
               "emoji": "📚",
               "name": "Inventory bytecode opcodes, stack layout and data",
-              "progress": 38,
-              "evidence": "CI-tested read-only CE .INT program/24-byte procedure/static string decoder, all 76 core opcode names, typed 16-bit opcode/32-bit immediate readers, native CLI inspection and synthetic fixtures. Native engine opcodes and full instruction semantics pending."
+              "progress": 44,
+              "evidence": "CI-tested INT preamble and 76 opcode names plus synthetic procedure table, CE case-insensitive first-match lookup and all 24 original game action slots (src/script_program.rs, src/script_procedures.rs). MAP/INT and CLI tests added; full action dispatch and installed-game parity pending."
             },
             {
               "id": "T602",

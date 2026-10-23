@@ -70,7 +70,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/queue.cc` | — | ⚪ Not ported |
 | `src/game/reaction.cc` | — | ⚪ Not ported |
 | `src/game/roll.cc` | — | ⚪ Not ported |
-| `src/game/scripts.cc` | `src/script_data.rs` | 🟡 Partial |
+| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs` | 🟡 Partial |
 | `src/game/select.cc` | — | ⚪ Not ported |
 | `src/game/selfrun.cc` | — | ⚪ Not ported |
 | `src/game/sfxcache.cc` | — | ⚪ Not ported |

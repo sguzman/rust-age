@@ -301,7 +301,10 @@
     {
       "source": "src/game/scripts.cc",
       "rust": [
-        "src/script_data.rs"
+        "src/script_data.rs",
+        "src/script_list.rs",
+        "src/script_binding.rs",
+        "src/script_procedures.rs"
       ],
       "status": "partial"
     },
