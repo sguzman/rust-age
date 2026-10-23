@@ -499,7 +499,12 @@ pub fn run_invocation_with_event_snapshot_bounded(
         | GAME_TICKS_OPCODE
         | GAME_TIME_HOUR_OPCODE
         | GET_MONTH_OPCODE
-        | GET_DAY_OPCODE => snapshot.owner.native.clock.clock.apply_opcode(opcode, stack),
+        | GET_DAY_OPCODE => snapshot
+            .owner
+            .native
+            .clock
+            .clock
+            .apply_opcode(opcode, stack),
         DAYS_SINCE_VISITED_OPCODE => snapshot.owner.native.clock.clock.apply_visit_opcode(
             snapshot
                 .owner
@@ -539,13 +544,12 @@ mod tests {
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
         run_invocation_with_event_snapshot_bounded, run_invocation_with_native_snapshot_bounded,
-        run_invocation_with_owner_snapshot_bounded,
-        run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
-        ScriptInvocationState, ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot,
-        ScriptNativeSnapshot, FIXED_PARAM_OPCODE,
-        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
-        SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE, SOURCE_OBJ_OPCODE,
-        TARGET_OBJ_OPCODE,
+        run_invocation_with_owner_snapshot_bounded, run_variable_subset_bounded,
+        run_with_script_action_bounded, ScriptClockContext, ScriptInvocationState,
+        ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot,
+        FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
+        SCRIPT_OVERRIDES_OPCODE, SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        SOURCE_OBJ_OPCODE, TARGET_OBJ_OPCODE,
     };
     use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
@@ -556,7 +560,7 @@ mod tests {
         GAME_TIME_IN_SECONDS_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_list::ScriptRunInfo;
-    use crate::script_object_read::{ScriptObjectSnapshot, TILE_NUM_OPCODE};
+    use crate::script_object_read::{ScriptObjectSnapshot, OBJ_PID_OPCODE, TILE_NUM_OPCODE};
     use crate::script_owner_binding::ScriptOwnerResolution;
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
