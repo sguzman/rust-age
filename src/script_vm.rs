@@ -1261,6 +1261,45 @@ mod tests {
     }
 
     #[test]
+    fn ce_condition_frame_previews_scheduled_procedure_changes_without_commit() {
+        // CALL_AT (from original CE interpreter) changes a procedure's
+        // scheduled time and flag. The candidate reports the modification;
+        // the installed VM and original decoded INT table remain unchanged.
+        let mut bytes = vec![0_u8; 42];
+        let mut condition = Vec::new();
+        push_int(&mut condition, 7); // delay seconds
+        push_int(&mut condition, 0); // procedure index
+        opcode(&mut condition, 0x8006); // CALL_AT
+        push_int(&mut condition, 1); // successful condition result
+        opcode(&mut condition, 0x8011); // STOP_PROGRAM
+        assert_eq!(condition.len(), 22);
+        bytes[20..42].copy_from_slice(&condition);
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, 0, 0, 0, 20, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes).unwrap());
+        vm.set_clock_millis(250);
+        let candidate = vm
+            .preview_condition_frame_with_host_bounded(20, 5, &mut |_, _| {
+                Err(super::invalid("CE condition native host forbidden"))
+            })
+            .unwrap();
+        assert!(candidate.satisfied);
+        assert_eq!(candidate.procedures[0].flags & 0x01, 0x01);
+        assert_eq!(candidate.procedures[0].event_time, 7250);
+        assert_eq!(vm.runtime_procedures()[0].flags, 0);
+        assert_eq!(vm.runtime_procedures()[0].event_time, 0);
+        assert_eq!(vm.program.procedures()[0].flags, 0);
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+    }
+
+    #[test]
     fn ce_conditional_preview_preserves_existing_data_and_return_stacks() {
         // A running CE script has already pushed a persistent operand and
         // stopped. doEvents enters its condition without clearing that stack.
