@@ -62,13 +62,13 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
 - ⚙️ T602 — Port interpreter, procedures and interpreter state — `████░░░░░░ 42%`
-- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `█░░░░░░░░░ 10%`
+- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `█░░░░░░░░░ 11%`
 - 🧪 T604 — Golden-script differential tests versus CE — `██░░░░░░░░ 17%`
 
-### 📜 P7 — Quests, dialogue and triggers — `░░░░░░░░░░ 3%`
+### 📜 P7 — Quests, dialogue and triggers — `░░░░░░░░░░ 4%`
 
 - 🗣️ T701 — Port dialogue branches and NPC reactions — `░░░░░░░░░░ 0%`
-- 🚩 T702 — Port map scripts, spatial triggers and timers — `█░░░░░░░░░ 11%`
+- 🚩 T702 — Port map scripts, spatial triggers and timers — `██░░░░░░░░ 15%`
 - 🧮 T703 — Port global/local state and quest flags — `░░░░░░░░░░ 0%`
 - 🤝 T704 — Port companion scripts and party interactions — `░░░░░░░░░░ 0%`
 

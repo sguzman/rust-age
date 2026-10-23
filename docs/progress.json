@@ -275,8 +275,8 @@
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 10,
-              "evidence": "CI-tested ScriptRuntime mirrors CE newest-first program and per-procedure order, condition priority and strict timing. Bounded synthetic condition previews can return isolated local interrupt values transactionally (Rust-only diagnostic). New explicit dispatch_due_with host hook clears each due event before immediate callback, allowing earlier host effects to change later condition decisions; callback failure leaves that event consumed as CE does. Rust tests verify order, suspension, interleaving and error semantics; no real Fallout native opcodes, engine state, quests or saved VM lifecycle yet."
+              "progress": 11,
+              "evidence": "CI-tested Rust ScriptRuntime handles CE per-program event ordering, condition/time eligibility, host callback dispatch and 24-slot action resolution. The StaticScene unstarted_script_runtime pathway decodes original MAP->scripts.lst->INT records into independent registered VMs but triggers NO procedures, callbacks, quest logic or map lifecycle. Native game opcode engine and persistence remain outstanding."
             },
             {
               "id": "T604",
@@ -302,8 +302,8 @@
               "id": "T702",
               "emoji": "🚩",
               "name": "Port map scripts, spatial triggers and timers",
-              "progress": 11,
-              "evidence": "Read-only MAP script categories/SIDs and scripts.lst run-info map_init/map_exit flags, local_vars declarations, resolved .INT names and standard script actions through RuntimeScene inspection; synthetic CLI tests pass core CI. Script triggers and timed callbacks not executed."
+              "progress": 15,
+              "evidence": "CI-tested MAP script SID/category/run-info lookup, scripts.lst flags, resolved INT built-in actions and optional per-record unstarted Rust VM installation. Missing INTs and absent index entries remain explicit, repeated INT references produce separate VMs. No production map triggers, time callbacks, local/global state mutation or real-game parity."
             },
             {
               "id": "T703",

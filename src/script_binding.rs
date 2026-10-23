@@ -206,6 +206,7 @@ mod tests {
         .unwrap();
         // Invented INT with one named procedure. Its body never executes.
         let mut int_bytes = vec![0_u8; 42];
+        int_bytes[0..2].copy_from_slice(&0x8011_u16.to_be_bytes()); // invented STOP
         for number in [1_i32, 4, 0, 0, 0, 0, 0, 6] {
             int_bytes.extend_from_slice(&number.to_be_bytes());
         }
@@ -257,6 +258,25 @@ mod tests {
         assert_eq!(loaded.runtime.vm(1).unwrap().program.procedures().len(), 1);
         assert_eq!(loaded.runtime.vm(1).unwrap().pc(), 0);
         assert!(loaded.runtime.vm(1).unwrap().stack().is_empty());
+        // Two serialized records referencing one .INT produce independent
+        // mutable VM instances, not two aliases of shared runtime state.
+        let duplicates = ScriptTables {
+            categories: [
+                vec![record(0, 0), record(1, 0)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            ],
+            bytes_consumed: 0,
+        };
+        let mut repeated = install_map_scripts(&mut assets, &duplicates).unwrap();
+        assert_eq!(repeated.runtime.len(), 2);
+        assert_eq!(repeated.entries[0].instance_id, Some(1));
+        assert_eq!(repeated.entries[1].instance_id, Some(2));
+        repeated.runtime.vm_mut(1).unwrap().run_bounded(2).unwrap();
+        assert!(repeated.runtime.vm(1).unwrap().halted());
+        assert!(!repeated.runtime.vm(2).unwrap().halted());
         fs::remove_dir_all(root).unwrap();
     }
 }
