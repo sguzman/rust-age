@@ -351,6 +351,75 @@ impl ScriptVm {
         })
     }
 
+    /// Synthetic-only local CE interrupt procedure preview. Mirrors the
+    /// CE setupCallWithReturnVal/setupCall data and return stack layout for
+    /// executeProc (return address 20), then handles 0x8025 on that isolated
+    /// invocation. Only supported core opcodes execute. This does NOT model
+    /// native game opcodes, externally imported procedures, callback pointers,
+    /// suspended programs, or a full game script's persistent VM state.
+    pub fn preview_local_interrupt_bounded(
+        &self,
+        procedure_index: usize,
+        max_steps: usize,
+    ) -> io::Result<ScriptValue> {
+        let procedure = self
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE local interrupt procedure index outside table"))?;
+        if procedure.flags & 0x04 != 0 {
+            return Err(invalid("CE imported interrupt procedure not supported"));
+        }
+        if procedure.argument_count != 0 {
+            return Err(invalid("CE local interrupt arguments not supported"));
+        }
+        let mut probe = self.clone();
+        let old_pc = i32::try_from(probe.pc)
+            .map_err(|_| invalid("CE return PC exceeds i32"))?;
+        let body = usize::try_from(procedure.body_offset)
+            .map_err(|_| invalid("negative CE interrupt body offset"))?;
+        probe.program.word_at(body)?;
+        probe.push_return(ScriptValue::Int(old_pc))?;
+        probe.push_return(ScriptValue::Int(20))?;
+        // The sandbox has no wait callback or window; these CE frame fields
+        // remain correctly typed null/zero placeholders, never host pointers.
+        let saved_flags = if probe.critical_section { 0x80 } else { 0 };
+        probe.push(ScriptValue::Int(saved_flags))?;
+        probe.push(ScriptValue::Pointer(0))?;
+        probe.push(ScriptValue::Int(0))?;
+        probe.push(ScriptValue::Int(0))?; // setupCall's no-argument marker
+        probe.critical_section = procedure.flags & 0x10 != 0;
+        probe.halted = false;
+        probe.pc = body;
+        for _ in 0..max_steps {
+            let instruction = probe.program.word_at(probe.pc)?;
+            if instruction == 0x8025 {
+                // CE op_pop_flags_return_val_exit pops the return value,
+                // window ID, checkWait pointer, flags, and return PC in order.
+                let result = probe.pop()?;
+                if probe.pop()? != ScriptValue::Int(0)
+                    || probe.pop()? != ScriptValue::Pointer(0)
+                {
+                    return Err(invalid("unsupported CE interrupt host frame"));
+                }
+                let flags = probe.pop_int()?;
+                if probe.pop_return_int()? != 20 {
+                    return Err(invalid("CE interrupt return address mismatch"));
+                }
+                probe.critical_section = flags & 0x80 != 0;
+                // The saved original PC remains on CE's return stack until
+                // the enclosing interpreter context handles it. Since this
+                // is an isolated preview, the original VM stays unchanged.
+                return Ok(result);
+            }
+            probe.step()?;
+            if probe.halted {
+                return Err(invalid("CE interrupt stopped before return"));
+            }
+        }
+        Err(invalid("CE interrupt instruction budget exhausted"))
+    }
+
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
         let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
         self.runtime_procedures
@@ -1400,6 +1469,61 @@ mod tests {
         vm.runtime_procedures[0].condition_offset = 20;
         assert!(vm.take_due_procedures_preview(100, 4).is_err());
         assert_eq!(vm.runtime_procedures[0].flags, 0x02);
+    }
+
+    fn interrupt_fixture(body: &[u8], flags: i32, argument_count: i32) -> ScriptProgram {
+        let mut bytes = vec![0_u8; 42];
+        // Keep main entry separate from procedure body, which starts at 20.
+        assert!(body.len() <= 20);
+        bytes[20..20 + body.len()].copy_from_slice(body);
+        bytes.extend_from_slice(&1_i32.to_be_bytes());
+        for field in [4_i32, flags, 0, 0, 20, argument_count] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        bytes.extend_from_slice(&5_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptProgram::decode(&bytes).unwrap()
+    }
+
+    #[test]
+    fn ce_local_interrupt_preview_restores_isolated_stack_on_value_return() {
+        let mut body = Vec::new();
+        opcode(&mut body, 0x801A); // discard CE setupCall zero argument marker
+        push_int(&mut body, 42);
+        opcode(&mut body, 0x8025); // CE POP_FLAGS_RETURN_VAL_EXIT
+        let mut vm = ScriptVm::new(interrupt_fixture(&body, 0x10, 0));
+        vm.set_clock_millis(123);
+        let previous = vm.clone();
+        assert_eq!(
+            vm.preview_local_interrupt_bounded(0, 4).unwrap(),
+            ScriptValue::Int(42)
+        );
+        assert_eq!(vm.pc(), previous.pc());
+        assert_eq!(vm.stack(), previous.stack());
+        assert_eq!(vm.return_stack(), previous.return_stack());
+        assert_eq!(vm.critical_section(), previous.critical_section());
+        assert_eq!(vm.runtime_procedures(), previous.runtime_procedures());
+        assert!(!vm.halted());
+    }
+
+    #[test]
+    fn ce_local_interrupt_preview_rejects_imports_arguments_errors_and_budget() {
+        let mut body = Vec::new();
+        opcode(&mut body, 0x801A);
+        push_int(&mut body, 42);
+        opcode(&mut body, 0x8025);
+        let vm = ScriptVm::new(interrupt_fixture(&body, 0, 0));
+        assert!(vm.preview_local_interrupt_bounded(1, 4).is_err());
+        assert!(vm.preview_local_interrupt_bounded(0, 2).is_err());
+        let vm = ScriptVm::new(interrupt_fixture(&body, 0x04, 0));
+        assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
+        let vm = ScriptVm::new(interrupt_fixture(&body, 0, 1));
+        assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
+        let vm = ScriptVm::new(interrupt_fixture(&[0x80, 0x11], 0, 0));
+        assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
+        let vm = ScriptVm::new(interrupt_fixture(&[0x80, 0x4C], 0, 0));
+        assert!(vm.preview_local_interrupt_bounded(0, 4).is_err());
     }
 
     #[test]
