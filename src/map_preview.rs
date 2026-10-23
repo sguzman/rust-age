@@ -23,6 +23,8 @@ pub struct FloorPreview {
     pub tile_count: usize,
     /// Count of distinct successfully resolved FRM filenames.
     pub unique_art: usize,
+    /// Number of roofs composited in the optional read-only diagnostic.
+    pub roof_count: usize,
 }
 
 fn load_tile_frame(assets: &mut GameAssets, name: &str) -> io::Result<Option<Frame>> {
@@ -45,6 +47,18 @@ impl FloorPreview {
         map_bytes: &[u8],
         width: usize,
         height: usize,
+    ) -> io::Result<Self> {
+        Self::render_layers(assets, map_bytes, width, height, false)
+    }
+
+    /// Optional unlit roof pass, overlaid after every floor tile. This does
+    /// not implement the CE egg mask, ambient lighting or true roof clipping.
+    pub fn render_layers(
+        assets: &mut GameAssets,
+        map_bytes: &[u8],
+        width: usize,
+        height: usize,
+        include_roofs: bool,
     ) -> io::Result<Self> {
         let header = MapHeader::decode(map_bytes)?;
         let squares = header.decode_squares(map_bytes)?;
@@ -94,11 +108,43 @@ impl FloorPreview {
             }
         }
 
+        let mut roof_count = 0;
+        if include_roofs {
+            // Original CE draws roof tiles in a separate pass after floors.
+            for (square, &word) in layer.iter().enumerate().take(SQUARE_COUNT) {
+                if word & 0x1000_0000 != 0 {
+                    continue;
+                }
+                let id = ((word >> 16) & 0x0FFF) as u16;
+                if id == 1 {
+                    continue;
+                }
+                let Some((x, y)) = view.square_coord(square as i32, true) else {
+                    continue;
+                };
+                if x < -256 || y < -256 || x >= w + 256 || y >= h + 256 {
+                    continue;
+                }
+                if let std::collections::btree_map::Entry::Vacant(entry) = frame_cache.entry(id) {
+                    let frame = match tile_names.file_name(usize::from(id))? {
+                        Some(name) => load_tile_frame(assets, name)?,
+                        None => None,
+                    };
+                    entry.insert(frame);
+                }
+                if let Some(Some(frame)) = frame_cache.get(&id) {
+                    surface.blit_frame(frame, x, y, true)?;
+                    roof_count += 1;
+                }
+            }
+        }
+
         let unique_art = frame_cache.values().filter(|entry| entry.is_some()).count();
         Ok(Self {
             surface,
             tile_count,
             unique_art,
+            roof_count,
         })
     }
 }
@@ -155,7 +201,11 @@ mod tests {
         map.extend_from_slice(&[0_u8; 44 * 4]);
         for square in 0..10_000 {
             // Every cell except the one visible example is blank tile #1.
-            let word = if square == 5049 { 0_u32 } else { 1_u32 };
+            let word = if square == 5049 {
+                0_u32
+            } else {
+                0x0001_0001_u32
+            };
             map.extend_from_slice(&word.to_be_bytes());
         }
 
@@ -163,11 +213,17 @@ mod tests {
         let preview = FloorPreview::render(&mut assets, &map, 640, 380).unwrap();
         assert_eq!(preview.unique_art, 1);
         assert_eq!(preview.tile_count, 1);
+        assert_eq!(preview.roof_count, 0);
         let (x, y) = (288_usize, 180_usize);
         let indices = preview.surface.indices();
         assert_eq!(indices[y * 640 + x], 7);
         assert_eq!(indices[y * 640 + x + 1], 0);
         assert_eq!(indices[(y + 1) * 640 + x + 1], 9);
+        let layered = FloorPreview::render_layers(&mut assets, &map, 640, 380, true).unwrap();
+        assert_eq!(layered.tile_count, 1);
+        assert_eq!(layered.roof_count, 1);
+        assert_eq!(layered.surface.indices()[84 * 640 + x], 7);
+        assert_eq!(layered.surface.indices()[180 * 640 + x], 7);
         fs::remove_dir_all(root).unwrap();
     }
 
