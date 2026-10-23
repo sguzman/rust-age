@@ -409,7 +409,10 @@ impl PreparedScriptEnvironment {
             io::Error::new(io::ErrorKind::InvalidData, "CE active due session missing")
         })?;
         let action = i32::try_from(planned.action).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE active due action exceeds i32")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE active due action exceeds i32",
+            )
         })?;
         if !event.is_active()
             || event.invocation().action() != action
@@ -427,7 +430,9 @@ impl PreparedScriptEnvironment {
             .scripts
             .runtime
             .vm(planned.instance_id)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE active due VM missing"))?;
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE active due VM missing")
+            })?;
         let snapshot = event.snapshot(&self.object_queries, clock)?;
         vm.preview_due_procedures_with_host_bounded(
             now_millis,

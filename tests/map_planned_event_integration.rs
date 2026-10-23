@@ -701,9 +701,7 @@ fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
 fn active_due_condition_uses_retained_script_fixed_parameter_and_fails_closed() {
     let mut environment = environment();
     // CE fixed_param read; PUSH 1; EQUAL; STOP_PROGRAM.
-    let condition = [
-        0x80, 0xF7, 0xC0, 0x01, 0, 0, 0, 1, 0x80, 0x33, 0x80, 0x11,
-    ];
+    let condition = [0x80, 0xF7, 0xC0, 0x01, 0, 0, 0, 1, 0x80, 0x33, 0x80, 0x11];
     let body = [0x80, 0x1A, 0x80, 0x21];
     *environment.scripts.runtime.vm_mut(1).unwrap() =
         synthetic_vm_with_condition(&body, &condition);
