@@ -93,7 +93,7 @@
               "emoji": "🧬",
               "name": "Decode FRM, PRO, map and script asset structures",
               "progress": 66,
-              "evidence": "MAP header/variables/squares/scripts/objects plus PRO/FRM/FID and read-only INT decoding. CE scripts.lst index/flags, installed INT action bindings, cached MAP->LST->INT inspection with synthetic CLI fixtures. Actual installation parity, lifecycle and execution pending."
+              "evidence": "CE .INT preamble/24-byte procedures/static strings, all 76 core numeric opcode names, scripts.lst path/run-info/declared locals, case-insensitive built-in procedure lookup, Linux script inspectors and synthetic tests pass core CI. No commercial game script audit."
             }
           ]
         }
@@ -156,15 +156,15 @@
               "id": "T302",
               "emoji": "🚶",
               "name": "Port pathfinding, collision and actor movement",
-              "progress": 30,
-              "evidence": "CI-tested CE-style 2000-node path search with screen heuristic and turn cost, C++ numeric differential probe, MAP-derived direct/multihex collision and Linux read-only MAP route CLI integration test. No mutable actors, doors, animations or runtime movement."
+              "progress": 40,
+              "evidence": "Original CE hex/pathfinder numeric C++ oracle; MAP-derived direct/multihex collision; same-elevation relocation, flag changes, bounded ActorRoute obstacle rechecks and RuntimeScene object-table/rotation synchronization pass core CI. Lighting, triggers, door use, animation and playable controls absent."
             },
             {
               "id": "T303",
               "emoji": "🚪",
               "name": "Port map/elevation load and spatial exits",
-              "progress": 66,
-              "evidence": "CI-tested MAP v19 variables, squares, serialized script and per-elevation object/inventory tables, PRO subtype lookup, immutable StaticScene composition and shared inspection/route commands. No live transitions, runtime map changes or state."
+              "progress": 69,
+              "evidence": "CE MAP v19 immutable scene decoder, variables/squares/scripts/inventories, original script-index/.INT action binding and read-only Linux map inspectors tested. Mutable RuntimeScene preserves object-header/collision correspondence. No map transitions or persistent world state."
             },
             {
               "id": "T304",
@@ -261,15 +261,15 @@
               "id": "T601",
               "emoji": "📚",
               "name": "Inventory bytecode opcodes, stack layout and data",
-              "progress": 44,
-              "evidence": "CI-tested INT preamble and 76 opcode names plus synthetic procedure table, CE case-insensitive first-match lookup and all 24 original game action slots (src/script_program.rs, src/script_procedures.rs). MAP/INT and CLI tests added; full action dispatch and installed-game parity pending."
+              "progress": 46,
+              "evidence": "Core CE .INT parser, procedure table/string decoding, original opcode inventory, lower-24-bit scripts.lst resolution, source comment flags, case-insensitive standard action lookup and synthetic CLI/MAP integration pass core CI. No full program execution or real-game verification."
             },
             {
               "id": "T602",
               "emoji": "⚙️",
               "name": "Port interpreter, procedures and interpreter state",
-              "progress": 18,
-              "evidence": "Isolated bounded ScriptVm implements typed immediate PUSH, stack POP/DUP/SWAP, numeric ADD/SUB/MUL/DIV/MOD, comparisons, boolean/bitwise, IF/WHILE/JUMP and simplified STOP/EXIT semantics. Synthetic C++/Rust numeric regression cases; no procedure/return stack, callbacks or game execution."
+              "progress": 28,
+              "evidence": "Bounded typed ScriptVm with numeric/branch operations, separate data/return stack, frame/global local fetch/store, local CALL/POP_RETURN and argument checks; independent C++ subset oracle; core CI tested. External/imported procedures, VM scheduler and original save state pending."
             },
             {
               "id": "T603",
@@ -301,7 +301,8 @@
               "id": "T702",
               "emoji": "🚩",
               "name": "Port map scripts, spatial triggers and timers",
-              "progress": 0
+              "progress": 11,
+              "evidence": "Read-only MAP script categories/SIDs and scripts.lst run-info map_init/map_exit flags, local_vars declarations, resolved .INT names and standard script actions through RuntimeScene inspection; synthetic CLI tests pass core CI. Script triggers and timed callbacks not executed."
             },
             {
               "id": "T703",
@@ -396,7 +397,8 @@
               "id": "T1001",
               "emoji": "⏰",
               "name": "Port time, rest and random encounters",
-              "progress": 0
+              "progress": 9,
+              "evidence": "Pure src/event_queue.rs port of all 13 CE queue event indices, ascending signed game-time ordering and FIFO ties, owner/type removal and handler nonzero stop; synthetic core CI passed. No game clock, event callback side effects, encounters or save support."
             },
             {
               "id": "T1002",

@@ -21,7 +21,7 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 📄 T105 — Implement game configuration, messages and encodings — `███████░░░ 65%`
 - 🧬 T106 — Decode FRM, PRO, map and script asset structures — `███████░░░ 66%`
 
-## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█████░░░░░ 50%`
+## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█████░░░░░ 51%`
 **Acceptance gate:** An original Fallout 1 location renders faithfully, with movement and transitions.
 
 ### 🎨 P2 — Art and rendering — `██████░░░░ 59%`
@@ -31,11 +31,11 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 💡 T203 — Port tile/roof layering, compositing and lighting — `██████░░░░ 55%`
 - 🪟 T204 — Build native Linux window, framebuffer scaling and input loop — `██████░░░░ 55%`
 
-### 🗺️ P3 — Maps and world views — `████░░░░░░ 40%`
+### 🗺️ P3 — Maps and world views — `████░░░░░░ 43%`
 
 - 🧭 T301 — Implement original hex projection and map scrolling — `██████░░░░ 64%`
-- 🚶 T302 — Port pathfinding, collision and actor movement — `███░░░░░░░ 30%`
-- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 66%`
+- 🚶 T302 — Port pathfinding, collision and actor movement — `████░░░░░░ 40%`
+- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 69%`
 - 🌍 T304 — Render world map, town selection and location discovery — `░░░░░░░░░░ 0%`
 
 ## 📟 M2 — Menus, UI, audio and cinematics — `░░░░░░░░░░ 0%`
@@ -55,24 +55,24 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `█░░░░░░░░░ 9%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `█░░░░░░░░░ 11%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
-### 🔣 P6 — Script interpreter and native opcodes — `██░░░░░░░░ 17%`
+### 🔣 P6 — Script interpreter and native opcodes — `██░░░░░░░░ 20%`
 
-- 📚 T601 — Inventory bytecode opcodes, stack layout and data — `████░░░░░░ 44%`
-- ⚙️ T602 — Port interpreter, procedures and interpreter state — `██░░░░░░░░ 18%`
+- 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
+- ⚙️ T602 — Port interpreter, procedures and interpreter state — `███░░░░░░░ 28%`
 - 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `░░░░░░░░░░ 0%`
 - 🧪 T604 — Golden-script differential tests versus CE — `█░░░░░░░░░ 6%`
 
-### 📜 P7 — Quests, dialogue and triggers — `░░░░░░░░░░ 0%`
+### 📜 P7 — Quests, dialogue and triggers — `░░░░░░░░░░ 3%`
 
 - 🗣️ T701 — Port dialogue branches and NPC reactions — `░░░░░░░░░░ 0%`
-- 🚩 T702 — Port map scripts, spatial triggers and timers — `░░░░░░░░░░ 0%`
+- 🚩 T702 — Port map scripts, spatial triggers and timers — `█░░░░░░░░░ 11%`
 - 🧮 T703 — Port global/local state and quest flags — `░░░░░░░░░░ 0%`
 - 🤝 T704 — Port companion scripts and party interactions — `░░░░░░░░░░ 0%`
 
-## ⚔️ M4 — Gameplay and combat parity — `░░░░░░░░░░ 0%`
+## ⚔️ M4 — Gameplay and combat parity — `░░░░░░░░░░ 1%`
 **Acceptance gate:** Characters, inventory, rules, turn-based combat and AI produce original outcomes.
 
 ### 🧬 P8 — Character and item rules — `░░░░░░░░░░ 0%`
@@ -89,9 +89,9 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 💥 T903 — Port criticals, deaths and animations — `░░░░░░░░░░ 0%`
 - 🔬 T904 — Differential fixed-seed combat scenarios — `░░░░░░░░░░ 0%`
 
-### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 0%`
+### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 2%`
 
-- ⏰ T1001 — Port time, rest and random encounters — `░░░░░░░░░░ 0%`
+- ⏰ T1001 — Port time, rest and random encounters — `█░░░░░░░░░ 9%`
 - 🚶 T1002 — Port world travel and location state — `░░░░░░░░░░ 0%`
 - 🎭 T1003 — Port NPC schedule, hostility and reputation — `░░░░░░░░░░ 0%`
 - 🏁 T1004 — Port endings, fail states and victory conditions — `░░░░░░░░░░ 0%`

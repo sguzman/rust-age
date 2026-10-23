@@ -31,7 +31,8 @@
       "source": "src/game/anim.cc",
       "rust": [
         "src/pathfinding.rs",
-        "src/animation.rs"
+        "src/animation.rs",
+        "src/actor_route.rs"
       ],
       "status": "partial"
     },
@@ -241,7 +242,8 @@
         "src/object_tables.rs",
         "src/collision.rs",
         "src/object_bounds.rs",
-        "src/object_preview.rs"
+        "src/object_preview.rs",
+        "src/runtime_scene.rs"
       ],
       "status": "partial"
     },
@@ -285,8 +287,10 @@
     },
     {
       "source": "src/game/queue.cc",
-      "rust": [],
-      "status": "unported"
+      "rust": [
+        "src/event_queue.rs"
+      ],
+      "status": "partial"
     },
     {
       "source": "src/game/reaction.cc",
@@ -304,7 +308,8 @@
         "src/script_data.rs",
         "src/script_list.rs",
         "src/script_binding.rs",
-        "src/script_procedures.rs"
+        "src/script_procedures.rs",
+        "src/assets.rs"
       ],
       "status": "partial"
     },
@@ -415,7 +420,8 @@
       "rust": [
         "src/script_program.rs",
         "src/int_opcode.rs",
-        "src/script_vm.rs"
+        "src/script_vm.rs",
+        "src/script_procedures.rs"
       ],
       "status": "partial"
     },
