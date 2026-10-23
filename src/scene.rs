@@ -21,6 +21,7 @@ use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::MapScriptLocals;
 use crate::script_object_binding::MapObjectReadBindings;
+use crate::script_runtime::PlannedLocalActionFrame;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use std::collections::BTreeMap;
 use std::io;
@@ -67,6 +68,33 @@ impl PreparedScriptEnvironment {
     pub fn detached_event_for_instance(&self, instance_id: u64) -> Option<DetachedScriptEvent> {
         self.owner_for_instance(instance_id)
             .map(DetachedScriptEvent::new)
+    }
+
+    /// Verify the source-derived local executeProc/setupCall frame of one
+    /// already-selected MAP action. It does not create a live CE call frame,
+    /// move a VM program counter, dispatch callbacks or invoke a procedure.
+    pub fn local_frame_for_planned(
+        &self,
+        planned: &PlannedMapAction,
+    ) -> io::Result<PlannedLocalActionFrame> {
+        let _ = self.detached_event_for_planned(planned)?;
+        let frame = self
+            .scripts
+            .runtime
+            .inspect_local_action_frame(planned.instance_id, planned.action)?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned local action procedure absent",
+                )
+            })?;
+        if frame.procedure_index != planned.procedure_index {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE planned local action frame does not match procedure",
+            ));
+        }
+        Ok(frame)
     }
 
     /// Compose an already-planned CE MAP lifecycle action with its exact

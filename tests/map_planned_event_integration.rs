@@ -17,11 +17,12 @@ use rust_age::script_vm::ScriptVm;
 fn synthetic_vm() -> ScriptVm {
     let names: [&[u8]; 2] = [b"main", b"map_enter_p_proc"];
     let mut bytes = vec![0_u8; 42];
+    bytes[20..22].copy_from_slice(&0x8011_u16.to_be_bytes());
     bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
     let mut strings = Vec::new();
     for name in names {
         let offset = 4 + strings.len() as i32;
-        for value in [offset, 0, 0, 0, 0, 0] {
+        for value in [offset, 0, 0, 0, 20, 0] {
             bytes.extend_from_slice(&value.to_be_bytes());
         }
         strings.extend_from_slice(name);
@@ -104,6 +105,15 @@ fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     let action = actions[0];
     assert_eq!(action.script_id, 17);
     assert_eq!(action.procedure_index, 1);
+    let frame = env.local_frame_for_planned(&action).unwrap();
+    assert_eq!(frame.program_id, 1);
+    assert_eq!(frame.action, 15);
+    assert_eq!(frame.procedure_index, 1);
+    assert_eq!(frame.body_offset, 20);
+    assert_eq!(frame.saved_pc, 0);
+    assert_eq!(frame.return_marker, 20);
+    assert_eq!(frame.argument_marker, 0);
+    assert!(!frame.critical);
     let mut event = env.detached_event_for_planned(&action).unwrap();
     assert!(event.is_active());
     assert_eq!(event.invocation().action(), 15);
@@ -136,6 +146,7 @@ fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
         },
     ] {
         assert!(env.detached_event_for_planned(&wrong).is_err());
+        assert!(env.local_frame_for_planned(&wrong).is_err());
     }
 }
 
