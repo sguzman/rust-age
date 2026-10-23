@@ -17,24 +17,22 @@ fn fixture() -> Result<rust_age::script_locals::MapScriptLocals, Box<dyn Error>>
     for id in 1..=4 {
         runtime.register(id, ScriptVm::new(program.clone()))?;
     }
-    let record = |id: u64, category: usize, offset: i32, count: i32| {
-        InstalledScriptBinding {
-            binding: ScriptBinding {
-                category,
-                ordinal: id as usize - 1,
-                script_id: id as i32,
-                script_index: 0,
-                owner_id: -1,
-                path: Some("scripts/SYNTH.int".to_owned()),
-                run_info: Some(ScriptRunInfo {
-                    local_variables: Some(count),
-                    ..Default::default()
-                }),
-                local_variable_offset: offset,
-                local_variable_count: count,
-            },
-            instance_id: Some(id),
-        }
+    let record = |id: u64, category: usize, offset: i32, count: i32| InstalledScriptBinding {
+        binding: ScriptBinding {
+            category,
+            ordinal: id as usize - 1,
+            script_id: id as i32,
+            script_index: 0,
+            owner_id: -1,
+            path: Some("scripts/SYNTH.int".to_owned()),
+            run_info: Some(ScriptRunInfo {
+                local_variables: Some(count),
+                ..Default::default()
+            }),
+            local_variable_offset: offset,
+            local_variable_count: count,
+        },
+        instance_id: Some(id),
     };
     let bound = BoundScriptRuntime {
         runtime,
@@ -92,7 +90,11 @@ fn probe(
         stack.push(value);
     }
     apply_map_variable_opcode(&mut state, instance, opcode, &mut stack)?;
-    let top = stack.last().copied().map(repr).unwrap_or_else(|| "E".to_owned());
+    let top = stack
+        .last()
+        .copied()
+        .map(repr)
+        .unwrap_or_else(|| "E".to_owned());
     let peek = if setter {
         let looked_up = if op == "lw" {
             state.read_typed(instance, index).ok().flatten()
