@@ -75,7 +75,10 @@ impl BoundScriptRuntime {
             MapLifecyclePhase::Update => 23,
             MapLifecyclePhase::Exit => 16,
         };
-        let map_entry = self.entries.iter().find(|entry| entry.binding.script_id == map_script_id);
+        let map_entry = self
+            .entries
+            .iter()
+            .find(|entry| entry.binding.script_id == map_script_id);
         let mut actions = Vec::new();
         if phase == MapLifecyclePhase::Update || phase == MapLifecyclePhase::Exit {
             if let Some(entry) = map_entry {
@@ -131,12 +134,23 @@ mod tests {
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
     }
 
-    fn record(category: usize, ordinal: usize, sid: i32, id: Option<u64>) -> InstalledScriptBinding {
+    fn record(
+        category: usize,
+        ordinal: usize,
+        sid: i32,
+        id: Option<u64>,
+    ) -> InstalledScriptBinding {
         InstalledScriptBinding {
             binding: ScriptBinding {
-                category, ordinal, script_id: sid, script_index: 0,
-                owner_id: -1, path: Some("scripts/SYNTH.int".to_owned()),
-                run_info: None, local_variable_offset: -1, local_variable_count: 0,
+                category,
+                ordinal,
+                script_id: sid,
+                script_index: 0,
+                owner_id: -1,
+                path: Some("scripts/SYNTH.int".to_owned()),
+                run_info: None,
+                local_variable_offset: -1,
+                local_variable_count: 0,
             },
             instance_id: id,
         }
@@ -144,9 +158,21 @@ mod tests {
 
     fn fixture() -> BoundScriptRuntime {
         let mut runtime = ScriptRuntime::new();
-        runtime.register(1, vm(&[b"main", b"start", b"map_update_p_proc", b"map_exit_p_proc"])).unwrap();
-        runtime.register(2, vm(&[b"main", b"start", b"map_enter_p_proc", b"map_update_p_proc"])).unwrap();
-        runtime.register(4, vm(&[b"main", b"start", b"MAP_ENTER_P_PROC"])).unwrap();
+        runtime
+            .register(
+                1,
+                vm(&[b"main", b"start", b"map_update_p_proc", b"map_exit_p_proc"]),
+            )
+            .unwrap();
+        runtime
+            .register(
+                2,
+                vm(&[b"main", b"start", b"map_enter_p_proc", b"map_update_p_proc"]),
+            )
+            .unwrap();
+        runtime
+            .register(4, vm(&[b"main", b"start", b"MAP_ENTER_P_PROC"]))
+            .unwrap();
         BoundScriptRuntime {
             runtime,
             entries: vec![
@@ -161,19 +187,43 @@ mod tests {
     #[test]
     fn ce_start_enter_update_and_exit_source_order() {
         let bound = fixture();
-        let start = bound.plan_map_lifecycle(MapLifecyclePhase::Start, 500, 0).unwrap();
-        assert_eq!(start.iter().map(|a| a.script_id).collect::<Vec<_>>(), [500, 501, 602]);
+        let start = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Start, 500, 0)
+            .unwrap();
+        assert_eq!(
+            start.iter().map(|a| a.script_id).collect::<Vec<_>>(),
+            [500, 501, 602]
+        );
         assert!(start.iter().all(|a| a.action == 1));
-        let enter = bound.plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 0).unwrap();
-        assert_eq!(enter.iter().map(|a| a.script_id).collect::<Vec<_>>(), [501, 602]);
+        let enter = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 0)
+            .unwrap();
+        assert_eq!(
+            enter.iter().map(|a| a.script_id).collect::<Vec<_>>(),
+            [501, 602]
+        );
         assert_eq!(enter[0].procedure_index, 2);
-        assert!(enter.iter().all(|a| a.action == 15 && a.external_parameter == Some(1)));
-        let revisited = bound.plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 1).unwrap();
+        assert!(enter
+            .iter()
+            .all(|a| a.action == 15 && a.external_parameter == Some(1)));
+        let revisited = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Enter, 500, 1)
+            .unwrap();
         assert!(revisited.iter().all(|a| a.external_parameter == Some(0)));
-        let update = bound.plan_map_lifecycle(MapLifecyclePhase::Update, 500, 0).unwrap();
-        assert_eq!(update.iter().map(|a| a.script_id).collect::<Vec<_>>(), [500, 501]);
-        assert_eq!(update.iter().map(|a| a.procedure_index).collect::<Vec<_>>(), [2, 3]);
-        let exit = bound.plan_map_lifecycle(MapLifecyclePhase::Exit, 500, 0).unwrap();
+        let update = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Update, 500, 0)
+            .unwrap();
+        assert_eq!(
+            update.iter().map(|a| a.script_id).collect::<Vec<_>>(),
+            [500, 501]
+        );
+        assert_eq!(
+            update.iter().map(|a| a.procedure_index).collect::<Vec<_>>(),
+            [2, 3]
+        );
+        let exit = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Exit, 500, 0)
+            .unwrap();
         assert_eq!(exit.len(), 1);
         assert_eq!(exit[0].script_id, 500);
         assert_eq!(exit[0].procedure_index, 3);
@@ -184,9 +234,23 @@ mod tests {
     #[test]
     fn absent_map_or_missing_int_never_invents_actions() {
         let bound = fixture();
-        assert!(bound.plan_map_lifecycle(MapLifecyclePhase::Exit, 999, 0).unwrap().is_empty());
-        assert_eq!(bound.plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0).unwrap().len(), 2);
-        let update = bound.plan_map_lifecycle(MapLifecyclePhase::Update, 501, 0).unwrap();
-        assert_eq!(update.iter().map(|a| a.script_id).collect::<Vec<_>>(), [501, 500]);
+        assert!(bound
+            .plan_map_lifecycle(MapLifecyclePhase::Exit, 999, 0)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            bound
+                .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+                .unwrap()
+                .len(),
+            2
+        );
+        let update = bound
+            .plan_map_lifecycle(MapLifecyclePhase::Update, 501, 0)
+            .unwrap();
+        assert_eq!(
+            update.iter().map(|a| a.script_id).collect::<Vec<_>>(),
+            [501, 500]
+        );
     }
 }
