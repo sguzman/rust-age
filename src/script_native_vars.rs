@@ -96,7 +96,6 @@ pub fn apply_map_variable_opcode(
     Ok(())
 }
 
-
 /// Explicitly execute the supported CE variable-opcode subset in an owned
 /// diagnostic VM, with caller-supplied mutable MAP and game-global state.
 /// This is not part of StaticScene loading, event dispatch or gameplay.
@@ -112,9 +111,7 @@ pub fn run_variable_subset_bounded(
         LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
             apply_map_variable_opcode(locals, instance_id, opcode, stack)
         }
-        game_opcode @ (0x80C5 | 0x80C6) => {
-            globals.apply_opcode(game_opcode, stack)
-        }
+        game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
         _ => Err(invalid("unrecognized CE native variable opcode")),
     })
 }
@@ -122,8 +119,8 @@ pub fn run_variable_subset_bounded(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_map_variable_opcode, run_variable_subset_bounded, LOCAL_VAR_OPCODE,
-        MAP_VAR_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        apply_map_variable_opcode, run_variable_subset_bounded, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
+        SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
