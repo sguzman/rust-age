@@ -195,6 +195,51 @@ impl MapScriptLocals {
         Ok(Some(local.offset.unwrap() + index))
     }
 
+    /// Snapshot-only CE script-local read for already allocated/saved ranges.
+    /// It never calls the mutating CE map_malloc_local_var equivalent.
+    /// Unallocated lazy ranges are deliberately unsupported so a diagnostic
+    /// preview cannot silently omit the source engine's allocation effect.
+    /// Both integer and opaque pointer tags are retained without dereference.
+    pub fn peek_saved_typed(
+        &self,
+        instance: u64,
+        variable: i32,
+    ) -> io::Result<Option<ScriptValue>> {
+        let range = self
+            .instances
+            .get(&instance)
+            .ok_or_else(|| invalid("CE read-only local references unknown instance"))?;
+        if range.is_system {
+            return Err(invalid("CE system/map script local access is unsupported"));
+        }
+        if range.declared == 0 {
+            return Ok(None);
+        }
+        let index =
+            usize::try_from(variable).map_err(|_| invalid("negative CE script local index"))?;
+        if index >= range.declared {
+            return Err(invalid("CE script local index exceeds declared count"));
+        }
+        let offset = range
+            .offset
+            .ok_or_else(|| invalid("CE read-only local would allocate lazy MAP storage"))?;
+        let slot = offset
+            .checked_add(index)
+            .ok_or_else(|| invalid("CE read-only local slot overflow"))?;
+        let number = *self
+            .locals
+            .get(slot)
+            .ok_or_else(|| invalid("CE read-only local slot outside MAP"))?;
+        let tag = self
+            .pointers
+            .get(slot)
+            .ok_or_else(|| invalid("CE read-only local pointer tag outside MAP"))?;
+        Ok(Some(match tag {
+            Some(pointer) => ScriptValue::Pointer(*pointer),
+            None => ScriptValue::Int(number),
+        }))
+    }
+
     /// CE script-local integer read, with original lazy allocation.
     /// None means no declared locals; CE get would leave its output untouched.
     pub fn read(&mut self, instance: u64, index: i32) -> io::Result<Option<i32>> {
@@ -330,6 +375,46 @@ mod tests {
         assert_eq!(state.locals(), [42, 11, 0, -5, 0]);
         assert_eq!(original.locals, [10, 11]); // source MAP is immutable.
         assert_eq!(original.globals, [99]);
+    }
+
+    #[test]
+    fn readonly_saved_local_peek_keeps_lazy_state_and_pointer_tags_intact() {
+        let bound = fixture();
+        let mut state = bound
+            .script_local_state(&MapVariables {
+                globals: vec![],
+                locals: vec![10, 11],
+            })
+            .unwrap();
+        assert_eq!(
+            state.peek_saved_typed(1, 0).unwrap(),
+            Some(ScriptValue::Int(10))
+        );
+        assert_eq!(
+            state.peek_saved_typed(1, 1).unwrap(),
+            Some(ScriptValue::Int(11))
+        );
+        assert!(state.peek_saved_typed(2, 0).is_err());
+        assert_eq!(state.range(2).unwrap().offset, None);
+        assert_eq!(state.locals(), [10, 11]);
+        assert!(state.peek_saved_typed(3, 0).is_err()); // system script
+        assert_eq!(state.peek_saved_typed(4, 0).unwrap(), None);
+        assert!(state.peek_saved_typed(1, -1).is_err());
+        assert!(state.peek_saved_typed(1, 2).is_err());
+        assert!(state.peek_saved_typed(999, 0).is_err());
+
+        state
+            .write_typed(2, 0, ScriptValue::Pointer(-34))
+            .unwrap();
+        assert_eq!(
+            state.peek_saved_typed(2, 0).unwrap(),
+            Some(ScriptValue::Pointer(-34))
+        );
+        assert_eq!(
+            state.peek_saved_typed(2, 1).unwrap(),
+            Some(ScriptValue::Int(0))
+        );
+        assert_eq!(state.locals(), [10, 11, 0, 0, 0]);
     }
 
     #[test]
