@@ -34,11 +34,7 @@ impl ScriptRandomHost {
     /// roll_dice native logs unimplemented and pushes integer zero.
     /// Invalid Rust operand types and arithmetic overflow return an error
     /// before consuming any stack values; no native game objects are used.
-    pub fn apply_opcode(
-        &mut self,
-        opcode: u16,
-        stack: &mut Vec<ScriptValue>,
-    ) -> io::Result<()> {
+    pub fn apply_opcode(&mut self, opcode: u16, stack: &mut Vec<ScriptValue>) -> io::Result<()> {
         if opcode != RANDOM_OPCODE && opcode != ROLL_DICE_OPCODE {
             return Err(invalid("unsupported CE random native opcode"));
         }
@@ -46,8 +42,7 @@ impl ScriptRandomHost {
             return Err(invalid("CE random native operand stack underflow"));
         }
         let index = stack.len() - 2;
-        let (ScriptValue::Int(low), ScriptValue::Int(high)) =
-            (stack[index], stack[index + 1])
+        let (ScriptValue::Int(low), ScriptValue::Int(high)) = (stack[index], stack[index + 1])
         else {
             return Err(invalid("CE random native arguments must be integer"));
         };
@@ -55,7 +50,8 @@ impl ScriptRandomHost {
             0
         } else if self.vcr_playback {
             high.checked_sub(low)
-                .ok_or_else(|| invalid("CE VCR random midpoint overflows signed i32"))? / 2
+                .ok_or_else(|| invalid("CE VCR random midpoint overflows signed i32"))?
+                / 2
         } else {
             self.rng.between(low, high)?
         };
@@ -108,9 +104,15 @@ mod tests {
         let mut host = ScriptRandomHost::from_seed(47, false);
         for (opcode, original) in [
             (RANDOM_OPCODE, vec![ScriptValue::Int(1)]),
-            (RANDOM_OPCODE, vec![ScriptValue::Pointer(9), ScriptValue::Int(5)]),
+            (
+                RANDOM_OPCODE,
+                vec![ScriptValue::Pointer(9), ScriptValue::Int(5)],
+            ),
             (0x80B6, vec![ScriptValue::Int(1), ScriptValue::Int(4)]),
-            (RANDOM_OPCODE, vec![ScriptValue::Int(i32::MIN), ScriptValue::Int(i32::MAX)]),
+            (
+                RANDOM_OPCODE,
+                vec![ScriptValue::Int(i32::MIN), ScriptValue::Int(i32::MAX)],
+            ),
         ] {
             let mut stack = original.clone();
             let saved = host.rng.clone();
