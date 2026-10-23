@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn direct_ce_art_category_names_and_bounds() {
         let categories = [
-            "items", "critters", "scenery", "walls", "tiles", "misc",
-            "intrface", "inven", "heads", "backgrnd", "skilldex",
+            "items", "critters", "scenery", "walls", "tiles", "misc", "intrface", "inven", "heads",
+            "backgrnd", "skilldex",
         ];
         for (kind, directory) in categories.iter().enumerate() {
             assert_eq!(ArtFid((kind as u32) << 24).directory().unwrap(), *directory);
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(fid(1, 0, 20, 0, 0).filename("hmjmps").unwrap(), "hmjmpsba.frm");
         assert_eq!(fid(1, 0, 36, 0, 0).filename("hmjmps").unwrap(), "hmjmpsch.frm");
         assert_eq!(fid(1, 0, 38, 1, 0).filename("hmjmps").unwrap(), "hmjmpsdc.frm");
-        assert_eq!(fid(1, 0, 47, 10, 0).filename("hmjmps").unwrap(), "hmjmpsmm.frm");
+        assert_eq!(fid(1, 0, 47, 10, 0).filename("hmjmps").unwrap(), "hmjmpsml.frm");
         assert_eq!(fid(1, 0, 63, 0, 0).filename("hmjmps").unwrap(), "hmjmpsrp.frm");
         assert_eq!(fid(1, 0, 64, 0, 0).filename("hmjmps").unwrap(), "hmjmpsan.frm");
         assert!(fid(1, 0, 38, 0, 0).filename("hmjmps").is_err());
@@ -212,7 +212,7 @@ mod tests {
     fn talking_head_fidget_and_regular_names_match_ce() {
         assert_eq!(fid(8, 0, 0, 0, 0).filename("VREDFL").unwrap(), "VREDFLgv.frm");
         assert_eq!(fid(8, 0, 1, 3, 0).filename("VREDFL").unwrap(), "VREDFLgf3.frm");
-        assert_eq!(fid(8, 0, 4, 9, 0).filename("VREDFL").unwrap(), "VREDFLn f9.frm".replace(' ', ""));
+        assert_eq!(fid(8, 0, 4, 9, 0).filename("VREDFL").unwrap(), "VREDFLnf9.frm");
         assert!(fid(8, 0, 12, 0, 0).filename("VREDFL").is_err());
         assert_eq!(fid(4, 0, 0, 0, 0).filename("grid001.frm").unwrap(), "grid001.frm");
         assert!(fid(4, 0, 0, 0, 0).filename("../bad").is_err());

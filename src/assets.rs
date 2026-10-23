@@ -374,6 +374,41 @@ mod tests {
         );
         assert!(assets.direct_art_path(0x0400_0002).unwrap().is_none());
         assert!(assets.direct_art_path(0x0100_0000).is_err());
+        fs::create_dir_all(root.join("Critter_Patches").join("Art").join("Critters")).unwrap();
+        fs::create_dir_all(root.join("Master_Patches").join("Art").join("Heads")).unwrap();
+        fs::write(
+            root.join("Critter_Patches")
+                .join("Art")
+                .join("Critters")
+                .join("critters.lst"),
+            b"hmjmps,1\nhfjmps\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Master_Patches")
+                .join("Art")
+                .join("Heads")
+                .join("heads.lst"),
+            b"VREDFL\n",
+        )
+        .unwrap();
+        assert_eq!(
+            assets.art_path_by_fid(0x0100_0000).unwrap(),
+            Some((Bank::Critter, "art/critters/hmjmpsaa.frm".to_string()))
+        );
+        assert_eq!(
+            assets.art_path_by_fid(0x1101_0000).unwrap(),
+            Some((Bank::Critter, "art/critters/hmjmpsab.fr0".to_string()))
+        );
+        assert_eq!(
+            assets.art_path_by_fid(0x011B_0000).unwrap(),
+            Some((Bank::Critter, "art/critters/hfjmpsbh.frm".to_string()))
+        );
+        assert_eq!(
+            assets.art_path_by_fid(0x0801_3000).unwrap(),
+            Some((Bank::Master, "art/heads/VREDFLgf3.frm".to_string()))
+        );
+        assert!(assets.art_path_by_fid(0x011B_0001).is_err());
         fs::create_dir_all(root.join("Master_Patches").join("Proto").join("Tiles")).unwrap();
         fs::write(
             root.join("Master_Patches")
