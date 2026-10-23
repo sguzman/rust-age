@@ -61,7 +61,11 @@ fn reports_ce_map_script_index_and_run_flags_without_executing() {
     fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
     fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
     fs::write(maps.join("test.map"), synthetic_map()).unwrap();
-    fs::write(scripts.join("scripts.lst"), b"START.ssl # map_init local_vars=3\n").unwrap();
+    fs::write(
+        scripts.join("scripts.lst"),
+        b"START.ssl # map_init local_vars=3\n",
+    )
+    .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_rust-age"))
         .arg("--inspect-map-scripts")
         .arg(&root)
@@ -71,8 +75,20 @@ fn reports_ce_map_script_index_and_run_flags_without_executing() {
     fs::remove_dir_all(root).unwrap();
     assert!(output.status.success(), "{:?}", output);
     let output = String::from_utf8(output.stdout).unwrap();
-    assert!(output.contains("Original MAP script bindings: 1"), "{output}");
-    assert!(output.contains("script index 0 -> scripts/START.int"), "{output}");
-    assert!(output.contains("map_init=true map_exit=false list_local_vars=Some(3)"), "{output}");
-    assert!(output.contains("no Fallout script has executed"), "{output}");
+    assert!(
+        output.contains("Original MAP script bindings: 1"),
+        "{output}"
+    );
+    assert!(
+        output.contains("script index 0 -> scripts/START.int"),
+        "{output}"
+    );
+    assert!(
+        output.contains("map_init=true map_exit=false list_local_vars=Some(3)"),
+        "{output}"
+    );
+    assert!(
+        output.contains("no Fallout script has executed"),
+        "{output}"
+    );
 }
