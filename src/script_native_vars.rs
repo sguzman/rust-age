@@ -9,7 +9,7 @@
 use crate::game_globals::GameGlobalState;
 use crate::script_clock::{
     ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
+    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE, DAYS_SINCE_VISITED_OPCODE,
 };
 use crate::script_locals::MapScriptLocals;
 use crate::script_vm::{ScriptValue, ScriptVm};
@@ -269,6 +269,25 @@ pub fn run_invocation_with_clock_bounded(
     clock: ScriptGameClock,
     max_steps: usize,
 ) -> io::Result<usize> {
+    run_invocation_with_clock_and_visit_bounded(
+        vm, instance_id, locals, globals, invocation, clock, None, max_steps,
+    )
+}
+
+/// Same isolated, bounded native subset, additionally accepting the original
+/// serialized MAP's lastVisitTime. Supplying None refuses the MAP-dependent
+/// op_days_since_visited; Some(0) explicitly represents no previous visit.
+/// This does not inspect or mutate the live world or schedule a MAP event.
+pub fn run_invocation_with_clock_and_visit_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    invocation: &mut ScriptInvocationState,
+    clock: ScriptGameClock,
+    last_visit_ticks: Option<i32>,
+    max_steps: usize,
+) -> io::Result<usize> {
     vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
         LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
             apply_map_variable_opcode(locals, instance_id, opcode, stack)
@@ -286,6 +305,11 @@ pub fn run_invocation_with_clock_bounded(
         | GAME_TIME_HOUR_OPCODE
         | GET_MONTH_OPCODE
         | GET_DAY_OPCODE => clock.apply_opcode(opcode, stack),
+        DAYS_SINCE_VISITED_OPCODE => clock.apply_visit_opcode(
+            last_visit_ticks.ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
+            opcode,
+            stack,
+        ),
         _ => Err(invalid("unrecognized CE script-state or game-clock opcode")),
     })
 }
@@ -294,7 +318,8 @@ pub fn run_invocation_with_clock_bounded(
 mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
-        run_invocation_with_clock_bounded, run_variable_subset_bounded,
+        run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
+        run_variable_subset_bounded,
         run_with_script_action_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
         LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
         SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
@@ -304,6 +329,7 @@ mod tests {
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_clock::{
         ScriptGameClock, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
+        DAYS_SINCE_VISITED_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_list::ScriptRunInfo;
     use crate::script_program::ScriptProgram;
@@ -444,6 +470,67 @@ mod tests {
         assert!(vm.step_with_variable_host(&mut rejected).is_err());
         assert_eq!(vm.pc(), saved_pc);
         assert_eq!(vm.stack(), saved_stack);
+    }
+
+    #[test]
+    fn synthetic_ce_visit_and_month_require_explicit_serialized_map_time() {
+        let mut code = Vec::new();
+        op(&mut code, DAYS_SINCE_VISITED_OPCODE);
+        op(&mut code, GET_MONTH_OPCODE);
+        op(&mut code, 0x8039);
+        op(&mut code, 0x8011);
+        let clock = ScriptGameClock {
+            ticks: 4 * 864_000,
+        };
+        let mut map = fixture();
+        let mut globals = GameGlobalState::from_initial_values(&[9]).unwrap();
+        let mut invocation = ScriptInvocationState::installed();
+        let mut vm = program(&code);
+        assert_eq!(
+            run_invocation_with_clock_and_visit_bounded(
+                &mut vm,
+                1,
+                &mut map,
+                &mut globals,
+                &mut invocation,
+                clock,
+                Some(2 * 864_000),
+                6,
+            )
+            .unwrap(),
+            4
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(14)]);
+        assert_eq!(globals.values(), [9]);
+        assert!(!invocation.overrides());
+
+        let mut never_visited = program(&code);
+        run_invocation_with_clock_and_visit_bounded(
+            &mut never_visited,
+            1,
+            &mut map,
+            &mut globals,
+            &mut invocation,
+            clock,
+            Some(0),
+            6,
+        )
+        .unwrap();
+        assert_eq!(never_visited.stack(), [ScriptValue::Int(11)]);
+
+        let mut absent = program(&code);
+        assert!(run_invocation_with_clock_bounded(
+            &mut absent,
+            1,
+            &mut map,
+            &mut globals,
+            &mut invocation,
+            clock,
+            6,
+        )
+        .is_err());
+        assert_eq!(absent.pc(), 0);
+        assert!(absent.stack().is_empty());
     }
 
     #[test]
