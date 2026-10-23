@@ -96,3 +96,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Per-elevation object and recursive inventory tables
 
 `src/object_tables.rs` now follows CE `obj_load_func` and `obj_load_obj`: a global top-level object count, one count for each of three elevations, and nested inventory children each preceded by quantity. It locates each object's PID at the original byte-44 offset and asks the caller for item/scenery prototype subtypes so the variable-width `proto_read_protoUpdateData` layout is consumed correctly. Strict size and recursion limits reject malicious inputs. Synthetic tests cover an object with a nested weapon, empty elevations, and malformed counts. This is **deserialization only**; no actors are instantiated or drawn.
+
+## Full static MAP read boundary
+
+`MapSquares::decode_objects_with` chains original 100×100 square layers, five script tables and per-elevation object/inventory records, returning the byte offset after the object section. It requires the caller to supply the correct item/scenery prototype subtype for variable-width updates. This is a read-only format boundary; script execution, actor placement, collision, rendering and save/restore are separate unfinished stages.

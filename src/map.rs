@@ -4,6 +4,7 @@
 //! square_load) and src/game/map_defs.h.
 //! This does NOT load map scripts, dynamic objects or saved map state.
 
+use crate::object_tables::ObjectTables;
 use crate::script_data::ScriptTables;
 use std::io::{self, Cursor, Read};
 
@@ -65,6 +66,28 @@ impl MapSquares {
             .checked_add(scripts.bytes_consumed)
             .ok_or_else(|| invalid("MAP script offset overflow"))?;
         Ok((scripts, object_offset))
+    }
+
+    /// Decode the original script metadata and MAP object tables.
+    /// The caller must resolve item/scenery subtype values by their PIDs.
+    /// No bytecode execution, object instantiation or game state mutation.
+    pub fn decode_objects_with<F>(
+        &self,
+        file: &[u8],
+        resolve_subtype: F,
+    ) -> io::Result<(ScriptTables, ObjectTables, usize)>
+    where
+        F: FnMut(u32) -> io::Result<Option<i32>>,
+    {
+        let (scripts, object_start) = self.decode_scripts(file)?;
+        let data = file
+            .get(object_start..)
+            .ok_or_else(|| invalid("MAP object data outside file"))?;
+        let objects = ObjectTables::decode_with(data, resolve_subtype)?;
+        let end = object_start
+            .checked_add(objects.bytes_consumed)
+            .ok_or_else(|| invalid("MAP object section offset overflow"))?;
+        Ok((scripts, objects, end))
     }
 
     pub fn floor_id(&self, elevation: usize, square: usize) -> Option<u16> {
@@ -278,6 +301,18 @@ mod tests {
             &bytes[object_offset..object_offset + 4],
             &88_i32.to_be_bytes()
         );
+    }
+
+    #[test]
+    fn decodes_empty_map_script_and_object_sections_together() {
+        let mut bytes = header(2 | 4 | 8, 0, 0);
+        bytes.extend_from_slice(&[0_u8; 20]); // five empty script counts
+        bytes.extend_from_slice(&[0_u8; 16]); // total and three empty object counts
+        let square = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let (scripts, objects, end) = square.decode_objects_with(&bytes, |_| Ok(None)).unwrap();
+        assert_eq!(scripts.script_count(), 0);
+        assert_eq!(objects.total_objects, 0);
+        assert_eq!(end, bytes.len());
     }
 
     #[test]
