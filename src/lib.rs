@@ -12,6 +12,7 @@ pub mod map;
 pub mod map_preview;
 pub mod message;
 pub mod object_data;
+pub mod object_tables;
 pub mod palette;
 pub mod prototype;
 pub mod prototype_list;

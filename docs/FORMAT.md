@@ -92,3 +92,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Original MAP object-record prefix (read-only)
 
 `src/object_data.rs` ports CE's `obj_read_obj` 18-word object prefix and `proto_read_protoUpdateData` inventory header plus type-specific update fields. Critter records include the 7-word combat metadata and HP/radiation/poison; item/scenery record lengths require a known `.PRO` subtype. This parser reads **one** object record and leaves inventory children and the full per-elevation object table to later work. It ignores serialized pointer tokens and normalizes the CE `0xCCCCCCCC` data-flags marker. No entity simulation or object rendering is implemented.
+
+## Per-elevation object and recursive inventory tables
+
+`src/object_tables.rs` now follows CE `obj_load_func` and `obj_load_obj`: a global top-level object count, one count for each of three elevations, and nested inventory children each preceded by quantity. It locates each object's PID at the original byte-44 offset and asks the caller for item/scenery prototype subtypes so the variable-width `proto_read_protoUpdateData` layout is consumed correctly. Strict size and recursion limits reject malicious inputs. Synthetic tests cover an object with a nested weapon, empty elevations, and malformed counts. This is **deserialization only**; no actors are instantiated or drawn.
