@@ -22,15 +22,22 @@ fn synthetic_vm() -> ScriptVm {
 }
 
 fn synthetic_vm_with_body(body: &[u8]) -> ScriptVm {
+    synthetic_vm_with_condition(body, &[])
+}
+
+fn synthetic_vm_with_condition(body: &[u8], condition: &[u8]) -> ScriptVm {
     assert!(body.len() <= 22);
+    assert!(condition.len() <= 20);
     let names: [&[u8]; 2] = [b"main", b"map_enter_p_proc"];
     let mut bytes = vec![0_u8; 42];
+    bytes[..condition.len()].copy_from_slice(condition);
     bytes[20..20 + body.len()].copy_from_slice(body);
     bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
     let mut strings = Vec::new();
-    for name in names {
+    for (index, name) in names.into_iter().enumerate() {
         let offset = 4 + strings.len() as i32;
-        for value in [offset, 0, 0, 0, 20, 0] {
+        let flags = if index == 0 && !condition.is_empty() { 0x02 } else { 0 };
+        for value in [offset, flags, 0, 0, 20, 0] {
             bytes.extend_from_slice(&value.to_be_bytes());
         }
         strings.extend_from_slice(name);
@@ -493,6 +500,87 @@ fn cloned_map_and_game_global_reads_use_immutable_values_and_deny_writes() {
         .preview_planned_event_reads_bounded(&plan, clock, 5)
         .is_err());
     assert_eq!(environment.map_locals.globals(), [14]);
+}
+
+#[test]
+fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
+    let mut environment = environment();
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![12],
+            locals: vec![],
+        })
+        .unwrap();
+
+    // Synthetic CE condition at program offset zero: MAP_GLOBAL[0] == 12.
+    let mut condition = Vec::new();
+    condition.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH index
+    condition.extend_from_slice(&0_i32.to_be_bytes());
+    condition.extend_from_slice(&0x80C3_u16.to_be_bytes()); // map_var
+    condition.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH expected
+    condition.extend_from_slice(&12_i32.to_be_bytes());
+    condition.extend_from_slice(&[0x80, 0x33, 0x80, 0x11]); // EQ; STOP
+    let body = [0x80, 0x1A, 0x80, 0x21];
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_condition(&body, &condition);
+    let plan = environment
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: None,
+    };
+    assert!(environment
+        .preview_planned_condition_reads_bounded(&plan, 0, clock, 5)
+        .unwrap());
+    assert!(environment
+        .preview_planned_condition_reads_bounded(&plan, 0, clock, 4)
+        .is_err());
+    for index in [1, 10] {
+        assert!(environment
+            .preview_planned_condition_reads_bounded(&plan, index, clock, 5)
+            .is_err());
+    }
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        0x02
+    );
+    assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert_eq!(environment.map_locals.globals(), [12]);
+
+    // Read new immutable MAP data on another preview; neither poll
+    // consumes the scheduled event nor changes the installed VM.
+    environment.map_locals = environment
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![13],
+            locals: vec![],
+        })
+        .unwrap();
+    assert!(!environment
+        .preview_planned_condition_reads_bounded(&plan, 0, clock, 5)
+        .unwrap());
+
+    // Script overrides remain a write and must be refused by this adapter.
+    *environment.scripts.runtime.vm_mut(1).unwrap() =
+        synthetic_vm_with_condition(&body, &[0x80, 0xB9, 0x80, 0x11]);
+    assert!(environment
+        .preview_planned_condition_reads_bounded(&plan, 0, clock, 2)
+        .is_err());
+    assert_eq!(environment.map_locals.globals(), [13]);
+    assert_eq!(
+        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        0x02
+    );
+    let stale = rust_age::script_lifecycle::PlannedMapAction {
+        instance_id: 999,
+        ..plan
+    };
+    assert!(environment
+        .preview_planned_condition_reads_bounded(&stale, 0, clock, 5)
+        .is_err());
 }
 
 #[test]

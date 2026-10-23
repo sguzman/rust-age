@@ -310,6 +310,48 @@ impl PreparedScriptEnvironment {
         })
     }
 
+    /// Preview a source-recorded CE conditional procedure using immutable
+    /// original MAP/quest state and a verified planned event context.
+    /// The scheduled procedure flags, installed VM, and event session
+    /// remain untouched; this does NOT dispatch a real CE event.
+    pub fn preview_planned_condition_reads_bounded(
+        &self,
+        planned: &PlannedMapAction,
+        procedure_index: usize,
+        clock: ScriptClockContext,
+        max_steps: usize,
+    ) -> io::Result<bool> {
+        let event = self.detached_event_for_planned(planned)?;
+        let vm = self.scripts.runtime.vm(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE condition VM missing")
+        })?;
+        let procedure = vm.runtime_procedures().get(procedure_index).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE condition procedure missing")
+        })?;
+        if procedure.flags & 0x02 == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE procedure has no pending conditional event",
+            ));
+        }
+        let snapshot = event.snapshot(&self.object_queries, clock)?;
+        vm.preview_condition_with_host_bounded(
+            procedure.condition_offset,
+            max_steps,
+            &mut |opcode, stack| {
+                apply_readonly_event_native_with_vars(
+                    snapshot,
+                    event.invocation(),
+                    &self.map_locals,
+                    self.game_globals.as_ref(),
+                    planned.instance_id,
+                    opcode,
+                    stack,
+                )
+            },
+        )
+    }
+
     /// Preview only supported CE object, event and clock READ opcodes
     /// inside the local procedure, using a cloned installed VM and a pure
     /// native adapter. No global/local state writes, overrides, timers,
