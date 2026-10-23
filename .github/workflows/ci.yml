@@ -56,6 +56,12 @@ jobs:
           /tmp/rust-age-ce-schedule tests/int_schedule_cases.txt > /tmp/rust-age-ce-schedule.txt
           cargo run --quiet --bin int_schedule_probe > /tmp/rust-age-rust-schedule.txt
           diff -u /tmp/rust-age-ce-schedule.txt /tmp/rust-age-rust-schedule.txt
+      - name: Compare CE C++ and Rust program-list event traversal
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/int_runtime_oracle.cc -o /tmp/rust-age-ce-runtime
+          /tmp/rust-age-ce-runtime tests/int_runtime_cases.txt > /tmp/rust-age-ce-runtime.txt
+          cargo run --quiet --bin int_runtime_probe > /tmp/rust-age-rust-runtime.txt
+          diff -u /tmp/rust-age-ce-runtime.txt /tmp/rust-age-rust-runtime.txt
       - name: Compare CE C++ and Rust deterministic rolls
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/roll_oracle.cc -o /tmp/rust-age-ce-roll

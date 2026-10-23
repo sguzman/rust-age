@@ -1,0 +1,7 @@
+all_due 11 1 10 0 1 10 0 1 10 0
+exact_none 10 1 10 0 1 10 0 1 10 0
+mixed_times 21 1 10 0 1 20 0 1 40 0
+conditional_priority 11 1 10 0 3 0 0 3 0 1
+conditional_abort 11 1 10 0 2 0 -1 2 0 1
+suspended_like_none 10 0 10 0 0 10 0 0 10 0
+signed_unsigned 20 1 -1 0 1 1 0 1 0 0
