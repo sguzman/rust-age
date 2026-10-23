@@ -384,8 +384,8 @@ impl ScriptVm {
                     .program
                     .find_callable_procedure(name)?
                     .ok_or_else(|| invalid("CE named procedure not found"))?;
-                let index = i32::try_from(index)
-                    .map_err(|_| invalid("CE procedure index exceeds i32"))?;
+                let index =
+                    i32::try_from(index).map_err(|_| invalid("CE procedure index exceeds i32"))?;
                 self.push(ScriptValue::Int(index))?;
             }
             0x29 => {
