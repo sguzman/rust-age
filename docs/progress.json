@@ -275,8 +275,8 @@
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 7,
-              "evidence": "CI-tested Rust ScriptRuntime polls scheduled programs in CE newest-first order and resolves bounded synthetic condition bytecode, now also connecting ready procedure IDs to isolated local-interrupt return value previews. Preview transaction rollback avoids consuming events on errors (Rust safety rule, not CE semantics). No real engine callback dispatch, game native opcodes, persistence or quest effects."
+              "progress": 10,
+              "evidence": "CI-tested ScriptRuntime mirrors CE newest-first program and per-procedure order, condition priority and strict timing. Bounded synthetic condition previews can return isolated local interrupt values transactionally (Rust-only diagnostic). New explicit dispatch_due_with host hook clears each due event before immediate callback, allowing earlier host effects to change later condition decisions; callback failure leaves that event consumed as CE does. Rust tests verify order, suspension, interleaving and error semantics; no real Fallout native opcodes, engine state, quests or saved VM lifecycle yet."
             },
             {
               "id": "T604",
