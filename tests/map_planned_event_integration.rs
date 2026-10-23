@@ -462,8 +462,9 @@ fn repeated_planned_actions_keep_inherited_top_level_target_but_clear_source() {
 #[test]
 fn planned_map_sandbox_reports_cloned_call_at_schedule_alongside_world_effects() {
     let mut environment = environment();
-    let mut body = vec![0x80, 0x1A]; // setupCall argument marker
+    // Consume the CE setupCall argument marker before CALL_AT.
     // CALL_AT takes delay in seconds, then the procedure index.
+    let mut body = vec![0x80, 0x1A];
     body.extend_from_slice(&0xC001_u16.to_be_bytes());
     body.extend_from_slice(&1_i32.to_be_bytes());
     body.extend_from_slice(&0xC001_u16.to_be_bytes());
