@@ -13,3 +13,9 @@ system_write w 3 0 2
 empty r 4 0 0
 empty_write w 4 0 7
 not_found r 999 0 0
+pointer_saved p 1 1 123
+pointer_lazy p 2 1 -12
+pointer_null p 2 0 0
+pointer_system p 3 0 4
+pointer_empty p 4 0 77
+pointer_bad p 2 3 100

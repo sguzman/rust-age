@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     int instance, variable, value;
     while (in >> label >> op >> instance >> variable >> value) {
         std::vector<int> locals{10, 11};
+        std::vector<int> opaque_pointers(locals.size(), 0);
         Slot slot = binding(instance);
         std::string output = "ERR";
         if (slot.category > 0 && slot.declared == 0 && op == "r") {
@@ -35,10 +36,21 @@ int main(int argc, char** argv) {
             if (slot.offset < 0) {
                 slot.offset = static_cast<int>(locals.size());
                 locals.resize(locals.size() + slot.declared, 0);
+                opaque_pointers.resize(locals.size(), 0);
             }
             const int index = slot.offset + variable;
-            if (op == "w") locals[index] = value;
-            output = "I:" + std::to_string(locals[index]);
+            if (op == "w") {
+                locals[index] = value;
+                opaque_pointers[index] = 0;
+            } else if (op == "p") {
+                locals[index] = 0;
+                opaque_pointers[index] = value;
+            }
+            if (opaque_pointers[index] != 0) {
+                output = "P:" + std::to_string(opaque_pointers[index]);
+            } else {
+                output = "I:" + std::to_string(locals[index]);
+            }
         }
         std::cout << label << " " << output << " "
                   << locals.size() << " " << slot.offset << "\n";

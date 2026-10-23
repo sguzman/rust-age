@@ -4,7 +4,7 @@ use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, Scrip
 use rust_age::script_list::ScriptRunInfo;
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
-use rust_age::script_vm::ScriptVm;
+use rust_age::script_vm::{ScriptValue, ScriptVm};
 use std::error::Error;
 
 fn record(
@@ -63,6 +63,14 @@ fn probe(op: &str, instance: u64, index: i32, value: i32) -> Result<String, Box<
         "w" => state
             .write(instance, index, value)
             .map(|_| format!("I:{value}")),
+        "p" => state
+            .write_typed(instance, index, ScriptValue::Pointer(value))
+            .and_then(|_| state.read_typed(instance, index))
+            .map(|result| match result {
+                Some(ScriptValue::Pointer(pointer)) => format!("P:{pointer}"),
+                Some(ScriptValue::Int(number)) => format!("I:{number}"),
+                _ => "ERR".to_owned(),
+            }),
         _ => return Err("unknown synthetic local operation".into()),
     };
     let offset = state
