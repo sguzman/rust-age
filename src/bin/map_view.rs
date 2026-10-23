@@ -37,6 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read(Bank::Master, &args[2])?
         .ok_or_else(|| error("original MAP file is missing"))?;
     let preview = FloorPreview::render(&mut assets, &map_bytes, WIDTH, HEIGHT)?;
+    let roof_preview = FloorPreview::render_layers(&mut assets, &map_bytes, WIDTH, HEIGHT, true)?;
 
     let sdl = sdl2::init().map_err(error)?;
     let video = sdl.video().map_err(error)?;
@@ -58,9 +59,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut texture = textures
         .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
         .map_err(error)?;
+    let mut show_roofs = false;
+    let mut events = sdl.event_pump().map_err(error)?;
+    loop {
+        let scene = if show_roofs { &roof_preview } else { &preview };
     texture
         .with_lock(None, |pixels, pitch| {
-            for (y, row) in preview
+            for (y, row) in scene
                 .surface
                 .indices()
                 .as_chunks::<WIDTH>()
@@ -77,19 +82,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .map_err(error)?;
 
-    let mut events = sdl.event_pump().map_err(error)?;
-    loop {
+
         canvas.clear();
         canvas.copy(&texture, None, None).map_err(error)?;
         canvas.present();
 
-        // No render-driven emulator timing; this image is only a static view.
+        // Event-driven presentation, without an artificial emulator tick.
         match events.wait_event() {
             Event::Quit { .. }
             | Event::KeyDown {
                 keycode: Some(Keycode::Escape),
                 ..
             } => break,
+            Event::KeyDown {
+                keycode: Some(Keycode::R),
+                repeat: false,
+                ..
+            } => show_roofs = !show_roofs,
             _ => {}
         }
     }

@@ -48,7 +48,7 @@ This is a **static, read-only floor preview**, not a playable game. It uses the 
 cargo run --features native-window --bin rust-age-map-view -- /path/to/Fallout maps/example.map
 ```
 
-Escape closes the window; resizing scales the original 640×380 framebuffer. Replace the example path with a map actually present in your installation.
+Press **R** to toggle the unlit roof layer, and **Escape** to close. Resizing scales the original 640×380 framebuffer. This is still not a complete roof implementation: no egg mask, lighting or game simulation. Replace the example path with a map actually present in your installation.
 
 ### Optional native SDL2 sprite window
 

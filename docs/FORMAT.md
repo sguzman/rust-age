@@ -64,3 +64,7 @@ The read-only diagnostic `rust-age --inspect-map /path/to/Fallout maps/example.m
 `src/prototype.rs` reads the big-endian common 12-byte PID/message/FID prefix and original per-object fields using the pinned CE `proto_read_protoSubNode` layout. It recognizes items, critters, scenery, walls, tiles and misc, including the original type-specific item/scenery field lengths. Weapon sound codes use the original trailing byte. Critter stats are **not decoded** and are retained as raw trailing bytes; remaining data is not evidence of fully parsed gameplay objects.
 
 This is strictly a read-only, synthetic-test-backed reader. It does not instantiate entities, infer AI, interpret scripting or provide prototype behavior.
+
+## Optional native MAP roof pass
+
+`FloorPreview::render_layers(..., include_roofs=true)` runs a separate static roof pass after the floor, using the top 16-bit tile word, per-square CE roof projection (96 px above floor) and the original FRM transparency convention. The SDL2 MAP viewer switches the overlay using **R**. The preview deliberately omits CE roof egg masks, lighting and animated actor occlusion. This is for testing data alignment and geometry, not visual or gameplay parity.
