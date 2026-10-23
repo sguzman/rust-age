@@ -59,7 +59,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/map.cc` | `src/map.rs`, `src/object_tables.rs`, `src/scene.rs`, `src/script_locals.rs` | 🟡 Partial |
 | `src/game/message.cc` | `src/message.rs` | 🟡 Partial |
 | `src/game/moviefx.cc` | — | ⚪ Not ported |
-| `src/game/object.cc` | `src/object_data.rs`, `src/object_tables.rs`, `src/collision.rs`, `src/object_bounds.rs`, `src/object_preview.rs`, `src/runtime_scene.rs` | 🟡 Partial |
+| `src/game/object.cc` | `src/object_data.rs`, `src/object_tables.rs`, `src/collision.rs`, `src/object_bounds.rs`, `src/object_preview.rs`, `src/runtime_scene.rs`, `src/script_object_binding.rs`, `src/script_owner_binding.rs` | 🟡 Partial |
 | `src/game/options.cc` | — | ⚪ Not ported |
 | `src/game/palette.cc` | — | ⚪ Not ported |
 | `src/game/party.cc` | — | ⚪ Not ported |
@@ -70,7 +70,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 | `src/game/queue.cc` | `src/event_queue.rs`, `src/script_timer.rs` | 🟡 Partial |
 | `src/game/reaction.cc` | — | ⚪ Not ported |
 | `src/game/roll.cc` | `src/random_roll.rs` | 🟡 Partial |
-| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs`, `src/script_lifecycle.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_timer.rs` | 🟡 Partial |
+| `src/game/scripts.cc` | `src/script_data.rs`, `src/script_list.rs`, `src/script_binding.rs`, `src/script_procedures.rs`, `src/assets.rs`, `src/script_lifecycle.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_timer.rs`, `src/script_owner_binding.rs`, `src/script_event_state.rs`, `src/scene.rs` | 🟡 Partial |
 | `src/game/select.cc` | — | ⚪ Not ported |
 | `src/game/selfrun.cc` | — | ⚪ Not ported |
 | `src/game/sfxcache.cc` | — | ⚪ Not ported |
@@ -112,7 +112,7 @@ The archive is not yet playable; the source matrix is not a gameplay-progress pe
 
 | C++ compilation unit | Rust counterpart | Status |
 |---|---|---|
-| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_random.rs`, `src/script_time_advance.rs` | 🟡 Partial |
+| `src/int/support/intextra.cc` | `src/script_native_vars.rs`, `src/game_globals.rs`, `src/script_locals.rs`, `src/script_clock.rs`, `src/script_random.rs`, `src/script_time_advance.rs`, `src/script_object_read.rs`, `src/script_event_state.rs` | 🟡 Partial |
 
 ## src/plib/assoc (1)
 

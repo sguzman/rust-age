@@ -245,7 +245,9 @@
         "src/collision.rs",
         "src/object_bounds.rs",
         "src/object_preview.rs",
-        "src/runtime_scene.rs"
+        "src/runtime_scene.rs",
+        "src/script_object_binding.rs",
+        "src/script_owner_binding.rs"
       ],
       "status": "partial"
     },
@@ -318,7 +320,10 @@
         "src/script_lifecycle.rs",
         "src/script_locals.rs",
         "src/script_clock.rs",
-        "src/script_timer.rs"
+        "src/script_timer.rs",
+        "src/script_owner_binding.rs",
+        "src/script_event_state.rs",
+        "src/scene.rs"
       ],
       "status": "partial"
     },
@@ -482,7 +487,9 @@
         "src/script_locals.rs",
         "src/script_clock.rs",
         "src/script_random.rs",
-        "src/script_time_advance.rs"
+        "src/script_time_advance.rs",
+        "src/script_object_read.rs",
+        "src/script_event_state.rs"
       ],
       "status": "partial"
     },
