@@ -9,6 +9,7 @@ use rust_age::palette::Palette;
 use rust_age::prototype::Prototype;
 use rust_age::scene::StaticScene;
 use rust_age::script_lifecycle::MapLifecyclePhase;
+use rust_age::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use rust_age::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use rust_age::script_program::ScriptProgram;
 use std::env;
@@ -23,6 +24,7 @@ fn usage() {
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-scripts /path/to/Fallout maps/v13.map");
+    println!("       rust-age --inspect-map-script-owners /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-procedures /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-map-lifecycle /path/to/Fallout maps/v13.map enter MAP_SID MAP_FLAGS");
     println!("       rust-age --inspect-map-route /path/to/Fallout maps/v13.map 20099 20098");
@@ -351,6 +353,54 @@ fn main() {
                     println!("Metadata inspection only; no Fallout script has executed.");
                 }
                 Err(error) => fail(format!("Cannot inspect MAP script procedures: {error}")),
+            }
+        }
+        [_, flag, directory, path] if flag == "--inspect-map-script-owners" => {
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let scene = StaticScene::load(&mut assets, path)?
+                    .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+                let object_queries = scene.object_query_snapshot()?;
+                MapScriptOwners::from_map(&scene.scripts, &scene.objects, &object_queries)
+            })();
+            match result {
+                Ok(owners) => {
+                    println!("Serialized MAP script-owner diagnostics: {}", owners.entries().len());
+                    for entry in owners.entries() {
+                        print!(
+                            "  [{}:{}] SID {:#010X}, saved object ID {}: ",
+                            entry.category,
+                            entry.ordinal,
+                            entry.script_id as u32,
+                            entry.saved_owner_id
+                        );
+                        match entry.resolution {
+                            ScriptOwnerResolution::Bound {
+                                key,
+                                handle,
+                                saved_oid_matches,
+                            } => println!(
+                                "bound object [{}:{}], opaque handle {}, saved-ID match={}",
+                                key.elevation, key.ordinal, handle, saved_oid_matches
+                            ),
+                            ScriptOwnerResolution::NullOwner => {
+                                println!("unowned non-spatial script (NULL)")
+                            }
+                            ScriptOwnerResolution::SpatialOwnerRequiresEngine => {
+                                println!("unowned spatial script (requires CE runtime object)")
+                            }
+                            ScriptOwnerResolution::InvalidSid => println!("invalid serialized SID"),
+                            ScriptOwnerResolution::DuplicateScriptSid => {
+                                println!("ambiguous duplicate script SID")
+                            }
+                            ScriptOwnerResolution::DuplicateObjectSid => {
+                                println!("ambiguous multiple object claims")
+                            }
+                        }
+                    }
+                    println!("Read-only SID join; no Fallout script or engine owner was created.");
+                }
+                Err(error) => fail(format!("Cannot inspect MAP script owners: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map-scripts" => {
