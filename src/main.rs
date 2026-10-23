@@ -19,6 +19,7 @@ fn usage() {
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
     println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
+    println!("       rust-age --export-map-roof-preview /path/to/Fallout maps/v13.map roof.ppm");
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
 }
@@ -165,7 +166,9 @@ fn main() {
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
             }
         }
-        [_, flag, directory, path, destination] if flag == "--export-map-floor-preview" => {
+        [_, flag, directory, path, destination]
+            if flag == "--export-map-floor-preview" || flag == "--export-map-roof-preview" =>
+        {
             let mut assets = GameAssets::open(Path::new(directory))
                 .unwrap_or_else(|error| fail(format!("Cannot open installation: {error}")));
             let palette_bytes = assets
@@ -178,17 +181,24 @@ fn main() {
                 .read(Bank::Master, path)
                 .unwrap_or_else(|error| fail(format!("Cannot load original map: {error}")))
                 .unwrap_or_else(|| fail(format!("Map not found: {path}")));
-            let preview = FloorPreview::render(&mut assets, &map_bytes, 640, 380)
-                .unwrap_or_else(|error| fail(format!("Cannot draw floor preview: {error}")));
+            let preview = FloorPreview::render_layers(
+                &mut assets,
+                &map_bytes,
+                640,
+                380,
+                flag == "--export-map-roof-preview",
+            )
+            .unwrap_or_else(|error| fail(format!("Cannot draw MAP preview: {error}")));
             let output = File::create(destination)
                 .unwrap_or_else(|error| fail(format!("Cannot create preview file: {error}")));
             preview
                 .surface
                 .write_ppm(&palette, output)
                 .unwrap_or_else(|error| fail(format!("Cannot save preview: {error}")));
-            println!("Saved static floor image: {destination}");
+            println!("Saved static MAP image: {destination}");
             println!("Candidate tiles: {}", preview.tile_count);
             println!("Unique tile art: {}", preview.unique_art);
+            println!("Roof tiles: {}", preview.roof_count);
             println!("No lighting, roofs, objects, combat or gameplay.");
         }
         [_, flag, directory, bank, path, direction, frame_number, destination]
