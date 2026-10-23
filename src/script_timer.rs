@@ -120,7 +120,7 @@ mod tests {
     use crate::script_vm::ScriptVm;
 
     fn prepared() -> BoundScriptRuntime {
-        let names: [&[u8]; 2] = [b"main", b"timed_p_proc"];
+        let names: [&[u8]; 2] = [b"main", b"timed_event_p_proc"];
         let mut bytes = vec![0_u8; 42];
         bytes.extend_from_slice(&2_i32.to_be_bytes());
         let mut identifiers = Vec::new();
