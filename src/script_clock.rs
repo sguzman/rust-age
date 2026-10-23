@@ -160,8 +160,8 @@ impl ScriptGameClock {
 #[cfg(test)]
 mod tests {
     use super::{
-        ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-        GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE, DAYS_SINCE_VISITED_OPCODE,
+        ScriptGameClock, DAYS_SINCE_VISITED_OPCODE, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE,
+        GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};

@@ -8,8 +8,8 @@
 
 use crate::game_globals::GameGlobalState;
 use crate::script_clock::{
-    ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE, DAYS_SINCE_VISITED_OPCODE,
+    ScriptGameClock, DAYS_SINCE_VISITED_OPCODE, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE,
+    GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
 };
 use crate::script_locals::MapScriptLocals;
 use crate::script_vm::{ScriptValue, ScriptVm};
@@ -270,7 +270,14 @@ pub fn run_invocation_with_clock_bounded(
     max_steps: usize,
 ) -> io::Result<usize> {
     run_invocation_with_clock_and_visit_bounded(
-        vm, instance_id, locals, globals, invocation, clock, None, max_steps,
+        vm,
+        instance_id,
+        locals,
+        globals,
+        invocation,
+        clock,
+        None,
+        max_steps,
     )
 }
 
@@ -319,17 +326,16 @@ mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
-        run_variable_subset_bounded,
-        run_with_script_action_bounded, ScriptInvocationState, FIXED_PARAM_OPCODE,
-        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE,
-        SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        run_variable_subset_bounded, run_with_script_action_bounded, ScriptInvocationState,
+        FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
+        SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_clock::{
-        ScriptGameClock, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-        DAYS_SINCE_VISITED_OPCODE, GET_MONTH_OPCODE,
+        ScriptGameClock, DAYS_SINCE_VISITED_OPCODE, GAME_TIME_HOUR_OPCODE,
+        GAME_TIME_IN_SECONDS_OPCODE, GET_MONTH_OPCODE,
     };
     use crate::script_list::ScriptRunInfo;
     use crate::script_program::ScriptProgram;
@@ -479,9 +485,7 @@ mod tests {
         op(&mut code, GET_MONTH_OPCODE);
         op(&mut code, 0x8039);
         op(&mut code, 0x8011);
-        let clock = ScriptGameClock {
-            ticks: 4 * 864_000,
-        };
+        let clock = ScriptGameClock { ticks: 4 * 864_000 };
         let mut map = fixture();
         let mut globals = GameGlobalState::from_initial_values(&[9]).unwrap();
         let mut invocation = ScriptInvocationState::installed();

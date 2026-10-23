@@ -210,7 +210,10 @@ mod tests {
         assert!(environment.scripts.runtime.is_empty());
         assert_eq!(environment.map_locals.globals(), [12, -8]);
         assert_eq!(environment.map_locals.locals(), [99]);
-        assert_eq!(environment.map_last_visit_ticks, scene.header.last_visit_time);
+        assert_eq!(
+            environment.map_last_visit_ticks,
+            scene.header.last_visit_time
+        );
         assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
         assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
