@@ -322,7 +322,9 @@ pub fn run_invocation_with_clock_and_visit_bounded(
         | GET_MONTH_OPCODE
         | GET_DAY_OPCODE => context.clock.apply_opcode(opcode, stack),
         DAYS_SINCE_VISITED_OPCODE => context.clock.apply_visit_opcode(
-            context.last_visit_ticks.ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
+            context
+                .last_visit_ticks
+                .ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
             opcode,
             stack,
         ),
@@ -336,9 +338,8 @@ mod tests {
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
         run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
-        ScriptInvocationState,
-        FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
-        SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        ScriptInvocationState, FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
+        SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
