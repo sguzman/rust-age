@@ -275,8 +275,8 @@
               "id": "T603",
               "emoji": "🔌",
               "name": "Port engine opcodes, callbacks and event dispatch",
-              "progress": 4,
-              "evidence": "Isolated ScriptRuntime owns multiple script VMs, mirrors pinned CE insertProgram newest-first and doEvents per-program slot order, suspension guard and host-injected condition decisions; emits ready (instance ID, procedure index) without execution. Rust synthetic tests and 7 independent adapted C++/Rust traversal cases pass core CI; no gameplay engine callbacks, native opcodes, actual dispatch or quest effects."
+              "progress": 5,
+              "evidence": "CI-tested bounded Rust ScriptRuntime owns isolated .INT interpreters and traverses newest-first CE program list, per-procedure ascending index, suspension and instance removal. Synthetic-only take_due_preview now feeds supported bounded CE-style condition bytecode into multi-program polling; scheduler emits ready (instance ID, procedure index) only. Seven adapted C++ traversal parity cases and Rust tests pass. No production engine callbacks, native opcodes, saved script state or quest effects."
             },
             {
               "id": "T604",
