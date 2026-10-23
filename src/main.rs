@@ -5,6 +5,7 @@ use rust_age::frm::Frm;
 use rust_age::map::MapHeader;
 use rust_age::map_preview::FloorPreview;
 use rust_age::palette::Palette;
+use rust_age::prototype::Prototype;
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -16,6 +17,7 @@ fn usage() {
     println!("       rust-age --inspect-dat /path/to/master.dat");
     println!("       rust-age --inspect-frm /path/to/Fallout master art/items/item.frm");
     println!("       rust-age --inspect-map /path/to/Fallout maps/v13.map");
+    println!("       rust-age --inspect-pro /path/to/Fallout proto/items/example.pro");
     println!("       rust-age --export-map-floor-preview /path/to/Fallout maps/v13.map floor.ppm");
     println!("       rust-age --export-frm-preview /path/to/Fallout master art/items/item.frm 0 0 preview.ppm");
     println!("       rust-age --help");
@@ -106,6 +108,25 @@ fn main() {
                     println!("No graphics renderer yet.");
                 }
                 Err(error) => fail(format!("Cannot decode sprite: {error}")),
+            }
+        }
+        [_, flag, directory, path] if flag == "--inspect-pro" => {
+            let result = GameAssets::open(Path::new(directory))
+                .and_then(|mut assets| assets.read(Bank::Master, path))
+                .and_then(|bytes| {
+                    bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
+                })
+                .and_then(|bytes| Prototype::decode(&bytes));
+            match result {
+                Ok(proto) => {
+                    println!("Fallout 1 prototype type: {:?}", proto.kind);
+                    println!("PID: {:#010X}", proto.pid);
+                    println!("Art FID: {:#010X}", proto.fid);
+                    println!("Message ID: {}", proto.message_id);
+                    println!("Uninterpreted trailing bytes: {}", proto.remaining_bytes.len());
+                    println!("Prototype data inspection only; no gameplay object instantiated.");
+                }
+                Err(error) => fail(format!("Cannot inspect Fallout 1 prototype: {error}")),
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map" => {
