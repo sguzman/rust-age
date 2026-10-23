@@ -144,3 +144,7 @@ The read-only `ScriptTables` parser mirrors CE `scr_load` and `scr_read_ScriptSu
 ## Unlit top-level object-sprite diagnostic
 
 `src/object_preview.rs` uses decoded MAP top-level objects, CE art FID filename resolution, user-owned FRM pixels and CE `obj_bound` placement to paint static critter/item/scenery sprites on an indexed surface. It skips hidden objects, renders flat objects first, and caches each FID's decoded frames per pass. Synthetic integration asserts exact placed palette indices and transparent pixels. This is **not a finished CE scene renderer**: per-hex traversal order, lighting, egg masking, alpha effects, roof passes and animation are still unported.
+
+## CE .INT procedure and string-table foundation (no VM execution)
+
+`src/script_program.rs` reads CE's 42-byte preamble, big-endian procedure count, six-i32 (24-byte) `Procedure` table, size-prefixed identifier and static string tables. Procedure names are resolved from offsets relative to the identifier section; static strings are offset from the end of the static section's four-byte header. Raw string bytes are preserved without assuming UTF-8. An explicit 16-bit big-endian word reader supports future opcode dispatch. Bounds, count caps, malformed strings, and truncation are tested using synthetic script payloads. No interpreter state, bytecode execution, quest semantics, or runtime script loading is implemented.
