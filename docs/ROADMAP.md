@@ -21,7 +21,7 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 📄 T105 — Implement game configuration, messages and encodings — `███████░░░ 65%`
 - 🧬 T106 — Decode FRM, PRO, map and script asset structures — `███████░░░ 66%`
 
-## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█████░░░░░ 51%`
+## 🖼️ M1 — Pixel-faithful renderer and navigable maps — `█████░░░░░ 52%`
 **Acceptance gate:** An original Fallout 1 location renders faithfully, with movement and transitions.
 
 ### 🎨 P2 — Art and rendering — `██████░░░░ 59%`
@@ -35,7 +35,7 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 
 - 🧭 T301 — Implement original hex projection and map scrolling — `██████░░░░ 64%`
 - 🚶 T302 — Port pathfinding, collision and actor movement — `████░░░░░░ 40%`
-- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 70%`
+- 🚪 T303 — Port map/elevation load and spatial exits — `███████░░░ 71%`
 - 🌍 T304 — Render world map, town selection and location discovery — `░░░░░░░░░░ 0%`
 
 ## 📟 M2 — Menus, UI, audio and cinematics — `░░░░░░░░░░ 0%`
@@ -55,15 +55,15 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `███░░░░░░░ 25%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `███░░░░░░░ 26%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
-### 🔣 P6 — Script interpreter and native opcodes — `████░░░░░░ 40%`
+### 🔣 P6 — Script interpreter and native opcodes — `████░░░░░░ 41%`
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
 - ⚙️ T602 — Port interpreter, procedures and interpreter state — `█████░░░░░ 50%`
-- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `███░░░░░░░ 29%`
-- 🧪 T604 — Golden-script differential tests versus CE — `████░░░░░░ 36%`
+- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `███░░░░░░░ 30%`
+- 🧪 T604 — Golden-script differential tests versus CE — `████░░░░░░ 37%`
 
 ### 📜 P7 — Quests, dialogue and triggers — `█░░░░░░░░░ 10%`
 
