@@ -71,8 +71,14 @@ fn script_index_lookup_reads_cached_ce_list_and_decodes_synthetic_int() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("CE built-in action bindings: 2 of 24"), "{stdout}");
-    assert!(stdout.contains("action [1] start -> procedure [1]"), "{stdout}");
+    assert!(
+        stdout.contains("CE built-in action bindings: 2 of 24"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("action [1] start -> procedure [1]"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("action [16] map_exit_p_proc -> procedure [2]"),
         "{stdout}"

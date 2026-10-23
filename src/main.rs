@@ -161,7 +161,11 @@ fn main() {
                 let program = assets
                     .script_program_by_index(index)?
                     .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-                Ok((path, program.procedures().len(), build_lookup_table(&program)?))
+                Ok((
+                    path,
+                    program.procedures().len(),
+                    build_lookup_table(&program)?,
+                ))
             })();
             match result {
                 Ok((path, count, actions)) => {
