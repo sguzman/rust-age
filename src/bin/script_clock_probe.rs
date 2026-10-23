@@ -1,7 +1,7 @@
 //! Independent Rust synthetic CE game-time native opcode differential probe.
 use rust_age::script_clock::{
     ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-    GAME_TIME_OPCODE,
+    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
 };
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
@@ -20,6 +20,8 @@ fn probe(kind: &str, ticks: i32, seconds: i32) -> Result<String, Box<dyn Error>>
         "t" => word(&mut code, GAME_TIME_OPCODE),
         "s" => word(&mut code, GAME_TIME_IN_SECONDS_OPCODE),
         "h" => word(&mut code, GAME_TIME_HOUR_OPCODE),
+        "m" => word(&mut code, GET_MONTH_OPCODE),
+        "d" => word(&mut code, GET_DAY_OPCODE),
         "k" => {
             push(&mut code, seconds);
             word(&mut code, GAME_TICKS_OPCODE);
