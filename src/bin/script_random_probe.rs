@@ -4,8 +4,12 @@ use rust_age::script_vm::ScriptValue;
 use std::error::Error;
 
 fn probe(
-    opcode: &str, seed: i32, low: i32, high: i32,
-    vcr: bool, count: usize,
+    opcode: &str,
+    seed: i32,
+    low: i32,
+    high: i32,
+    vcr: bool,
+    count: usize,
 ) -> Result<String, Box<dyn Error>> {
     let mut host = ScriptRandomHost::from_seed(seed, vcr);
     let action = match opcode {
@@ -40,7 +44,8 @@ fn main() {
                 parts[5] == "1",
                 parts[6].parse()?,
             )
-        })().unwrap_or_else(|_| "ERR".to_owned());
+        })()
+        .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", parts[0], answer);
     }
 }
