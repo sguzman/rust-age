@@ -150,6 +150,19 @@ pub struct PreviewedConditionFrame {
     pub procedures: Vec<crate::script_program::ProcedureEntry>,
 }
 
+/// Discard-only CE doEvents candidate result. Earlier conditional stack
+/// and scheduling effects are visible to later procedures in the clone.
+/// No installed VM, MAP globals, or native game callbacks are modified.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewedDueProcedurePoll {
+    pub ready: Vec<usize>,
+    pub data_stack: Vec<ScriptValue>,
+    pub return_stack: Vec<ScriptValue>,
+    pub frame_pointer: i32,
+    pub base_pointer: i32,
+    pub procedures: Vec<crate::script_program::ProcedureEntry>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ScriptVm {
     pub program: ScriptProgram,
@@ -431,27 +444,79 @@ impl ScriptVm {
         })
     }
 
-    /// Return CE timed/conditional readiness from an isolated copy of the
-    /// procedure table. Original flags and event times are NOT consumed,
-    /// even if a condition succeeds or a later condition fails.
+    /// Inspect a CE doEvents pass on ONE speculative interpreter clone.
     ///
-    /// The native adapter must be pure/read-only for an observation-only
-    /// preview; only the interpreter's own state is cloned.
+    /// This follows the pinned interpreter's ascending procedure traversal.
+    /// A condition's data/return-stack, frame/base-pointer and scheduling
+    /// changes survive inside the scratch VM so later condition evaluations
+    /// can see them. The condition result is popped before the next entry.
+    /// Procedure flags are cleared for ready entries exactly as CE does
+    /// before executeProc, but NO actual procedure is executed or dispatched.
+    /// Consequently this models only the pre-dispatch candidate selection,
+    /// not later effects of executing a due script procedure.
+    ///
+    /// The native adapter must be read-only/pure: its external mutations
+    /// cannot be rolled back. Errors discard the complete speculative poll;
+    /// the installed VM stays unchanged in every case.
+    pub fn preview_due_procedure_poll_with_host_bounded(
+        &self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<PreviewedDueProcedurePoll> {
+        let mut scratch = self.clone();
+        // CE uses the same timerFunc source in CALL_AT and doEvents. Only
+        // the clone's clock is updated, never the installed interpreter.
+        scratch.clock_millis = now_millis as i32;
+        let mut ready = Vec::new();
+        for index in 0..scratch.runtime_procedures.len() {
+            let procedure = scratch.runtime_procedures[index];
+            if procedure.flags & 0x02 != 0 {
+                let frame = scratch.preview_condition_frame_with_host_bounded(
+                    procedure.condition_offset,
+                    max_steps_per_condition,
+                    native,
+                )?;
+                scratch.stack = frame.data_stack;
+                scratch.return_stack = frame.return_stack;
+                scratch.frame_pointer = frame.frame_pointer;
+                scratch.base_pointer = frame.base_pointer;
+                scratch.runtime_procedures = frame.procedures;
+                if frame.satisfied {
+                    scratch.runtime_procedures[index].flags = 0;
+                    ready.push(index);
+                }
+            } else if procedure.flags & 0x01 != 0
+                && (procedure.event_time as u32) < now_millis
+            {
+                scratch.runtime_procedures[index].flags = 0;
+                ready.push(index);
+            }
+        }
+        Ok(PreviewedDueProcedurePoll {
+            ready,
+            data_stack: scratch.stack,
+            return_stack: scratch.return_stack,
+            frame_pointer: scratch.frame_pointer,
+            base_pointer: scratch.base_pointer,
+            procedures: scratch.runtime_procedures,
+        })
+    }
+
+    /// Convenience candidate-only ready indices from the sequential CE
+    /// condition poll above. Does not consume a real procedure or callback.
     pub fn preview_due_procedures_with_host_bounded(
         &self,
         now_millis: u32,
         max_steps_per_condition: usize,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<Vec<usize>> {
-        let mut detached = self.clone();
-        detached.take_due_procedures_with(now_millis, |_, condition_offset| {
-            self.preview_condition_with_host_bounded(
-                condition_offset,
-                max_steps_per_condition,
-                native,
-            )
-            .map(Some)
-        })
+        self.preview_due_procedure_poll_with_host_bounded(
+            now_millis,
+            max_steps_per_condition,
+            native,
+        )
+        .map(|poll| poll.ready)
     }
 
     /// Synthetic-only end-to-end binding of the bounded condition preview
@@ -1162,6 +1227,106 @@ mod tests {
         bytes.extend_from_slice(b"main\0");
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn synthetic_due_vm(
+        first: &[u8],
+        second: &[u8],
+        second_flags: i32,
+    ) -> ScriptVm {
+        assert!(first.len() <= 24);
+        assert!(second.len() <= 12);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..first.len()].copy_from_slice(first);
+        bytes[28..28 + second.len()].copy_from_slice(second);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0x02, 0, 0, 0, 0],
+            [8_i32, second_flags, 0, 28, 28, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&8_i32.to_be_bytes());
+        bytes.extend_from_slice(b"one\0two\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn sequential_condition_poll_reuses_earlier_condition_stack_effects() {
+        let mut first = Vec::new();
+        push_int(&mut first, 77);
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8011); // false, leaves 77 on CE's operand stack
+        let mut second = Vec::new();
+        push_int(&mut second, 77);
+        opcode(&mut second, 0x8033); // compare with retained 77
+        opcode(&mut second, 0x8011);
+        let vm = synthetic_due_vm(&first, &second, 0x02);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(1000, 4, &mut |_, _| {
+                Err(super::invalid("native game opcodes denied"))
+            })
+            .unwrap();
+        assert_eq!(poll.ready, [1]);
+        assert!(poll.data_stack.is_empty());
+        assert!(poll.return_stack.is_empty());
+        assert_eq!(poll.procedures[0].flags, 0x02);
+        assert_eq!(poll.procedures[1].flags, 0);
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(
+            vm.preview_due_procedures_with_host_bounded(1000, 4, &mut |_, _| {
+                Err(super::invalid("native game opcodes denied"))
+            })
+            .unwrap(),
+            vec![1]
+        );
+    }
+
+    #[test]
+    fn sequential_condition_poll_sees_newly_scheduled_later_timed_procedure() {
+        let mut first = Vec::new();
+        push_int(&mut first, -1); // one second before this synthetic poll
+        push_int(&mut first, 1); // procedure index
+        opcode(&mut first, 0x8006); // CALL_AT
+        push_int(&mut first, 0); // false condition
+        opcode(&mut first, 0x8011);
+        let vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        let poll = vm
+            .preview_due_procedure_poll_with_host_bounded(1001, 5, &mut |_, _| {
+                Err(super::invalid("native game opcodes denied"))
+            })
+            .unwrap();
+        assert_eq!(poll.ready, [1]);
+        assert_eq!(poll.procedures[0].flags, 0x02);
+        assert_eq!(poll.procedures[1].flags, 0); // consumed only in clone
+        assert_eq!(poll.procedures[1].event_time, 1);
+        assert_eq!(vm.runtime_procedures()[1].event_time, 0);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+    }
+
+    #[test]
+    fn sequential_condition_poll_discards_prior_stack_effects_on_error() {
+        let mut first = Vec::new();
+        push_int(&mut first, 77);
+        push_int(&mut first, 0);
+        opcode(&mut first, 0x8011);
+        let vm = synthetic_due_vm(&first, &[0x80, 0xFC, 0x80, 0x11], 0x02);
+        assert!(vm
+            .preview_due_procedure_poll_with_host_bounded(1000, 3, &mut |_, _| {
+                Err(super::invalid("unsupported CE gameplay mutation"))
+            })
+            .is_err());
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
     }
 
     #[test]
