@@ -37,7 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read(Bank::Master, &args[2])?
         .ok_or_else(|| error("original MAP file is missing"))?;
     let preview = FloorPreview::render(&mut assets, &map_bytes, WIDTH, HEIGHT)?;
-    let roof_preview = FloorPreview::render_layers(&mut assets, &map_bytes, WIDTH, HEIGHT, true)?;
+    let roof_preview =
+        FloorPreview::render_layers(&mut assets, &map_bytes, WIDTH, HEIGHT, true)?;
 
     let sdl = sdl2::init().map_err(error)?;
     let video = sdl.video().map_err(error)?;
@@ -63,24 +64,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut events = sdl.event_pump().map_err(error)?;
     loop {
         let scene = if show_roofs { &roof_preview } else { &preview };
-    texture
-        .with_lock(None, |pixels, pitch| {
-            for (y, row) in scene
-                .surface
-                .indices()
-                .as_chunks::<WIDTH>()
-                .0
-                .iter()
-                .enumerate()
-            {
-                let destination = &mut pixels[y * pitch..y * pitch + WIDTH * 3];
-                for (x, index) in row.iter().enumerate() {
-                    let offset = x * 3;
-                    destination[offset..offset + 3].copy_from_slice(&palette.rgb8_preview(*index));
+        texture
+            .with_lock(None, |pixels, pitch| {
+                for (y, row) in scene
+                    .surface
+                    .indices()
+                    .as_chunks::<WIDTH>()
+                    .0
+                    .iter()
+                    .enumerate()
+                {
+                    let destination = &mut pixels[y * pitch..y * pitch + WIDTH * 3];
+                    for (x, index) in row.iter().enumerate() {
+                        let offset = x * 3;
+                        destination[offset..offset + 3].copy_from_slice(&palette.rgb8_preview(*index));
+                    }
                 }
-            }
-        })
-        .map_err(error)?;
+            })
+            .map_err(error)?;
 
 
         canvas.clear();
