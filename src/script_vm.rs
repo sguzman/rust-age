@@ -37,11 +37,13 @@ impl ScriptValue {
         }
     }
 
-
     /// CE op_not tests the raw 32-bit union field, not floating point equality.
     fn raw_zero(self) -> bool {
         match self {
-            Self::Int(value) | Self::StaticString(value) | Self::DynamicString(value) | Self::Pointer(value) => value == 0,
+            Self::Int(value)
+            | Self::StaticString(value)
+            | Self::DynamicString(value)
+            | Self::Pointer(value) => value == 0,
             Self::Float(value) => value.to_bits() == 0,
         }
     }
@@ -105,7 +107,6 @@ fn numeric_binary(
     };
     Ok(ScriptValue::Float(result))
 }
-
 
 fn numeric_comparison(left: ScriptValue, right: ScriptValue, operation: u16) -> io::Result<bool> {
     if let (ScriptValue::Int(a), ScriptValue::Int(b)) = (left, right) {
@@ -183,10 +184,9 @@ impl ScriptVm {
         }
     }
 
-
     fn jump(&mut self, destination: i32) -> io::Result<()> {
-        let target = usize::try_from(destination)
-            .map_err(|_| invalid("negative CE jump address"))?;
+        let target =
+            usize::try_from(destination).map_err(|_| invalid("negative CE jump address"))?;
         if target >= self.program.file_len() {
             return Err(invalid("CE jump address outside program"));
         }
@@ -407,7 +407,6 @@ mod tests {
         vm.run_bounded(8).unwrap();
         assert_eq!(vm.stack(), [ScriptValue::Float(3.0)]);
     }
-
 
     #[test]
     fn comparisons_and_boolean_arithmetic_follow_original_operand_order() {
