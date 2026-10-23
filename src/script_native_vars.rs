@@ -116,7 +116,6 @@ pub fn run_variable_subset_bounded(
     })
 }
 
-
 /// Gated CE op_script_action: original scr_find_sid_from_program lookup
 /// produces zero when no matching script can be found. Real script action
 /// state has not yet been linked; the caller supplies its current value.
@@ -327,7 +326,9 @@ mod tests {
         );
         assert_eq!(unknown.stack(), [ScriptValue::Int(4)]);
         let mut not_authorized = program(&code);
-        assert!(run_variable_subset_bounded(&mut not_authorized, 1, &mut map, &mut game, 7).is_err());
+        assert!(
+            run_variable_subset_bounded(&mut not_authorized, 1, &mut map, &mut game, 7).is_err()
+        );
         assert!(not_authorized.step().is_err());
         assert_eq!(not_authorized.pc(), 0);
     }
