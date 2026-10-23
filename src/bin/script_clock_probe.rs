@@ -1,7 +1,7 @@
 //! Independent Rust synthetic CE game-time native opcode differential probe.
 use rust_age::script_clock::{
-    ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE,
-    GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE,
+    ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
+    GAME_TIME_OPCODE,
 };
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
