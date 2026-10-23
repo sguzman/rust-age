@@ -145,6 +145,86 @@ fn serialized_map_objects_feed_only_explicit_read_only_native_vm() {
 }
 
 #[test]
+fn decoded_map_tile_contains_pid_uses_explicit_combined_host() {
+    let decoded = parsed_objects();
+    let bindings = MapObjectReadBindings::from_tables(&decoded).unwrap();
+    let prepared = BoundScriptRuntime {
+        runtime: ScriptRuntime::new(),
+        entries: vec![],
+    };
+    let mut locals = prepared
+        .script_local_state(&MapVariables {
+            globals: vec![],
+            locals: vec![],
+        })
+        .unwrap();
+    let mut globals = GameGlobalState::from_initial_values(&[7]).unwrap();
+    let mut invocation = ScriptInvocationState::installed();
+
+    for (tile, elevation, pid, expected) in [
+        (20_099, 0, 0x0300_0001, 8),
+        (20_098, 0, 0x0400_0002, 8),
+        (20_099, 1, 0x0300_0001, 7),
+        (20_099, 0, 0x0300_0002, 7),
+    ] {
+        let mut code = Vec::new();
+        for value in [tile, elevation, pid] {
+            code.extend_from_slice(&0xC001_u16.to_be_bytes());
+            word(&mut code, value);
+        }
+        code.extend_from_slice(&0x80BB_u16.to_be_bytes());
+        code.extend_from_slice(&0xC001_u16.to_be_bytes());
+        word(&mut code, 0);
+        code.extend_from_slice(&0x80C5_u16.to_be_bytes());
+        code.extend_from_slice(&0x8039_u16.to_be_bytes());
+        code.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let mut bytes = vec![0_u8; 42];
+        bytes[..code.len()].copy_from_slice(&code);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes).unwrap());
+        assert_eq!(
+            run_invocation_with_native_snapshot_bounded(
+                &mut vm,
+                1,
+                &mut locals,
+                &mut globals,
+                &mut invocation,
+                ScriptNativeSnapshot {
+                    clock: ScriptClockContext {
+                        clock: ScriptGameClock { ticks: 100 },
+                        last_visit_ticks: None,
+                    },
+                    objects: Some(bindings.snapshots()),
+                },
+                12,
+            )
+            .unwrap(),
+            8
+        );
+        assert!(vm.halted());
+        assert_eq!(vm.stack(), [ScriptValue::Int(expected)]);
+    }
+    assert_eq!(globals.values(), [7]); // detached queries did not write globals
+
+    let mut code = Vec::new();
+    for value in [20_099, 0, 0x0300_0001] {
+        code.extend_from_slice(&0xC001_u16.to_be_bytes());
+        word(&mut code, value);
+    }
+    code.extend_from_slice(&0x80BB_u16.to_be_bytes());
+    code.extend_from_slice(&0x8011_u16.to_be_bytes());
+    let mut bytes = vec![0_u8; 42];
+    bytes[..code.len()].copy_from_slice(&code);
+    bytes.extend_from_slice(&[0_u8; 12]);
+    let program = ScriptProgram::decode(&bytes).unwrap();
+    let mut unhosted = ScriptVm::new(program);
+    for _ in 0..3 {
+        unhosted.step().unwrap();
+    }
+    assert!(unhosted.step().is_err()); // native denied in ordinary VM
+}
+
+#[test]
 fn unknown_object_token_fails_without_mutating_quest_globals() {
     let objects = parsed_objects();
     let snapshots = MapObjectReadBindings::from_tables(&objects).unwrap();
