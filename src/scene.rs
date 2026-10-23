@@ -6,6 +6,7 @@
 //! gameplay world: no scripts, party, lighting, time, or actor movement.
 use crate::assets::{Bank, GameAssets};
 use crate::collision::{CollisionIndex, ObjectKey};
+use crate::game_globals::GameGlobalState;
 use crate::hex::HexViewport;
 use crate::map::{MapHeader, MapSquares, MapVariables};
 use crate::object_tables::ObjectTables;
@@ -16,7 +17,6 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
-use crate::game_globals::GameGlobalState;
 use crate::script_locals::MapScriptLocals;
 use std::io;
 
@@ -173,7 +173,11 @@ mod tests {
         fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
         fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
         fs::create_dir_all(root.join("data")).unwrap();
-        fs::write(root.join("data").join("VAULT13.GAM"), b"GAME_GLOBAL_VARS:\nA=7\nB=-13\n").unwrap();
+        fs::write(
+            root.join("data").join("VAULT13.GAM"),
+            b"GAME_GLOBAL_VARS:\nA=7\nB=-13\n",
+        )
+        .unwrap();
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&19_i32.to_be_bytes());
         bytes.extend_from_slice(b"TEST.MAP\0\0\0\0\0\0\0\0");
@@ -205,7 +209,11 @@ mod tests {
         assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
         assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
-        assert!(scene.unstarted_script_environment(&mut assets).unwrap().game_globals.is_none());
+        assert!(scene
+            .unstarted_script_environment(&mut assets)
+            .unwrap()
+            .game_globals
+            .is_none());
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
         assert_eq!(
             scene.route(&view, 20099, 20098, 0, None, true),
