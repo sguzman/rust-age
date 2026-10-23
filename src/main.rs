@@ -8,6 +8,7 @@ use rust_age::object_preview::ObjectPreview;
 use rust_age::palette::Palette;
 use rust_age::prototype::Prototype;
 use rust_age::scene::StaticScene;
+use rust_age::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use rust_age::script_program::ScriptProgram;
 use std::env;
 use std::fs::File;
@@ -160,13 +161,26 @@ fn main() {
                 let program = assets
                     .script_program_by_index(index)?
                     .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-                Ok((path, program.procedures().len()))
+                Ok((path, program.procedures().len(), build_lookup_table(&program)?))
             })();
             match result {
-                Ok((path, count)) => {
+                Ok((path, count, actions)) => {
                     println!("Fallout CE original script index: {index}");
                     println!("Original script file: {path}");
                     println!("Original procedures: {count}");
+                    println!(
+                        "CE built-in action bindings: {} of {}",
+                        actions.iter().filter(|entry| entry.is_some()).count(),
+                        SCRIPT_PROC_NAMES.len()
+                    );
+                    for (action, procedure) in actions.iter().enumerate() {
+                        if let Some(procedure) = procedure {
+                            println!(
+                                "  action [{action}] {} -> procedure [{procedure}]",
+                                SCRIPT_PROC_NAMES[action]
+                            );
+                        }
+                    }
                     println!("Read-only bytecode metadata; no script has been executed.");
                 }
                 Err(error) => fail(format!("Cannot inspect CE script index: {error}")),

@@ -96,7 +96,10 @@ mod tests {
     #[test]
     fn absent_or_empty_program_procedures_are_not_fabricated() {
         let program = fixture(&[]);
-        assert!(build_lookup_table(&program).unwrap().iter().all(Option::is_none));
+        assert!(build_lookup_table(&program)
+            .unwrap()
+            .iter()
+            .all(Option::is_none));
     }
 
     #[test]
