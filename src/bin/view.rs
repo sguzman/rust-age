@@ -3,6 +3,7 @@
 //! This is a rendering diagnostic, not the playable Fallout engine.
 //! SDL2 chooses Wayland/X11 according to the local Linux installation.
 
+use rust_age::animation::AnimationTimeline;
 use rust_age::assets::{Bank, GameAssets};
 use rust_age::framebuffer::IndexedSurface;
 use rust_age::frm::Frm;
@@ -13,6 +14,7 @@ use sdl2::pixels::PixelFormatEnum;
 use std::env;
 use std::io;
 use std::path::Path;
+use std::time::Instant;
 
 const WIDTH: usize = 640;
 const HEIGHT: usize = 480;
@@ -25,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments: Vec<String> = env::args().collect();
     if arguments.len() != 4 {
         eprintln!("Usage: rust-age-view /path/to/Fallout <master|critter> <FRM path>");
-        eprintln!("Controls: Left/Right = frame, Up/Down = direction, Escape = quit.");
+        eprintln!("Controls: Left/Right = frame, Up/Down = direction, Space = play/pause, Escape = quit.");
         std::process::exit(2);
     }
     let bank = match arguments[2].as_str() {
@@ -63,9 +65,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .create_texture_streaming(PixelFormatEnum::RGB24, WIDTH as u32, HEIGHT as u32)
         .map_err(error)?;
     let mut events = sdl.event_pump().map_err(error)?;
+    let timeline = AnimationTimeline::from_frm(&frm)?;
 
     let mut direction = 0usize;
     let mut frame_index = 0usize;
+    let mut base_frame = 0usize;
+    let mut playing = false;
+    let mut animation_origin = Instant::now();
     loop {
         let frames = &frm.frames[direction];
         if frames.is_empty() {
@@ -77,7 +83,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             frame_index = 0;
         }
         let frames = &frm.frames[direction];
-        frame_index %= frames.len();
+        if playing {
+            frame_index = (base_frame + timeline.frame_at(animation_origin.elapsed())) % frames.len();
+        } else {
+            frame_index %= frames.len();
+        }
         let frame = &frames[frame_index];
         let mut indexed = IndexedSurface::new(WIDTH, HEIGHT)?;
         indexed.blit_frame(
@@ -101,37 +111,63 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         canvas.copy(&texture, None, None).map_err(error)?;
         canvas.present();
 
-        // No background redraw: event driven until the user moves through
-        // the original animation frames or SDL requests a window repaint.
-        match events.wait_event() {
-            Event::Quit { .. }
-            | Event::KeyDown {
+        // The animation frame depends only on monotonic elapsed time, not
+        // the number of draw calls. SDL waits for input or the next frame.
+        let event = if playing {
+            events.wait_event_timeout((1000 / timeline.frames_per_second()).max(1))
+        } else {
+            Some(events.wait_event())
+        };
+        match event {
+            Some(Event::Quit { .. })
+            | Some(Event::KeyDown {
                 keycode: Some(Keycode::Escape),
                 ..
-            } => break,
-            Event::KeyDown {
+            }) => break,
+            Some(Event::KeyDown {
+                keycode: Some(Keycode::Space),
+                repeat: false,
+                ..
+            }) => {
+                if playing {
+                    playing = false;
+                } else {
+                    base_frame = frame_index;
+                    animation_origin = Instant::now();
+                    playing = true;
+                }
+            },
+            Some(Event::KeyDown {
                 keycode: Some(Keycode::Right),
                 repeat: false,
                 ..
-            } => frame_index = (frame_index + 1) % frames.len(),
-            Event::KeyDown {
+            }) => {
+                playing = false;
+                frame_index = (frame_index + 1) % frames.len();
+            },
+            Some(Event::KeyDown {
                 keycode: Some(Keycode::Left),
                 repeat: false,
                 ..
-            } => frame_index = (frame_index + frames.len() - 1) % frames.len(),
-            Event::KeyDown {
+            }) => {
+                playing = false;
+                frame_index = (frame_index + frames.len() - 1) % frames.len();
+            },
+            Some(Event::KeyDown {
                 keycode: Some(Keycode::Up),
                 repeat: false,
                 ..
-            } => {
+            }) => {
+                playing = false;
                 direction = (direction + 1) % 6;
                 frame_index = 0;
             }
-            Event::KeyDown {
+            Some(Event::KeyDown {
                 keycode: Some(Keycode::Down),
                 repeat: false,
                 ..
-            } => {
+            }) => {
+                playing = false;
                 direction = (direction + 5) % 6;
                 frame_index = 0;
             }

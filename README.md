@@ -59,7 +59,7 @@ On EndeavourOS, install the standard `sdl2` development package if it is not alr
 cargo run --features native-window --bin rust-age-view -- /path/to/Fallout master art/items/example.frm
 ```
 
-Choose a real FRM path from your own game installation. Use Left/Right to switch frames, Up/Down to switch directions, and Escape to close. SDL2 uses the available Linux display backend (Wayland where supported, otherwise X11/XWayland). This is **not** a playable map or full game.
+Choose a real FRM path from your own game installation. Use Left/Right to switch frames, Up/Down to switch directions, **Space to play/pause the original sprite animation independently of window redraws**, and Escape to close. SDL2 uses the available Linux display backend (Wayland where supported, otherwise X11/XWayland). This is **not** a playable map or full game.
 
 ## Progress and issues
 
