@@ -319,6 +319,73 @@ mod tests {
     }
 
     #[test]
+    fn synthetic_map_object_looks_up_original_prototype_from_patch_bank() {
+        use crate::assets::GameAssets;
+        use crate::prototype::PrototypeBody;
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir()
+            .join(format!("rust-age-map-object-{}-{stamp}", std::process::id()));
+        let proto_dir = root.join("data").join("proto").join("items");
+        fs::create_dir_all(&proto_dir).unwrap();
+        fs::write(root.join("master.dat"), [0_u8; 16]).unwrap();
+        fs::write(root.join("critter.dat"), [0_u8; 16]).unwrap();
+        fs::write(proto_dir.join("items.lst"), b"BOX.PRO\n").unwrap();
+
+        let mut proto = Vec::new();
+        for value in [1_i32, 42, 4, 1, 2, 3, 4, -1, 1, 9, 10, 11, 12, 13] {
+            proto.extend_from_slice(&value.to_be_bytes());
+        }
+        proto.push(0);
+        for value in [100_i32, 200] {
+            proto.extend_from_slice(&value.to_be_bytes());
+        }
+        fs::write(proto_dir.join("BOX.PRO"), proto).unwrap();
+
+        let mut map = header(2 | 4 | 8, 0, 0); // no square elevations
+        map.extend_from_slice(&[0_u8; 5 * 4]); // five empty script types
+        for value in [1_i32, 1] { // total, elevation zero
+            map.extend_from_slice(&value.to_be_bytes());
+        }
+        for value in [
+            123_i32, 20099, 0, 0, 0, 0, 0, 2, 1, 0, 0, 1,
+            0, 0, 0, 0, -1, -1,
+        ] {
+            map.extend_from_slice(&value.to_be_bytes());
+        }
+        for value in [0_i32, 0, 0, 0, 0, 0] {
+            // inventory length/capacity/pointer, update flags, elevations 1/2
+            map.extend_from_slice(&value.to_be_bytes());
+        }
+
+        let mut assets = GameAssets::open(&root).unwrap();
+        let squares = MapHeader::decode(&map).unwrap().decode_squares(&map).unwrap();
+        let (scripts, objects, end) = squares
+            .decode_objects_with(&map, |pid| {
+                let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
+                })?;
+                Ok(match proto.body {
+                    PrototypeBody::Item { item_type, .. } => Some(item_type),
+                    PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
+                    _ => None,
+                })
+            })
+            .unwrap();
+        assert_eq!(scripts.script_count(), 0);
+        assert_eq!(objects.total_objects, 1);
+        assert_eq!(objects.elevations[0][0].record.header.id, 123);
+        assert_eq!(objects.elevations[0][0].record.header.pid, 1);
+        assert_eq!(end, map.len());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rejects_bad_version_and_truncated_tile_data() {
         let mut bytes = header(4 | 8, 0, 0);
         bytes[3] = 18;
