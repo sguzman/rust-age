@@ -548,9 +548,9 @@ mod tests {
         run_invocation_with_owner_snapshot_bounded, run_variable_subset_bounded,
         run_with_script_action_bounded, ScriptClockContext, ScriptInvocationState,
         ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot,
-        FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
-        SCRIPT_OVERRIDES_OPCODE, SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
-        SOURCE_OBJ_OPCODE, TARGET_OBJ_OPCODE, OBJ_BEING_USED_WITH_OPCODE,
+        FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, OBJ_BEING_USED_WITH_OPCODE,
+        SCRIPT_ACTION_OPCODE, SCRIPT_OVERRIDES_OPCODE, SELF_OBJ_OPCODE, SET_LOCAL_VAR_OPCODE,
+        SET_MAP_VAR_OPCODE, SOURCE_OBJ_OPCODE, TARGET_OBJ_OPCODE,
     };
     use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
