@@ -405,7 +405,9 @@ mod tests {
             (0x00, 0, 22),  // Uninitialized byte, no opcode marker.
         ] {
             let mut runtime = ScriptRuntime::new();
-            runtime.register(1, local_action_vm(flags, args, body)).unwrap();
+            runtime
+                .register(1, local_action_vm(flags, args, body))
+                .unwrap();
             assert!(runtime.inspect_local_action_frame(1, 1).is_err());
             assert_eq!(runtime.vm(1).unwrap().pc(), 0);
             assert!(runtime.vm(1).unwrap().stack().is_empty());
