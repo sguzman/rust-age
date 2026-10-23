@@ -275,10 +275,20 @@ pub fn run_invocation_with_clock_bounded(
         locals,
         globals,
         invocation,
-        clock,
-        None,
+        ScriptClockContext {
+            clock,
+            last_visit_ticks: None,
+        },
         max_steps,
     )
+}
+
+/// Explicit game-clock and optional serialized MAP last-visit snapshot.
+/// A missing value is distinct from CE's zero-tick never-visited sentinel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptClockContext {
+    pub clock: ScriptGameClock,
+    pub last_visit_ticks: Option<i32>,
 }
 
 /// Same isolated, bounded native subset, additionally accepting the original
@@ -291,8 +301,7 @@ pub fn run_invocation_with_clock_and_visit_bounded(
     locals: &mut MapScriptLocals,
     globals: &mut GameGlobalState,
     invocation: &mut ScriptInvocationState,
-    clock: ScriptGameClock,
-    last_visit_ticks: Option<i32>,
+    context: ScriptClockContext,
     max_steps: usize,
 ) -> io::Result<usize> {
     vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
@@ -311,9 +320,9 @@ pub fn run_invocation_with_clock_and_visit_bounded(
         | GAME_TICKS_OPCODE
         | GAME_TIME_HOUR_OPCODE
         | GET_MONTH_OPCODE
-        | GET_DAY_OPCODE => clock.apply_opcode(opcode, stack),
-        DAYS_SINCE_VISITED_OPCODE => clock.apply_visit_opcode(
-            last_visit_ticks.ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
+        | GET_DAY_OPCODE => context.clock.apply_opcode(opcode, stack),
+        DAYS_SINCE_VISITED_OPCODE => context.clock.apply_visit_opcode(
+            context.last_visit_ticks.ok_or_else(|| invalid("CE MAP lastVisitTime not provided"))?,
             opcode,
             stack,
         ),
@@ -326,7 +335,8 @@ mod tests {
     use super::{
         apply_map_variable_opcode, run_invocation_subset_bounded,
         run_invocation_with_clock_and_visit_bounded, run_invocation_with_clock_bounded,
-        run_variable_subset_bounded, run_with_script_action_bounded, ScriptInvocationState,
+        run_variable_subset_bounded, run_with_script_action_bounded, ScriptClockContext,
+        ScriptInvocationState,
         FIXED_PARAM_OPCODE, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE,
         SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
@@ -497,8 +507,10 @@ mod tests {
                 &mut map,
                 &mut globals,
                 &mut invocation,
-                clock,
-                Some(2 * 864_000),
+                ScriptClockContext {
+                    clock,
+                    last_visit_ticks: Some(2 * 864_000),
+                },
                 6,
             )
             .unwrap(),
@@ -515,8 +527,10 @@ mod tests {
             &mut map,
             &mut globals,
             &mut invocation,
-            clock,
-            Some(0),
+            ScriptClockContext {
+                clock,
+                last_visit_ticks: Some(0),
+            },
             6,
         )
         .unwrap();
