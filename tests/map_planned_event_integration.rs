@@ -5,17 +5,16 @@ use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
 use rust_age::scene::{DetachedMapEventSessions, PreparedScriptEnvironment};
-use rust_age::script_clock::ScriptGameClock;
-use rust_age::script_native_vars::ScriptClockContext;
-use rust_age::script_vm::ScriptValue;
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
+use rust_age::script_clock::ScriptGameClock;
 use rust_age::script_data::{ScriptRecord, ScriptTables};
 use rust_age::script_lifecycle::MapLifecyclePhase;
+use rust_age::script_native_vars::ScriptClockContext;
 use rust_age::script_object_binding::MapObjectReadBindings;
 use rust_age::script_owner_binding::MapScriptOwners;
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
-use rust_age::script_vm::ScriptVm;
+use rust_age::script_vm::{ScriptValue, ScriptVm};
 
 fn synthetic_vm() -> ScriptVm {
     synthetic_vm_with_body(&[0x80, 0x1A, 0x80, 0x21])
