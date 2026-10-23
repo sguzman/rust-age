@@ -37,11 +37,7 @@ impl PrototypeList {
         };
         let name = std::str::from_utf8(name)
             .map_err(|_| invalid("prototype list filename is not UTF-8"))?;
-        if name.is_empty()
-            || name == "."
-            || name == ".."
-            || name.contains(['/', '\\', ':', '\0'])
-        {
+        if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\', ':', '\0']) {
             return Err(invalid("unsafe or empty prototype filename"));
         }
         Ok(Some(name))

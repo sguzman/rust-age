@@ -56,9 +56,13 @@ impl MapSquares {
     /// Read original MAP script-list records after the square layers.
     /// No script code is executed. Object records begin at the returned offset.
     pub fn decode_scripts(&self, file: &[u8]) -> io::Result<(ScriptTables, usize)> {
-        let data = file.get(self.scripts_offset..).ok_or_else(|| invalid("MAP scripts outside file"))?;
+        let data = file
+            .get(self.scripts_offset..)
+            .ok_or_else(|| invalid("MAP scripts outside file"))?;
         let scripts = ScriptTables::decode(data)?;
-        let object_offset = self.scripts_offset.checked_add(scripts.bytes_consumed)
+        let object_offset = self
+            .scripts_offset
+            .checked_add(scripts.bytes_consumed)
             .ok_or_else(|| invalid("MAP script offset overflow"))?;
         Ok((scripts, object_offset))
     }
@@ -263,11 +267,17 @@ mod tests {
         let mut bytes = header(2 | 4 | 8, 0, 0);
         bytes.extend_from_slice(&[0_u8; 20]);
         bytes.extend_from_slice(&88_i32.to_be_bytes());
-        let squares = MapHeader::decode(&bytes).unwrap().decode_squares(&bytes).unwrap();
+        let squares = MapHeader::decode(&bytes)
+            .unwrap()
+            .decode_squares(&bytes)
+            .unwrap();
         let (scripts, object_offset) = squares.decode_scripts(&bytes).unwrap();
         assert_eq!(scripts.script_count(), 0);
         assert_eq!(object_offset, HEADER_SIZE + 20);
-        assert_eq!(&bytes[object_offset..object_offset + 4], &88_i32.to_be_bytes());
+        assert_eq!(
+            &bytes[object_offset..object_offset + 4],
+            &88_i32.to_be_bytes()
+        );
     }
 
     #[test]

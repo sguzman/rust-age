@@ -150,11 +150,19 @@ impl GameAssets {
             3 => "walls",
             4 => "tiles",
             5 => "misc",
-            _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsupported PID kind")),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "unsupported PID kind",
+                ))
+            }
         };
         let index = pid & 0x00FF_FFFF;
         if index == 0 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "prototype PID index is zero"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "prototype PID index is zero",
+            ));
         }
         let list_path = format!("proto/{directory}/{directory}.lst");
         let Some(list_bytes) = self.read(Bank::Master, &list_path)? else {
@@ -317,7 +325,10 @@ mod tests {
         assert_eq!(tiles.file_name(1).unwrap(), Some("other.frm"));
         fs::create_dir_all(root.join("Master_Patches").join("Proto").join("Tiles")).unwrap();
         fs::write(
-            root.join("Master_Patches").join("Proto").join("Tiles").join("tiles.lst"),
+            root.join("Master_Patches")
+                .join("Proto")
+                .join("Tiles")
+                .join("tiles.lst"),
             b"00000001.PRO\n00000002.PRO\n",
         )
         .unwrap();
@@ -326,7 +337,10 @@ mod tests {
             record.extend_from_slice(&value.to_be_bytes());
         }
         fs::write(
-            root.join("Master_Patches").join("Proto").join("Tiles").join("00000002.PRO"),
+            root.join("Master_Patches")
+                .join("Proto")
+                .join("Tiles")
+                .join("00000002.PRO"),
             record,
         )
         .unwrap();
