@@ -185,9 +185,9 @@ mod tests {
     use crate::collision::ObjectKey;
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
-    use crate::script_binding::BoundScriptRuntime;
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
+    use crate::script_binding::BoundScriptRuntime;
     use crate::script_clock::ScriptGameClock;
     use crate::script_native_vars::{
         run_invocation_with_event_snapshot_bounded, ScriptClockContext,
