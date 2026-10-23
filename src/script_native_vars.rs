@@ -485,7 +485,9 @@ mod tests {
         assert!(invocation.overrides());
         assert_eq!(map.globals(), [12, -9]);
         let mut forbidden = program(&code);
-        assert!(forbidden.step().is_err());
+        forbidden.step().unwrap(); // typed integer immediate is a core opcode.
+        assert_eq!(forbidden.stack(), [ScriptValue::Int(0)]);
+        assert!(forbidden.step().is_err()); // clock native requires explicit host.
     }
 
     #[test]
