@@ -79,7 +79,12 @@ fn main() {
             continue;
         }
         let output = (|| -> Result<String, Box<dyn Error>> {
-            simulate(parts[1], parts[2].parse()?, parts[3].parse()?, parts[4] == "1")
+            simulate(
+                parts[1],
+                parts[2].parse()?,
+                parts[3].parse()?,
+                parts[4] == "1",
+            )
         })()
         .unwrap_or_else(|_| "ERR".to_owned());
         println!("{} {}", parts[0], output);

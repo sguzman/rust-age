@@ -1670,11 +1670,9 @@ mod tests {
             push_int(&mut code, 1); // the CE condition result
             opcode(&mut code, 0x801D); // POP_EXIT
             let vm = ScriptVm::new(fixture(&code));
-            let result = vm.preview_condition_frame_with_host_bounded(
-                0,
-                4,
-                &mut |_, _| Err(super::invalid("CE native host not configured")),
-            );
+            let result = vm.preview_condition_frame_with_host_bounded(0, 4, &mut |_, _| {
+                Err(super::invalid("CE native host not configured"))
+            });
             if valid {
                 let candidate = result.unwrap();
                 assert!(candidate.satisfied);
