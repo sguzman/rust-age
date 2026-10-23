@@ -161,7 +161,8 @@ impl ScriptRuntime {
             let vm = scratch
                 .vm(entry.program_id)
                 .ok_or_else(|| invalid("CE ready script instance is missing"))?;
-            let result = vm.preview_local_interrupt_bounded(entry.procedure_index, procedure_budget)?;
+            let result =
+                vm.preview_local_interrupt_bounded(entry.procedure_index, procedure_budget)?;
             results.push((entry, result));
         }
         *self = scratch;
@@ -342,7 +343,10 @@ mod tests {
         assert_eq!(previews[1].1, crate::script_vm::ScriptValue::Int(51));
         assert_eq!(runtime.vm(1).unwrap().program, original);
         assert_eq!(runtime.vm(3).unwrap().runtime_procedures()[0].flags, 0x02);
-        assert!(runtime.preview_due_local_interrupts(10, 3, 4).unwrap().is_empty());
+        assert!(runtime
+            .preview_due_local_interrupts(10, 3, 4)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -353,7 +357,13 @@ mod tests {
         assert!(runtime.preview_due_local_interrupts(10, 3, 2).is_err());
         assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[0].flags, 0x02);
         assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[0].flags, 0x02);
-        assert_eq!(runtime.preview_due_local_interrupts(10, 3, 4).unwrap().len(), 2);
+        assert_eq!(
+            runtime
+                .preview_due_local_interrupts(10, 3, 4)
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
