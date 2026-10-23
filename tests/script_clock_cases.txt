@@ -34,3 +34,15 @@ date_max_month m 2147483647 0
 date_max_day d 2147483647 0
 date_min_month m -2147483648 0
 date_min_day d -2147483648 0
+visited_none v 3456000 0
+visited_one_day v 3456000 864000
+visited_two_days v 3456000 1728000
+visited_three_days v 3456000 2592000
+visited_fraction v 3456000 2592001
+visited_equal v 3456000 3456000
+visited_future_tick v 3456000 3456001
+visited_future_day v 3456000 5184000
+visited_small_delta v 100 1
+visited_past_negative_clock v -864000 -1728000
+visited_negative_last v 864000 -864000
+visited_clock_zero v 0 1

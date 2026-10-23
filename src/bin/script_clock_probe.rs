@@ -1,7 +1,7 @@
 //! Independent Rust synthetic CE game-time native opcode differential probe.
 use rust_age::script_clock::{
     ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
-    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE,
+    GAME_TIME_OPCODE, GET_DAY_OPCODE, GET_MONTH_OPCODE, DAYS_SINCE_VISITED_OPCODE,
 };
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_vm::{ScriptValue, ScriptVm};
@@ -22,6 +22,7 @@ fn probe(kind: &str, ticks: i32, seconds: i32) -> Result<String, Box<dyn Error>>
         "h" => word(&mut code, GAME_TIME_HOUR_OPCODE),
         "m" => word(&mut code, GET_MONTH_OPCODE),
         "d" => word(&mut code, GET_DAY_OPCODE),
+        "v" => word(&mut code, DAYS_SINCE_VISITED_OPCODE),
         "k" => {
             push(&mut code, seconds);
             word(&mut code, GAME_TICKS_OPCODE);
@@ -39,7 +40,12 @@ fn probe(kind: &str, ticks: i32, seconds: i32) -> Result<String, Box<dyn Error>>
     bytes[..code.len()].copy_from_slice(&code);
     bytes.extend_from_slice(&[0_u8; 12]);
     let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
-    let steps = ScriptGameClock { ticks }.run_bounded(&mut vm, 9)?;
+    let clock = ScriptGameClock { ticks };
+    let steps = if kind == "v" {
+        clock.run_with_visit_bounded(&mut vm, seconds, 9)?
+    } else {
+        clock.run_bounded(&mut vm, 9)?
+    };
     match vm.stack() {
         [ScriptValue::Int(value)] => Ok(format!("S:{value} N:{steps} PC:{}", vm.pc())),
         _ => Err("unexpected CE time result stack".into()),

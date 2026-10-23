@@ -47,6 +47,12 @@ int main(int argc, char** argv) {
             stack.push_back(100 * ((time / 600) / 60 % 24) + (time / 600) % 60);
             steps = 2; pc = 4;
             break;
+        case 'v':
+            // scripts.cc lastVisitTime is zero until the MAP has been visited.
+            // op_days_since_visited divides signed tick delta by a CE day.
+            stack.push_back(seconds == 0 ? -1 : (time - seconds) / 864000);
+            steps = 2; pc = 4;
+            break;
         case 'm':
         case 'd': {
             int month, day, year;
