@@ -5,7 +5,7 @@ use rust_age::frm::Frm;
 use rust_age::map::MapHeader;
 use rust_age::map_preview::FloorPreview;
 use rust_age::palette::Palette;
-use rust_age::prototype::Prototype;
+use rust_age::prototype::{Prototype, PrototypeBody};
 use std::env;
 use std::fs::File;
 use std::path::Path;
@@ -134,19 +134,31 @@ fn main() {
             }
         }
         [_, flag, directory, path] if flag == "--inspect-map" => {
-            let result = GameAssets::open(Path::new(directory))
-                .and_then(|mut assets| assets.read(Bank::Master, path))
-                .and_then(|bytes| {
-                    bytes.ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))
-                })
-                .and_then(|bytes| {
-                    let header = MapHeader::decode(&bytes)?;
-                    let squares = header.decode_squares(&bytes)?;
-                    let scripts = squares.decode_scripts(&bytes)?;
-                    Ok((header, squares, scripts))
-                });
+            let result: std::io::Result<_> = (|| {
+                let mut assets = GameAssets::open(Path::new(directory))?;
+                let bytes = assets.read(Bank::Master, path)?.ok_or_else(|| {
+                    std::io::Error::from(std::io::ErrorKind::NotFound)
+                })?;
+                let header = MapHeader::decode(&bytes)?;
+                let squares = header.decode_squares(&bytes)?;
+                let (scripts, objects, object_end) =
+                    squares.decode_objects_with(&bytes, |pid| {
+                        let proto = assets.prototype_by_pid(pid)?.ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                format!("missing original prototype {pid:#010X}"),
+                            )
+                        })?;
+                        Ok(match proto.body {
+                            PrototypeBody::Item { item_type, .. } => Some(item_type),
+                            PrototypeBody::Scenery { scenery_type, .. } => Some(scenery_type),
+                            _ => None,
+                        })
+                    })?;
+                Ok((header, squares, scripts, objects, object_end))
+            })();
             match result {
-                Ok((header, squares, (scripts, object_offset))) => {
+                Ok((header, squares, scripts, objects, object_end)) => {
                     println!(
                         "Fallout 1 map: {}",
                         String::from_utf8_lossy(header.name_bytes())
@@ -163,8 +175,9 @@ fn main() {
                     );
                     println!("Original scripts begin at byte {}", squares.scripts_offset);
                     println!("Serialized script records: {}", scripts.script_count());
-                    println!("Original objects begin at byte {object_offset}");
-                    println!("Script bytecode and objects are not decoded; game not playable.");
+                    println!("Serialized top-level objects: {}", objects.total_objects);
+                    println!("Original object data ends at byte {object_end}");
+                    println!("No scripts executed or gameplay objects instantiated.");
                 }
                 Err(error) => fail(format!("Cannot inspect Fallout 1 map: {error}")),
             }

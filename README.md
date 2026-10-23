@@ -23,6 +23,7 @@ cargo run -- --verify-installation /path/to/Fallout
 cargo run -- --inspect-dat /path/to/Fallout/master.dat
 cargo run -- --inspect-frm /path/to/Fallout master art/items/example.frm
 cargo run -- --inspect-map /path/to/Fallout maps/example.map
+# Read-only parser reports square layers, serialized script records and object counts
 cargo run -- --inspect-pro /path/to/Fallout proto/items/example.pro
 cargo run -- --export-frm-preview /path/to/Fallout master art/items/example.frm 0 0 preview.ppm
 python3 tools/render_roadmap.py --check
