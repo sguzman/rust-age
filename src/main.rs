@@ -257,8 +257,13 @@ fn main() {
             })();
             match result {
                 Ok((records, installed, actions)) => {
-                    println!("CE MAP lifecycle plan ({phase_name}): {} actions", actions.len());
-                    println!("Original MAP script records: {records}; installed INT VMs: {installed}");
+                    println!(
+                        "CE MAP lifecycle plan ({phase_name}): {} actions",
+                        actions.len()
+                    );
+                    println!(
+                        "Original MAP script records: {records}; installed INT VMs: {installed}"
+                    );
                     for action in actions {
                         println!(
                             "  SID {:#010X} [{}:{}] instance {} action [{}] {} -> procedure [{}], ext_param={:?}",
