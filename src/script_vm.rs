@@ -839,7 +839,7 @@ impl ScriptVm {
     }
 
     /// Execute a single CE core instruction or an explicitly gated native
-    /// state instruction (0x80B9, 0x80C1..0x80C7, 0x80EA/EB, 0x80F2, 0x80F6/F7), with host.
+    /// state instruction (0x80B9, 0x80C1..0x80C7, 0x80EA/EB, 0x80F0..F2, or 0x80F6/F7), with host.
     ///
     /// The normal step() method NEVER invokes native host functions.
     /// The Rust host receives a detached operand-stack copy; rejected input
@@ -853,7 +853,7 @@ impl ScriptVm {
             return Ok(());
         }
         let opcode = self.program.word_at(self.pc)?;
-        if !matches!(opcode, 0x80B9 | 0x80EA | 0x80EB | 0x80F2 | 0x80F6 | 0x80F7)
+        if !matches!(opcode, 0x80B9 | 0x80EA | 0x80EB | 0x80F0 | 0x80F1 | 0x80F2 | 0x80F6 | 0x80F7)
             && !(0x80C1..=0x80C7).contains(&opcode)
         {
             return self.step();
