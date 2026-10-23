@@ -836,8 +836,8 @@ impl ScriptVm {
         Ok(())
     }
 
-    /// Execute a single CE core instruction or one of six explicitly gated
-    /// native variable instructions (0x80C1..0x80C6).
+    /// Execute a single CE core instruction or an explicitly gated native
+    /// state instruction (0x80C1..0x80C7), with caller-supplied host.
     ///
     /// The normal step() method NEVER invokes native host functions.
     /// The Rust host receives a detached operand-stack copy; rejected input
@@ -851,7 +851,7 @@ impl ScriptVm {
             return Ok(());
         }
         let opcode = self.program.word_at(self.pc)?;
-        if !(0x80C1..=0x80C6).contains(&opcode) {
+        if !(0x80C1..=0x80C7).contains(&opcode) {
             return self.step();
         }
         let next_pc = self

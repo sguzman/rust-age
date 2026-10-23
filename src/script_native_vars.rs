@@ -1,10 +1,9 @@
-//! Pure, bounded adapter for the four CE native MAP variable opcodes.
-//! Pinned CE src/int/support/intextra.cc op_local_var, op_set_local_var,
-//! op_map_var, op_set_map_var and initIntExtra registrations.
+//! Explicit-host, bounded adapter for CE native script-state opcodes.
+//! Pinned CE src/int/support/intextra.cc op_{local,map,global}_var,
+//! op_set_{local,map,global}_var, op_script_action and initIntExtra.
 //!
-//! These routines operate on a supplied synthetic operand stack and a
-//! Rust-owned MAP state copy. They are NOT installed in ScriptVm's bytecode
-//! dispatcher: gameplay scripts, quest logic and host opcodes cannot run.
+//! An isolated Rust ScriptVm can run this subset only through the explicit
+//! host pathway. Ordinary ScriptVm::step and normal MAP loading remain inert.
 
 use crate::game_globals::GameGlobalState;
 use crate::script_locals::MapScriptLocals;
@@ -15,6 +14,7 @@ pub const LOCAL_VAR_OPCODE: u16 = 0x80C1;
 pub const SET_LOCAL_VAR_OPCODE: u16 = 0x80C2;
 pub const MAP_VAR_OPCODE: u16 = 0x80C3;
 pub const SET_MAP_VAR_OPCODE: u16 = 0x80C4;
+pub const SCRIPT_ACTION_OPCODE: u16 = 0x80C7;
 const MAX_STACK_VALUES: usize = 0x800;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -116,11 +116,49 @@ pub fn run_variable_subset_bounded(
     })
 }
 
+
+/// Gated CE op_script_action: original scr_find_sid_from_program lookup
+/// produces zero when no matching script can be found. Real script action
+/// state has not yet been linked; the caller supplies its current value.
+/// No game state or script dispatch occurs.
+pub fn push_script_action(
+    stack: &mut Vec<ScriptValue>,
+    current_action: Option<i32>,
+) -> io::Result<()> {
+    if stack.len() >= MAX_STACK_VALUES {
+        return Err(invalid("CE script action stack exceeds bounded capacity"));
+    }
+    stack.push(ScriptValue::Int(current_action.unwrap_or(0)));
+    Ok(())
+}
+
+/// Like run_variable_subset_bounded, but explicitly supplies the current
+/// script action for CE opcode 0x80C7. This *does not* determine the action
+/// from a running Fallout engine or synthesize its event lifecycle.
+pub fn run_with_script_action_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    current_action: Option<i32>,
+    max_steps: usize,
+) -> io::Result<usize> {
+    vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
+        LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
+            apply_map_variable_opcode(locals, instance_id, opcode, stack)
+        }
+        game_opcode @ (0x80C5 | 0x80C6) => globals.apply_opcode(game_opcode, stack),
+        SCRIPT_ACTION_OPCODE => push_script_action(stack, current_action),
+        _ => Err(invalid("unrecognized CE native script-state opcode")),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_map_variable_opcode, run_variable_subset_bounded, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
-        SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+        apply_map_variable_opcode, run_variable_subset_bounded, run_with_script_action_bounded,
+        LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_ACTION_OPCODE, SET_LOCAL_VAR_OPCODE,
+        SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
@@ -264,6 +302,34 @@ mod tests {
         assert!(vm.step_with_variable_host(&mut rejected).is_err());
         assert_eq!(vm.pc(), saved_pc);
         assert_eq!(vm.stack(), saved_stack);
+    }
+
+    #[test]
+    fn ce_script_action_is_bounded_opt_in_and_returns_zero_for_unknown_sid() {
+        let mut code = Vec::new();
+        op(&mut code, SCRIPT_ACTION_OPCODE);
+        int(&mut code, 4);
+        op(&mut code, 0x8039);
+        op(&mut code, 0x8011);
+        let mut vm = program(&code);
+        let mut map = fixture();
+        let mut game = GameGlobalState::from_initial_values(&[8]).unwrap();
+        assert_eq!(
+            run_with_script_action_bounded(&mut vm, 1, &mut map, &mut game, Some(15), 7).unwrap(),
+            4
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(19)]);
+        assert!(vm.halted());
+        let mut unknown = program(&code);
+        assert_eq!(
+            run_with_script_action_bounded(&mut unknown, 1, &mut map, &mut game, None, 7).unwrap(),
+            4
+        );
+        assert_eq!(unknown.stack(), [ScriptValue::Int(4)]);
+        let mut not_authorized = program(&code);
+        assert!(run_variable_subset_bounded(&mut not_authorized, 1, &mut map, &mut game, 7).is_err());
+        assert!(not_authorized.step().is_err());
+        assert_eq!(not_authorized.pc(), 0);
     }
 
     #[test]
