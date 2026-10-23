@@ -322,12 +322,17 @@ impl PreparedScriptEnvironment {
         max_steps: usize,
     ) -> io::Result<bool> {
         let event = self.detached_event_for_planned(planned)?;
-        let vm = self.scripts.runtime.vm(planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE condition VM missing")
-        })?;
-        let procedure = vm.runtime_procedures().get(procedure_index).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE condition procedure missing")
-        })?;
+        let vm = self
+            .scripts
+            .runtime
+            .vm(planned.instance_id)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "CE condition VM missing"))?;
+        let procedure = vm
+            .runtime_procedures()
+            .get(procedure_index)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE condition procedure missing")
+            })?;
         if procedure.flags & 0x02 == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,

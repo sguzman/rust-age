@@ -36,7 +36,11 @@ fn synthetic_vm_with_condition(body: &[u8], condition: &[u8]) -> ScriptVm {
     let mut strings = Vec::new();
     for (index, name) in names.into_iter().enumerate() {
         let offset = 4 + strings.len() as i32;
-        let flags = if index == 0 && !condition.is_empty() { 0x02 } else { 0 };
+        let flags = if index == 0 && !condition.is_empty() {
+            0x02
+        } else {
+            0
+        };
         for value in [offset, flags, 0, 0, 20, 0] {
             bytes.extend_from_slice(&value.to_be_bytes());
         }
@@ -544,7 +548,13 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
             .is_err());
     }
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
         0x02
     );
     assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 0);
@@ -571,7 +581,13 @@ fn planned_conditional_read_uses_ce_procedure_offset_without_dispatch() {
         .is_err());
     assert_eq!(environment.map_locals.globals(), [13]);
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
         0x02
     );
     let stale = rust_age::script_lifecycle::PlannedMapAction {

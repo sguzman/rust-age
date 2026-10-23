@@ -348,11 +348,9 @@ impl ScriptVm {
         condition_offset: i32,
         max_steps: usize,
     ) -> io::Result<bool> {
-        self.preview_condition_with_host_bounded(
-            condition_offset,
-            max_steps,
-            &mut |_, _| Err(invalid("CE condition native host not provided")),
-        )
+        self.preview_condition_with_host_bounded(condition_offset, max_steps, &mut |_, _| {
+            Err(invalid("CE condition native host not provided"))
+        })
     }
 
     /// Evaluate an INT condition on a detached VM with a strict instruction
@@ -1145,7 +1143,9 @@ mod tests {
         let write_vm = ScriptVm::new(fixture(&writes));
         assert!(write_vm
             .preview_condition_with_host_bounded(0, 4, &mut |_, _| {
-                Err(super::invalid("read-only CE condition forbids native writes"))
+                Err(super::invalid(
+                    "read-only CE condition forbids native writes",
+                ))
             })
             .is_err());
         assert_eq!(write_vm.pc(), 0);
