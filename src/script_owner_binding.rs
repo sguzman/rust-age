@@ -2,10 +2,12 @@
 //! Pinned src/game/object.cc obj_load_func: each top-level Object::sid is
 //! looked up in scr_ptr and then installed as Script::owner. Pinned
 //! src/game/scripts.cc scr_read_ScriptSubNode loads scr_oid independently;
-//! scr_find_obj_from_program synthesizes an owner for unowned spatial scripts.
+//! obj_load_obj also attaches nested inventory item scripts when that
+//! loading path is used. scr_find_obj_from_program can synthesize an owner
+//! for unowned spatial scripts.
 //! We never synthesize engine objects or dereference serialized addresses.
 use crate::collision::ObjectKey;
-use crate::object_tables::ObjectTables;
+use crate::object_tables::{MapObject, ObjectTables};
 use crate::script_binding::BoundScriptRuntime;
 use crate::script_data::ScriptTables;
 use crate::script_object_binding::MapObjectReadBindings;
@@ -31,6 +33,9 @@ pub enum ScriptOwnerResolution {
     /// CE scr_find_obj_from_program can create a new spatial owner at runtime.
     /// This decoded-only bridge refuses to invent that object.
     SpatialOwnerRequiresEngine,
+    /// An inventory child can own the script in CE obj_load_obj, but it is
+    /// not in the top-level object-query snapshot. Refuse guessed NULL.
+    InventoryOwnerNotRepresented,
     /// Refuse records with invalid category encodings or missing SID.
     InvalidSid,
     /// Multiple saved script records share one SID; refuse implicit choice.
@@ -53,6 +58,24 @@ pub struct MapScriptOwners {
     entries: Vec<ScriptOwnerEntry>,
 }
 
+fn collect_inventory_claims(
+    object: &MapObject,
+    claims: &mut BTreeMap<i32, usize>,
+    depth: usize,
+) -> io::Result<()> {
+    if depth >= 32 {
+        return Err(invalid("CE nested script owner inventory depth exceeded"));
+    }
+    for entry in &object.inventory {
+        let sid = entry.object.record.header.script_id;
+        if sid != -1 {
+            *claims.entry(sid).or_default() += 1;
+        }
+        collect_inventory_claims(&entry.object, claims, depth + 1)?;
+    }
+    Ok(())
+}
+
 impl MapScriptOwners {
     /// Resolve serialized MAP scripts against top-level MAP objects. The
     /// result contains every serialized script, even if its .INT is absent.
@@ -69,8 +92,10 @@ impl MapScriptOwners {
             }
         }
         let mut owners = BTreeMap::<i32, Vec<(ObjectKey, i32)>>::new();
+        let mut inventory_claims = BTreeMap::<i32, usize>::new();
         for (elevation, row) in objects.elevations.iter().enumerate() {
             for (ordinal, object) in row.iter().enumerate() {
+                collect_inventory_claims(object, &mut inventory_claims, 0)?;
                 let sid = object.record.header.script_id;
                 if sid == -1 {
                     continue;
@@ -94,6 +119,8 @@ impl MapScriptOwners {
                     ScriptOwnerResolution::InvalidSid
                 } else if sid_counts.get(&sid).copied().unwrap_or(0) != 1 {
                     ScriptOwnerResolution::DuplicateScriptSid
+                } else if inventory_claims.contains_key(&sid) {
+                    ScriptOwnerResolution::InventoryOwnerNotRepresented
                 } else {
                     match owners.get(&sid).map(Vec::as_slice).unwrap_or(&[]) {
                         [] if category == 1 => ScriptOwnerResolution::SpatialOwnerRequiresEngine,
@@ -169,7 +196,7 @@ mod tests {
     use super::{MapScriptOwners, ScriptOwnerResolution};
     use crate::collision::ObjectKey;
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
-    use crate::object_tables::{MapObject, ObjectTables};
+    use crate::object_tables::{InventoryEntry, MapObject, ObjectTables};
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_data::{ScriptRecord, ScriptTables};
     use crate::script_object_binding::MapObjectReadBindings;
@@ -384,6 +411,40 @@ mod tests {
             entries: vec![mk(3, 0x0300_0001, None)],
         };
         assert_eq!(owners.resolution_for_instance(&missing_int, 12), None);
+    }
+
+    #[test]
+    fn nested_inventory_owner_never_becomes_a_false_nonspatial_null() {
+        let sid = 0x0300_0003;
+        let scripts = scripts(&[(3, sid, 70)]);
+        let mut parent = object(50, -1);
+        parent.inventory.push(InventoryEntry {
+            quantity: 1,
+            object: Box::new(object(70, sid)),
+        });
+        let objects = tables([vec![parent], vec![], vec![]]);
+        let snapshots = MapObjectReadBindings::from_tables(&objects).unwrap();
+        assert_eq!(snapshots.snapshots().len(), 1);
+        let ownership = MapScriptOwners::from_map(&scripts, &objects, &snapshots).unwrap();
+        assert_eq!(
+            ownership.entry(3, 0).unwrap().resolution,
+            ScriptOwnerResolution::InventoryOwnerNotRepresented
+        );
+        assert_eq!(ownership.self_handle(3, 0), None);
+
+        // Even a matching top-level object must not conceal a nested claim.
+        let mut parent = object(50, sid);
+        parent.inventory.push(InventoryEntry {
+            quantity: 1,
+            object: Box::new(object(70, sid)),
+        });
+        let objects = tables([vec![parent], vec![], vec![]]);
+        let snapshots = MapObjectReadBindings::from_tables(&objects).unwrap();
+        let ownership = MapScriptOwners::from_map(&scripts, &objects, &snapshots).unwrap();
+        assert_eq!(
+            ownership.entry(3, 0).unwrap().resolution,
+            ScriptOwnerResolution::InventoryOwnerNotRepresented
+        );
     }
 
     #[test]

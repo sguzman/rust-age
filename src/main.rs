@@ -389,6 +389,9 @@ fn main() {
                             ScriptOwnerResolution::SpatialOwnerRequiresEngine => {
                                 println!("unowned spatial script (requires CE runtime object)")
                             }
+                            ScriptOwnerResolution::InventoryOwnerNotRepresented => {
+                                println!("nested inventory owner not in detached object snapshot")
+                            }
                             ScriptOwnerResolution::InvalidSid => println!("invalid serialized SID"),
                             ScriptOwnerResolution::DuplicateScriptSid => {
                                 println!("ambiguous duplicate script SID")
