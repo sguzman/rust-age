@@ -4,9 +4,8 @@ use rust_age::map::MapVariables;
 use rust_age::script_binding::BoundScriptRuntime;
 use rust_age::script_clock::ScriptGameClock;
 use rust_age::script_native_vars::{
-    apply_readonly_event_native_with_vars, ScriptClockContext,
-    ScriptInvocationState, ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot,
-    ScriptNativeSnapshot,
+    apply_readonly_event_native_with_vars, ScriptClockContext, ScriptInvocationState,
+    ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot,
 };
 use rust_age::script_owner_binding::ScriptOwnerResolution;
 use rust_age::script_program::ScriptProgram;
@@ -15,7 +14,9 @@ use rust_age::script_vm::{ScriptValue, ScriptVm};
 use std::error::Error;
 
 fn probe(parts: &[&str]) -> Result<i32, Box<dyn Error>> {
-    let values = parts[1..].iter().map(|v| v.parse::<i32>())
+    let values = parts[1..]
+        .iter()
+        .map(|v| v.parse::<i32>())
         .collect::<Result<Vec<_>, _>>()?;
     let [map_count, game_count, map_index, game_index, map0, map1, game0, game1] =
         values.as_slice()
@@ -66,9 +67,7 @@ fn probe(parts: &[&str]) -> Result<i32, Box<dyn Error>> {
     let vm = ScriptVm::new(ScriptProgram::decode(&bytes)?);
     let invocation = ScriptInvocationState::installed();
     let result = vm.preview_local_action_with_host_bounded(0, 8, &mut |op, stack| {
-        apply_readonly_event_native_with_vars(
-            snapshot, &invocation, &map, Some(&game), op, stack,
-        )
+        apply_readonly_event_native_with_vars(snapshot, &invocation, &map, Some(&game), op, stack)
     })?;
     if vm.pc() != 0 || !vm.stack().is_empty() || !vm.return_stack().is_empty() {
         return Err("original CE VM changed during cloned variable query".into());
