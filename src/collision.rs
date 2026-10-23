@@ -109,30 +109,43 @@ impl CollisionIndex {
     /// separately by the caller using first_blocker before committing it.
     pub fn relocate(&mut self, key: ObjectKey, to: i32) -> io::Result<()> {
         if !(0..40_000).contains(&to) || key.elevation >= 3 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid CE collision destination"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid CE collision destination",
+            ));
         }
-        let Some((from_elevation, from_tile)) = self
-            .objects
-            .iter()
-            .find_map(|(&(elevation, tile), objects)| {
-                if elevation == key.elevation && objects.iter().any(|object| object.key == key) {
-                    Some((elevation, tile))
-                } else {
-                    None
-                }
-            })
+        let Some((from_elevation, from_tile)) =
+            self.objects
+                .iter()
+                .find_map(|(&(elevation, tile), objects)| {
+                    if elevation == key.elevation && objects.iter().any(|object| object.key == key)
+                    {
+                        Some((elevation, tile))
+                    } else {
+                        None
+                    }
+                })
         else {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "CE collision object not found"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "CE collision object not found",
+            ));
         };
         if from_tile == to {
             return Ok(());
         }
         let origin = (from_elevation, from_tile);
         let Some(objects) = self.objects.get_mut(&origin) else {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "missing CE collision origin"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "missing CE collision origin",
+            ));
         };
         let Some(position) = objects.iter().position(|object| object.key == key) else {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "missing CE collision identity"));
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "missing CE collision identity",
+            ));
         };
         let mut moved = objects.remove(position);
         let remove_empty = objects.is_empty();
@@ -158,7 +171,10 @@ impl CollisionIndex {
                 return Ok(());
             }
         }
-        Err(io::Error::new(io::ErrorKind::NotFound, "CE collision object not found"))
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "CE collision object not found",
+        ))
     }
 
     pub fn is_passable(
@@ -279,11 +295,22 @@ mod tests {
         index.relocate(key, 20100).unwrap();
         assert!(index.is_passable(&view, 20098, 0, None));
         assert!(!index.is_passable(&view, 20100, 0, None));
-        assert_eq!(index.first_blocker(&view, 20100, 0, None).unwrap().tile, 20100);
+        assert_eq!(
+            index.first_blocker(&view, 20100, 0, None).unwrap().tile,
+            20100
+        );
         index.relocate(key, 20100).unwrap(); // idempotent same-tile move
         assert!(index.relocate(key, -1).is_err());
         assert!(index.relocate(key, 40000).is_err());
-        assert!(index.relocate(ObjectKey { elevation: 1, ordinal: 0 }, 20098).is_err());
+        assert!(index
+            .relocate(
+                ObjectKey {
+                    elevation: 1,
+                    ordinal: 0
+                },
+                20098
+            )
+            .is_err());
         assert!(!index.is_passable(&view, 20100, 0, None));
     }
 
@@ -299,7 +326,9 @@ mod tests {
         assert!(index.is_passable(&view, 20099, 0, None));
         index.set_flags(key, OBJECT_MULTIHEX).unwrap();
         assert!(!index.is_passable(&view, 20099, 0, None));
-        index.set_flags(key, OBJECT_HIDDEN | OBJECT_MULTIHEX).unwrap();
+        index
+            .set_flags(key, OBJECT_HIDDEN | OBJECT_MULTIHEX)
+            .unwrap();
         assert!(index.is_passable(&view, 20098, 0, None));
         assert!(index.is_passable(&view, 20099, 0, None));
         index.set_flags(key, OBJECT_NO_BLOCK).unwrap();
