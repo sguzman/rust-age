@@ -40,6 +40,9 @@ pub struct PreparedScriptEnvironment {
     pub scripts: BoundScriptRuntime,
     pub map_locals: MapScriptLocals,
     pub game_globals: Option<GameGlobalState>,
+    /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
+    /// Zero indicates no recorded visit; no gameplay time is advanced.
+    pub map_last_visit_ticks: i32,
 }
 
 impl StaticScene {
@@ -131,6 +134,7 @@ impl StaticScene {
             scripts,
             map_locals,
             game_globals,
+            map_last_visit_ticks: self.header.last_visit_time,
         })
     }
 
@@ -206,6 +210,7 @@ mod tests {
         assert!(environment.scripts.runtime.is_empty());
         assert_eq!(environment.map_locals.globals(), [12, -8]);
         assert_eq!(environment.map_locals.locals(), [99]);
+        assert_eq!(environment.map_last_visit_ticks, scene.header.last_visit_time);
         assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
         assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
