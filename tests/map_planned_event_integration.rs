@@ -643,7 +643,13 @@ fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
         .unwrap()
         .is_empty());
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
         0x03
     );
 
@@ -660,7 +666,13 @@ fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
         vec![0]
     );
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
         0x01
     );
 
@@ -674,7 +686,13 @@ fn read_only_due_preview_obeys_ce_condition_priority_and_strict_due_time() {
         vec![0]
     );
     assert_eq!(
-        environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[0].flags,
+        environment
+            .scripts
+            .runtime
+            .vm(1)
+            .unwrap()
+            .runtime_procedures()[0]
+            .flags,
         0x03
     );
 }
