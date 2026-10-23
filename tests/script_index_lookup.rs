@@ -83,6 +83,14 @@ fn script_index_lookup_reads_cached_ce_list_and_decodes_synthetic_int() {
         stdout.contains("action [16] map_exit_p_proc -> procedure [2]"),
         "{stdout}"
     );
+    assert!(
+        stdout.contains("procedure [0] main flags=0x0 body=0 args=0"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("procedure [1] START flags=0x0 body=0 args=0"),
+        "{stdout}"
+    );
     assert!(stdout.contains("no script has been executed"), "{stdout}");
     fs::write(scripts.join("scripts.lst"), b"OTHER.ssl\nSECOND.ssl\n").unwrap();
     assert_eq!(

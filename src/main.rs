@@ -162,17 +162,33 @@ fn main() {
                 let program = assets
                     .script_program_by_index(index)?
                     .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotFound))?;
-                Ok((
-                    path,
-                    program.procedures().len(),
-                    build_lookup_table(&program)?,
-                ))
+                let procedures = program
+                    .procedures()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, entry)| {
+                        Ok((
+                            program.procedure_name(index)?.escape_ascii().to_string(),
+                            entry.flags,
+                            entry.body_offset,
+                            entry.argument_count,
+                        ))
+                    })
+                    .collect::<std::io::Result<Vec<_>>>()?;
+                Ok((path, procedures, build_lookup_table(&program)?))
             })();
             match result {
-                Ok((path, count, actions)) => {
+                Ok((path, procedures, actions)) => {
                     println!("Fallout CE original script index: {index}");
                     println!("Original script file: {path}");
-                    println!("Original procedures: {count}");
+                    println!("Original procedures: {}", procedures.len());
+                    for (proc_index, (name, flags, body, arguments)) in
+                        procedures.iter().enumerate()
+                    {
+                        println!(
+                            "  procedure [{proc_index}] {name} flags={flags:#X} body={body} args={arguments}"
+                        );
+                    }
                     println!(
                         "CE built-in action bindings: {} of {}",
                         actions.iter().filter(|entry| entry.is_some()).count(),
