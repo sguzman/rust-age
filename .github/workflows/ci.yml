@@ -104,6 +104,12 @@ jobs:
           /tmp/rust-age-ce-object-read tests/script_object_read_cases.txt > /tmp/rust-age-ce-object-read.txt
           cargo run --quiet --bin script_object_read_probe > /tmp/rust-age-rust-object-read.txt
           diff -u /tmp/rust-age-ce-object-read.txt /tmp/rust-age-rust-object-read.txt
+      - name: Compare CE C++ and Rust detached script event lifetime
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_event_lifecycle_oracle.cc -o /tmp/rust-age-ce-event-lifecycle
+          /tmp/rust-age-ce-event-lifecycle tests/script_event_lifecycle_cases.txt > /tmp/rust-age-ce-event-lifecycle.txt
+          cargo run --quiet --bin script_event_lifecycle_probe > /tmp/rust-age-rust-event-lifecycle.txt
+          diff -u /tmp/rust-age-ce-event-lifecycle.txt /tmp/rust-age-rust-event-lifecycle.txt
       - name: Compare CE C++ and Rust obj-being-used-with native alias
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_used_with_oracle.cc -o /tmp/rust-age-ce-used-with
