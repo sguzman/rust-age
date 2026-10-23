@@ -836,6 +836,57 @@ impl ScriptVm {
         Ok(())
     }
 
+    /// Execute a single CE core instruction or one of six explicitly gated
+    /// native variable instructions (0x80C1..0x80C6).
+    ///
+    /// The normal step() method NEVER invokes native host functions.
+    /// The Rust host receives a detached operand-stack copy; rejected input
+    /// preserves this VM's original PC and data stack. External mutable host
+    /// state is not transactionally rolled back after callback failure.
+    pub fn step_with_variable_host(
+        &mut self,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<()> {
+        if self.halted {
+            return Ok(());
+        }
+        let opcode = self.program.word_at(self.pc)?;
+        if !(0x80C1..=0x80C6).contains(&opcode) {
+            return self.step();
+        }
+        let next_pc = self
+            .pc
+            .checked_add(2)
+            .ok_or_else(|| invalid("CE native variable program counter overflow"))?;
+        let mut detached = self.stack.clone();
+        native(opcode, &mut detached)?;
+        if detached.len() > MAX_STACK_VALUES {
+            return Err(invalid("CE native variable result exceeds stack bound"));
+        }
+        self.stack = detached;
+        self.pc = next_pc;
+        Ok(())
+    }
+
+    /// Bounded, opt-in diagnostic execution of supported core and variable
+    /// native instructions. Other CE game opcodes remain errors.
+    pub fn run_variable_subset_bounded(
+        &mut self,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<usize> {
+        for count in 0..max_steps {
+            if self.halted {
+                return Ok(count);
+            }
+            self.step_with_variable_host(native)?;
+        }
+        if self.halted {
+            return Ok(max_steps);
+        }
+        Err(invalid("CE native variable instruction budget exhausted"))
+    }
+
     /// Execute only the explicitly supported core opcodes under a caller
     /// supplied instruction budget. Never wait, invoke scripts or hang.
     pub fn run_bounded(&mut self, max_steps: usize) -> io::Result<usize> {

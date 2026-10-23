@@ -6,8 +6,9 @@
 //! Rust-owned MAP state copy. They are NOT installed in ScriptVm's bytecode
 //! dispatcher: gameplay scripts, quest logic and host opcodes cannot run.
 
+use crate::game_globals::GameGlobalState;
 use crate::script_locals::MapScriptLocals;
-use crate::script_vm::ScriptValue;
+use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
 
 pub const LOCAL_VAR_OPCODE: u16 = 0x80C1;
@@ -95,12 +96,36 @@ pub fn apply_map_variable_opcode(
     Ok(())
 }
 
+
+/// Explicitly execute the supported CE variable-opcode subset in an owned
+/// diagnostic VM, with caller-supplied mutable MAP and game-global state.
+/// This is not part of StaticScene loading, event dispatch or gameplay.
+/// Unsupported native/game opcodes still fail before arbitrary host effects.
+pub fn run_variable_subset_bounded(
+    vm: &mut ScriptVm,
+    instance_id: u64,
+    locals: &mut MapScriptLocals,
+    globals: &mut GameGlobalState,
+    max_steps: usize,
+) -> io::Result<usize> {
+    vm.run_variable_subset_bounded(max_steps, &mut |opcode, stack| match opcode {
+        LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
+            apply_map_variable_opcode(locals, instance_id, opcode, stack)
+        }
+        GameGlobalStateOpcode @ (0x80C5 | 0x80C6) => {
+            globals.apply_opcode(GameGlobalStateOpcode, stack)
+        }
+        _ => Err(invalid("unrecognized CE native variable opcode")),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_map_variable_opcode, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SET_LOCAL_VAR_OPCODE,
-        SET_MAP_VAR_OPCODE,
+        apply_map_variable_opcode, run_variable_subset_bounded, LOCAL_VAR_OPCODE,
+        MAP_VAR_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
+    use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_list::ScriptRunInfo;
@@ -143,6 +168,105 @@ mod tests {
             locals: vec![10, 11],
         })
         .unwrap()
+    }
+
+    fn program(code: &[u8]) -> ScriptVm {
+        assert!(code.len() <= 42);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..code.len()].copy_from_slice(code);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn int(code: &mut Vec<u8>, number: i32) {
+        code.extend_from_slice(&0xC001_u16.to_be_bytes());
+        code.extend_from_slice(&number.to_be_bytes());
+    }
+
+    fn op(code: &mut Vec<u8>, opcode: u16) {
+        code.extend_from_slice(&opcode.to_be_bytes());
+    }
+
+    #[test]
+    fn executes_synthetic_int_variable_bytecode_only_with_explicit_host() {
+        let mut code = Vec::new();
+        int(&mut code, 1);
+        int(&mut code, 39);
+        op(&mut code, SET_MAP_VAR_OPCODE);
+        int(&mut code, 1);
+        op(&mut code, MAP_VAR_OPCODE);
+        int(&mut code, 0);
+        op(&mut code, 0x80C5);
+        op(&mut code, 0x8039); // original CE numeric ADD
+        op(&mut code, 0x8011); // STOP
+        let mut vm = program(&code);
+        let mut map = fixture();
+        let mut game = GameGlobalState::from_initial_values(&[7, 8]).unwrap();
+        assert_eq!(
+            run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 12).unwrap(),
+            9
+        );
+        assert!(vm.halted());
+        assert_eq!(vm.stack(), [ScriptValue::Int(46)]);
+        assert_eq!(map.globals(), [12, 39]);
+        assert_eq!(game.values(), [7, 8]);
+
+        let mut default_vm = program(&0x80C3_u16.to_be_bytes());
+        assert!(default_vm.step().is_err());
+    }
+
+    #[test]
+    fn synthetic_game_global_write_and_local_pointer_round_trip() {
+        let mut code = Vec::new();
+        int(&mut code, 1);
+        int(&mut code, 99);
+        op(&mut code, 0x80C6);
+        int(&mut code, 1);
+        op(&mut code, 0x80C5);
+        op(&mut code, 0x8011);
+        let mut vm = program(&code);
+        let mut map = fixture();
+        let mut game = GameGlobalState::from_initial_values(&[7, 8]).unwrap();
+        assert_eq!(
+            run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 9).unwrap(),
+            6
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Int(99)]);
+        assert_eq!(game.values(), [7, 99]);
+
+        let mut local = Vec::new();
+        int(&mut local, 0);
+        op(&mut local, 0xE001);
+        local.extend_from_slice(&123_i32.to_be_bytes());
+        op(&mut local, SET_LOCAL_VAR_OPCODE);
+        int(&mut local, 0);
+        op(&mut local, LOCAL_VAR_OPCODE);
+        op(&mut local, 0x8011);
+        let mut vm = program(&local);
+        assert_eq!(
+            run_variable_subset_bounded(&mut vm, 1, &mut map, &mut game, 9).unwrap(),
+            6
+        );
+        assert_eq!(vm.stack(), [ScriptValue::Pointer(123)]);
+        assert_eq!(map.locals(), [0, 11]); // pointer stored out of band.
+    }
+
+    #[test]
+    fn explicitly_gated_host_failures_preserve_vm_stack_and_pc() {
+        let mut code = Vec::new();
+        int(&mut code, 1);
+        op(&mut code, 0x80C5);
+        let mut vm = program(&code);
+        vm.step().unwrap();
+        let saved_pc = vm.pc();
+        let saved_stack = vm.stack().to_vec();
+        let mut rejected = |_op: u16, stack: &mut Vec<ScriptValue>| {
+            stack.push(ScriptValue::Int(999));
+            Err(std::io::Error::other("synthetic rejected native opcode"))
+        };
+        assert!(vm.step_with_variable_host(&mut rejected).is_err());
+        assert_eq!(vm.pc(), saved_pc);
+        assert_eq!(vm.stack(), saved_stack);
     }
 
     #[test]
