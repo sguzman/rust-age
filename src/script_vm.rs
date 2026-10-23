@@ -873,6 +873,67 @@ impl ScriptVm {
         Ok(())
     }
 
+    /// A safe, local, null-host slice of pinned CE op_pop_flags and its
+    /// return variants. Only a zero window ID and null wait pointer are
+    /// accepted: nonzero host state is outside this isolated interpreter.
+    /// Only the modeled critical (0x80) flag is restorable. Other CE bits
+    /// require the full program lifecycle and fail closed.
+    ///
+    /// Preflight every operand and the return target before changing stacks,
+    /// so malformed synthetic call frames do not partially unwind the VM.
+    fn pop_local_flags_frame(&mut self, opcode: u16) -> io::Result<()> {
+        let preserve_value = opcode == 0x8025;
+        let return_frame = matches!(opcode, 0x8020 | 0x8021 | 0x8025);
+        let exit_interpreter = matches!(opcode, 0x8021 | 0x8025);
+        let value_count = usize::from(preserve_value);
+        let n = self.stack.len();
+        if n < 3 + value_count {
+            return Err(invalid("CE local POP_FLAGS frame underflow"));
+        }
+        let window = self.stack[n - 1 - value_count];
+        let wait = self.stack[n - 2 - value_count];
+        let flags = self.stack[n - 3 - value_count];
+        if window != ScriptValue::Int(0) || wait != ScriptValue::Pointer(0) {
+            return Err(invalid("CE local POP_FLAGS requires a null-host frame"));
+        }
+        let ScriptValue::Int(flags) = flags else {
+            return Err(invalid("CE local POP_FLAGS requires integer flags"));
+        };
+        if flags & !0x80 != 0 {
+            return Err(invalid("CE local POP_FLAGS contains unsupported program flags"));
+        }
+        let target = if return_frame {
+            let address = match self.return_stack.last() {
+                Some(ScriptValue::Int(address)) => *address,
+                _ => return Err(invalid("CE local POP_FLAGS return address is missing")),
+            };
+            let target = usize::try_from(address)
+                .map_err(|_| invalid("negative CE local POP_FLAGS return address"))?;
+            self.program.word_at(target)?;
+            Some(target)
+        } else {
+            None
+        };
+        let value = if preserve_value { self.stack.pop() } else { None };
+        self.stack.truncate(self.stack.len() - 3);
+        self.critical_section = flags & 0x80 != 0;
+        self.halt_reason = None;
+        if let Some(target) = target {
+            self.return_stack.pop();
+            self.pc = target;
+            if exit_interpreter {
+                // CE POP_EXIT sets transient 0x40; interpret clears it
+                // before returning to the enclosing caller.
+                self.halt_reason = Some(ScriptHaltReason::ReturnFromCall);
+                self.halted = true;
+            }
+        }
+        if let Some(value) = value {
+            self.push(value)?;
+        }
+        Ok(())
+    }
+
     pub fn step(&mut self) -> io::Result<()> {
         if self.halted {
             return Ok(());
@@ -1011,6 +1072,12 @@ impl ScriptVm {
             }
             0x1E => {
                 self.pop_return()?;
+            }
+            0x1F | 0x20 | 0x21 | 0x25 => {
+                // CE op_pop_flags, op_pop_flags_return,
+                // op_pop_flags_exit and op_pop_flags_return_val_exit.
+                // Only safe local, nil-host frames are supported.
+                self.pop_local_flags_frame(opcode)?;
             }
             0x27 => {
                 let expected = self.pop_int()?;
@@ -1638,6 +1705,114 @@ mod tests {
         assert_eq!(vm.modeled_program_low_flags(), 0);
         assert!(vm.stack().is_empty());
         assert!(vm.return_stack().is_empty());
+    }
+
+    fn push_pointer(buffer: &mut Vec<u8>, value: i32) {
+        buffer.extend_from_slice(&0xE001_u16.to_be_bytes());
+        buffer.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn local_return_fixture(
+        restored_flags: i32,
+        opcode_value: u16,
+        result: i32,
+        window: i32,
+        wait: i32,
+        address: i32,
+    ) -> ScriptVm {
+        let mut code = Vec::new();
+        if opcode_value != 0x801F {
+            push_int(&mut code, address);
+            opcode(&mut code, 0x800D); // D_TO_A
+        }
+        push_int(&mut code, restored_flags);
+        push_pointer(&mut code, wait);
+        push_int(&mut code, window);
+        if opcode_value == 0x8025 {
+            push_int(&mut code, result);
+        }
+        opcode(&mut code, opcode_value);
+        assert!(code.len() <= 42);
+        ScriptVm::new(fixture(&code))
+    }
+
+    #[test]
+    fn ce_local_pop_flags_variants_unwind_null_host_frames_and_resume() {
+        use super::ScriptHaltReason;
+        for flags in [0, 0x80] {
+            // Standalone POP_FLAGS restores only the modeled critical bit.
+            let mut vm = local_return_fixture(flags, 0x801F, 0, 0, 0, 0);
+            vm.run_bounded(4).unwrap_err(); // no stop after POP_FLAGS
+            assert!(vm.stack().is_empty());
+            assert_eq!(vm.return_stack().len(), 0);
+            assert_eq!(vm.modeled_program_low_flags(), flags as u16);
+
+            // POP_FLAGS_RETURN jumps and continues the interpreter.
+            let mut vm = local_return_fixture(flags, 0x8020, 0, 0, 0, 36);
+            for _ in 0..5 {
+                vm.step().unwrap();
+            }
+            assert_eq!(vm.pc(), 36);
+            assert!(!vm.halted());
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+            assert_eq!(vm.modeled_program_low_flags(), flags as u16);
+
+            // POP_FLAGS_EXIT returns to the C++ interpret caller.
+            let mut vm = local_return_fixture(flags, 0x8021, 0, 0, 0, 36);
+            assert_eq!(vm.run_bounded(5).unwrap(), 5);
+            assert_eq!(vm.pc(), 36);
+            assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::ReturnFromCall));
+            assert_eq!(vm.modeled_program_low_flags(), flags as u16);
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+
+            // POP_FLAGS_RETURN_VAL_EXIT saves the value across frame pop.
+            for value in [0, 1, -81, i32::MIN, i32::MAX] {
+                let mut vm = local_return_fixture(flags, 0x8025, value, 0, 0, 40);
+                assert_eq!(vm.run_bounded(6).unwrap(), 6);
+                assert_eq!(vm.pc(), 40);
+                assert_eq!(vm.stack(), [ScriptValue::Int(value)]);
+                assert!(vm.return_stack().is_empty());
+                assert_eq!(vm.halt_reason(), Some(ScriptHaltReason::ReturnFromCall));
+                assert_eq!(vm.modeled_program_low_flags(), flags as u16);
+            }
+        }
+    }
+
+    #[test]
+    fn ce_local_pop_flags_rejects_unrepresentable_host_state_without_partial_unwind() {
+        for opcode_value in [0x801F_u16, 0x8020, 0x8021, 0x8025] {
+            for (flags, window, wait, address) in [
+                (0x01, 0, 0, 36),
+                (0x08, 0, 0, 36),
+                (0, 1, 0, 36),
+                (0, 0, 8, 36),
+                (0, 0, 0, -1),
+                (0, 0, 0, 600),
+            ] {
+                if opcode_value == 0x801F && address != 36 {
+                    continue;
+                }
+                let mut vm = local_return_fixture(flags, opcode_value, 5, window, wait, address);
+                let count = match opcode_value {
+                    0x801F => 3,
+                    0x8025 => 5,
+                    _ => 4,
+                };
+                for _ in 0..count {
+                    vm.step().unwrap();
+                }
+                let before_stack = vm.stack().to_vec();
+                let before_return = vm.return_stack().to_vec();
+                let before_flags = vm.modeled_program_low_flags();
+                assert!(vm.step().is_err());
+                assert_eq!(vm.stack(), before_stack);
+                assert_eq!(vm.return_stack(), before_return);
+                assert_eq!(vm.modeled_program_low_flags(), before_flags);
+                assert!(!vm.halted());
+            }
+        }
     }
 
     #[test]
