@@ -474,7 +474,10 @@ mod tests {
         .unwrap();
         let proto = assets.prototype_by_pid(0x0400_0002).unwrap().unwrap();
         assert_eq!(proto.message_id, 99);
-        assert_eq!(assets.prototype_by_pid(0x0400_0002).unwrap(), Some(proto.clone()));
+        assert_eq!(
+            assets.prototype_by_pid(0x0400_0002).unwrap(),
+            Some(proto.clone())
+        );
         assert_eq!(proto.fid, 55);
         assert!(assets.prototype_by_pid(0x0400_0001).unwrap().is_none());
         assert!(assets.prototype_by_pid(0x0400_0000).is_err());
