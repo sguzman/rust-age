@@ -21,6 +21,7 @@ pub mod object_preview;
 pub mod object_tables;
 pub mod palette;
 pub mod pathfinding;
+pub mod event_queue;
 pub mod prototype;
 pub mod prototype_list;
 pub mod runtime_scene;
