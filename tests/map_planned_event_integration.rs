@@ -700,6 +700,12 @@ fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
         .preview_planned_condition_frame_reads_bounded(&plan, 0, clock, 5)
         .unwrap();
     assert!(candidate.satisfied);
+    assert_eq!(candidate.flag_restore.saved_pc, 0);
+    assert_eq!(candidate.flag_restore.evaluated_pc, 18);
+    assert_eq!(candidate.flag_restore.restored_pc, 0);
+    assert_eq!(candidate.flag_restore.saved_low_flags, 0);
+    assert_eq!(candidate.flag_restore.evaluated_low_flags, 0x08);
+    assert_eq!(candidate.flag_restore.restored_low_flags, 0);
     assert_eq!(candidate.procedures[1].flags & 0x01, 0x01);
     assert_eq!(candidate.procedures[1].event_time, 7000);
     let due = environment
@@ -709,6 +715,11 @@ fn verified_map_condition_frame_reports_detached_scheduling_side_effects() {
     assert_eq!(due.procedures[0].flags, 0);
     assert_eq!(due.procedures[1].flags & 0x01, 0x01);
     assert_eq!(due.procedures[1].event_time, 7000);
+    assert_eq!(due.condition_flag_restorations.len(), 1);
+    assert_eq!(due.condition_flag_restorations[0].0, 0);
+    assert_eq!(due.condition_flag_restorations[0].1.saved_low_flags, 0);
+    assert_eq!(due.condition_flag_restorations[0].1.evaluated_low_flags, 0x08);
+    assert_eq!(due.condition_flag_restorations[0].1.restored_low_flags, 0);
     assert!(due.data_stack.is_empty());
     assert_eq!(
         environment
