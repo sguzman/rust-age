@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: rust-age-main
+  cancel-in-progress: true
 jobs:
   core:
     name: Rust core and roadmap
