@@ -30,10 +30,14 @@ impl ScriptTimerEvent {
             return Err(invalid("not a CE script timer payload"));
         }
         let sid = i32::from_be_bytes(
-            event.payload[0..4].try_into().map_err(|_| invalid("invalid SID"))?,
+            event.payload[0..4]
+                .try_into()
+                .map_err(|_| invalid("invalid SID"))?,
         );
         let fixed_parameter = i32::from_be_bytes(
-            event.payload[4..8].try_into().map_err(|_| invalid("invalid fixedParam"))?,
+            event.payload[4..8]
+                .try_into()
+                .map_err(|_| invalid("invalid fixedParam"))?,
         );
         Ok(Self {
             time: event.time,
@@ -58,7 +62,11 @@ impl BoundScriptRuntime {
         sid: i32,
         fixed_parameter: i32,
     ) -> io::Result<bool> {
-        if !self.entries.iter().any(|entry| entry.binding.script_id == sid) {
+        if !self
+            .entries
+            .iter()
+            .any(|entry| entry.binding.script_id == sid)
+        {
             return Ok(false);
         }
         let mut payload = Vec::with_capacity(8);
@@ -82,13 +90,20 @@ impl BoundScriptRuntime {
         &self,
         timer: &ScriptTimerEvent,
     ) -> io::Result<Option<PlannedMapAction>> {
-        let Some(entry) = self.entries.iter().find(|x| x.binding.script_id == timer.sid) else {
+        let Some(entry) = self
+            .entries
+            .iter()
+            .find(|x| x.binding.script_id == timer.sid)
+        else {
             return Ok(None);
         };
         let Some(instance) = entry.instance_id else {
             return Ok(None);
         };
-        let Some(procedure) = self.runtime.resolve_action(instance, TIMED_PROCEDURE_ACTION)? else {
+        let Some(procedure) = self
+            .runtime
+            .resolve_action(instance, TIMED_PROCEDURE_ACTION)?
+        else {
             return Ok(None);
         };
         Ok(Some(PlannedMapAction {
@@ -141,37 +156,44 @@ mod tests {
             .unwrap();
         BoundScriptRuntime {
             runtime,
-            entries: vec![
-                InstalledScriptBinding {
-                    binding: ScriptBinding {
-                        category: 1,
-                        ordinal: 0,
-                        script_id: 500,
-                        script_index: 0,
-                        owner_id: 77,
-                        path: Some("scripts/SYNTH.int".to_owned()),
-                        run_info: None,
-                        local_variable_offset: -1,
-                        local_variable_count: 0,
-                    },
-                    instance_id: Some(1),
+            entries: vec![InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 1,
+                    ordinal: 0,
+                    script_id: 500,
+                    script_index: 0,
+                    owner_id: 77,
+                    path: Some("scripts/SYNTH.int".to_owned()),
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
                 },
-            ],
+                instance_id: Some(1),
+            }],
         }
     }
 
     fn owner(ordinal: usize) -> ObjectKey {
-        ObjectKey { elevation: 0, ordinal }
+        ObjectKey {
+            elevation: 0,
+            ordinal,
+        }
     }
 
     #[test]
     fn source_ce_timer_payload_fifo_and_fixed_parameter_to_invocation() {
         let bound = prepared();
         let mut queue = EventQueue::new();
-        assert!(!bound.queue_script_timer(&mut queue, 100, 20, owner(1), 999, 5).unwrap());
+        assert!(!bound
+            .queue_script_timer(&mut queue, 100, 20, owner(1), 999, 5)
+            .unwrap());
         assert_eq!(queue.len(), 0);
-        assert!(bound.queue_script_timer(&mut queue, 100, 20, owner(1), 500, -17).unwrap());
-        assert!(bound.queue_script_timer(&mut queue, 100, 20, owner(2), 500, 9).unwrap());
+        assert!(bound
+            .queue_script_timer(&mut queue, 100, 20, owner(1), 500, -17)
+            .unwrap());
+        assert!(bound
+            .queue_script_timer(&mut queue, 100, 20, owner(2), 500, 9)
+            .unwrap());
         assert!(queue.pop_due(119).is_none());
         let first = queue.pop_due(120).unwrap();
         assert_eq!(first.payload, [0, 0, 1, 244, 255, 255, 255, 239]);
@@ -185,7 +207,12 @@ mod tests {
         assert_eq!(context.action(), 22);
         assert_eq!(context.fixed_parameter(), -17);
         assert!(!context.overrides());
-        assert_eq!(ScriptTimerEvent::decode(&queue.pop_due(120).unwrap()).unwrap().fixed_parameter, 9);
+        assert_eq!(
+            ScriptTimerEvent::decode(&queue.pop_due(120).unwrap())
+                .unwrap()
+                .fixed_parameter,
+            9
+        );
         assert!(queue.is_empty());
     }
 
@@ -199,16 +226,29 @@ mod tests {
             payload: vec![0; 8],
         };
         assert!(ScriptTimerEvent::decode(&invalid).is_err());
-        let invalid = QueueEvent { kind: EventType::Script, payload: vec![0; 7], ..invalid };
+        let invalid = QueueEvent {
+            kind: EventType::Script,
+            payload: vec![0; 7],
+            ..invalid
+        };
         assert!(ScriptTimerEvent::decode(&invalid).is_err());
         let unknown = ScriptTimerEvent {
-            time: 20, owner: Some(owner(1)), sid: 1234, fixed_parameter: 5,
+            time: 20,
+            owner: Some(owner(1)),
+            sid: 1234,
+            fixed_parameter: 5,
         };
         assert!(bound.plan_script_timer(&unknown).unwrap().is_none());
         let mut queue = EventQueue::new();
-        bound.queue_script_timer(&mut queue, 0, 1, owner(1), 500, 5).unwrap();
-        queue.add(0, 1, EventType::Drug, Some(owner(1)), vec![]).unwrap();
-        queue.add(0, 1, EventType::Drug, Some(owner(2)), vec![]).unwrap();
+        bound
+            .queue_script_timer(&mut queue, 0, 1, owner(1), 500, 5)
+            .unwrap();
+        queue
+            .add(0, 1, EventType::Drug, Some(owner(1)), vec![])
+            .unwrap();
+        queue
+            .add(0, 1, EventType::Drug, Some(owner(2)), vec![])
+            .unwrap();
         assert_eq!(remove_object_timer_events(&mut queue, owner(1)), 2);
         assert_eq!(queue.len(), 1);
         assert_eq!(queue.pop_due(1).unwrap().owner, Some(owner(2)));

@@ -7,7 +7,10 @@
 //! host pathway. Ordinary ScriptVm::step and normal MAP loading remain inert.
 
 use crate::game_globals::GameGlobalState;
-use crate::script_clock::{ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE, GAME_TIME_OPCODE};
+use crate::script_clock::{
+    ScriptGameClock, GAME_TICKS_OPCODE, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
+    GAME_TIME_OPCODE,
+};
 use crate::script_locals::MapScriptLocals;
 use crate::script_vm::{ScriptValue, ScriptVm};
 use std::io;
@@ -253,7 +256,6 @@ pub fn run_invocation_subset_bounded(
     })
 }
 
-
 /// Explicitly run a caller-owned CE script invocation against isolated MAP
 /// locals, game globals, and a fixed game-clock snapshot. This cannot start
 /// engine events, advance time, dereference object pointers, or execute
@@ -278,7 +280,9 @@ pub fn run_invocation_with_clock_bounded(
             invocation.mark_overrides();
             Ok(())
         }
-        GAME_TIME_OPCODE | GAME_TIME_IN_SECONDS_OPCODE | GAME_TICKS_OPCODE
+        GAME_TIME_OPCODE
+        | GAME_TIME_IN_SECONDS_OPCODE
+        | GAME_TICKS_OPCODE
         | GAME_TIME_HOUR_OPCODE => clock.apply_opcode(opcode, stack),
         _ => Err(invalid("unrecognized CE script-state or game-clock opcode")),
     })
@@ -294,9 +298,11 @@ mod tests {
         SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
     };
     use crate::game_globals::GameGlobalState;
-    use crate::script_clock::{ScriptGameClock, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE};
     use crate::map::MapVariables;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
+    use crate::script_clock::{
+        ScriptGameClock, GAME_TIME_HOUR_OPCODE, GAME_TIME_IN_SECONDS_OPCODE,
+    };
     use crate::script_list::ScriptRunInfo;
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
