@@ -736,10 +736,7 @@ fn active_map_condition_can_arm_and_read_later_procedure_without_committing() {
         clock: ScriptGameClock { ticks: 0 },
         last_visit_ticks: None,
     };
-    for (expected, ready, retained_flags) in [
-        (1, vec![1_usize], 0_i32),
-        (2, vec![], 0x02_i32),
-    ] {
+    for (expected, ready, retained_flags) in [(1, vec![1_usize], 0_i32), (2, vec![], 0x02_i32)] {
         *environment.scripts.runtime.vm_mut(1).unwrap() =
             synthetic_vm_with_followup_condition(expected);
         let plan = environment
