@@ -205,6 +205,25 @@ impl ScriptVm {
         &self.runtime_procedures
     }
 
+    /// Poll CE doEvents' *timed* branch only, without dispatching callbacks.
+    /// A conditional flag takes precedence over a timed flag. CE compares
+    /// the signed event field as unsigned milliseconds with strict < time,
+    /// and clears all flags before executing a due procedure; neither the
+    /// stored event time nor the original INT bytes are cleared.
+    pub fn take_due_timed_procedures(&mut self, now_millis: u32) -> Vec<usize> {
+        let mut ready = Vec::new();
+        for (index, entry) in self.runtime_procedures.iter_mut().enumerate() {
+            if entry.flags & 0x02 != 0 {
+                continue; // Conditional scripts need a VM condition evaluation.
+            }
+            if entry.flags & 0x01 != 0 && (entry.event_time as u32) < now_millis {
+                entry.flags = 0;
+                ready.push(index);
+            }
+        }
+        ready
+    }
+
     fn procedure_at(&self, index: i32) -> io::Result<crate::script_program::ProcedureEntry> {
         let index = usize::try_from(index).map_err(|_| invalid("negative CE procedure index"))?;
         self.runtime_procedures
@@ -999,6 +1018,53 @@ mod tests {
         vm.run_bounded(4).unwrap();
         assert_eq!(vm.runtime_procedures()[0].flags, 0);
         assert_eq!(vm.program.procedures()[0].flags, 0x04);
+    }
+
+    #[test]
+    fn ce_timed_event_poll_requires_strictly_later_unsigned_time() {
+        let mut code = Vec::new();
+        push_int(&mut code, 2);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8006);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0x08, 0));
+        vm.set_clock_millis(750);
+        vm.run_bounded(8).unwrap();
+        assert!(vm.take_due_timed_procedures(2750).is_empty());
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x09);
+        assert_eq!(vm.take_due_timed_procedures(2751), [0]);
+        assert_eq!(vm.runtime_procedures()[0].flags, 0);
+        assert_eq!(vm.runtime_procedures()[0].event_time, 2750);
+        assert!(vm.take_due_timed_procedures(5000).is_empty());
+        assert_eq!(vm.program.procedures()[0].flags, 0x08);
+    }
+
+    #[test]
+    fn ce_timed_event_poll_defers_conditional_flags_and_uses_unsigned_compare() {
+        let mut code = Vec::new();
+        push_int(&mut code, -1);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8006);
+        push_int(&mut code, 12);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8007);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0, 0));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.runtime_procedures()[0].flags, 0x03);
+        assert!(vm.take_due_timed_procedures(u32::MAX).is_empty());
+        assert_eq!(vm.runtime_procedures()[0].condition_offset, 12);
+
+        let mut code = Vec::new();
+        push_int(&mut code, -1);
+        push_int(&mut code, 0);
+        opcode(&mut code, 0x8006);
+        opcode(&mut code, 0x8011);
+        let mut vm = ScriptVm::new(fixture_with_procedure(&code, 18, 0, 0));
+        vm.run_bounded(8).unwrap();
+        assert_eq!(vm.runtime_procedures()[0].event_time, -1000);
+        assert!(vm.take_due_timed_procedures(10_000).is_empty());
+        assert_eq!(vm.take_due_timed_procedures(u32::MAX), [0]);
     }
 
     #[test]
