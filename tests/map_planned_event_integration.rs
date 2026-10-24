@@ -868,12 +868,7 @@ fn critical_map_enter_native_game_time_advance_mutates_clock_and_quest_immediate
     let mut queue = EventQueue::new();
     let count = env
         .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
-            &action,
-            &mut clock,
-            &mut queue,
-            100,
-            7,
-            2,
+            &action, &mut clock, &mut queue, 100, 7, 2,
         )
         .unwrap();
     assert_eq!(count, 7);
@@ -898,17 +893,14 @@ fn critical_game_time_advance_due_queue_and_final_zero_poll_fail_atomically() {
         let mut clock = ScriptGameClock { ticks: 100 };
         let mut queue = EventQueue::new();
         if let Some(deadline) = due {
-            queue.add(0, deadline, EventType::Script, None, vec![]).unwrap();
+            queue
+                .add(0, deadline, EventType::Script, None, vec![])
+                .unwrap();
         }
         let original_queue = queue.clone();
         assert!(env
             .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
-                &action,
-                &mut clock,
-                &mut queue,
-                100,
-                7,
-                budget,
+                &action, &mut clock, &mut queue, 100, 7, budget,
             )
             .is_err());
         assert_eq!(clock.ticks, 100);
