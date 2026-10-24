@@ -2623,8 +2623,12 @@ mod tests {
     fn ce_local_pop_flags_rejects_unrepresentable_host_state_without_partial_unwind() {
         for opcode_value in [0x801F_u16, 0x8020, 0x8021, 0x8025] {
             for (flags, window, wait, address) in [
-                (0x01, 0, 0, 36),
-                (0x08, 0, 0, 36),
+                (0x02, 0, 0, 36), // unmodeled engine/program flag
+                (0x04, 0, 0, 36), // host error flag
+                (0x09, 0, 0, 36), // simultaneous EXITED and STOPPED unsupported
+                (0x10, 0, 0, 36), // waiting callback cannot be null
+                (0x20, 0, 0, 36), // parent/child call state
+                (0x40, 0, 0, 36), // transient interrupt return flag
                 (0, 1, 0, 36),
                 (0, 0, 8, 36),
                 (0, 0, 0, -1),
