@@ -355,7 +355,11 @@ impl RuntimeScene {
         if matched.next().is_some() {
             return Err(invalid("CE object target has ambiguous installed scripts"));
         }
-        let Some(procedure) = candidate.scripts.runtime.resolve_action(instance_id, action)? else {
+        let Some(procedure) = candidate
+            .scripts
+            .runtime
+            .resolve_action(instance_id, action)?
+        else {
             return Ok(None);
         };
         let planned = PlannedMapAction {
@@ -1193,11 +1197,11 @@ mod tests {
         body.extend_from_slice(&0_i32.to_be_bytes());
         for opcode in [
             0x80BD_u16, // SOURCE_OBJ
-            0x80D4, // TILE_NUM
-            0x80BE, // TARGET_OBJ
-            0x8100, // OBJ_PID
-            0x8039, // ADD
-            0x80C6, // SET_GLOBAL_VAR
+            0x80D4,     // TILE_NUM
+            0x80BE,     // TARGET_OBJ
+            0x8100,     // OBJ_PID
+            0x8039,     // ADD
+            0x80C6,     // SET_GLOBAL_VAR
             if invalid_after_write { 0x80FF } else { 0x8021 },
         ] {
             body.extend_from_slice(&opcode.to_be_bytes());
@@ -1225,7 +1229,10 @@ mod tests {
     ) -> (RuntimeScene, PreparedScriptEnvironment) {
         let mut world = scene();
         let sid = 0x0300_0001;
-        world.snapshot.objects.elevations[0][1].record.header.script_id = sid;
+        world.snapshot.objects.elevations[0][1]
+            .record
+            .header
+            .script_id = sid;
         world.snapshot.scripts.categories[3].push(ScriptRecord {
             script_id: sid,
             next: -1,
@@ -1239,7 +1246,9 @@ mod tests {
             remaining: [0; 8],
         });
         let mut runtime = ScriptRuntime::new();
-        runtime.register(7, object_use_vm(critical, invalid_after_write)).unwrap();
+        runtime
+            .register(7, object_use_vm(critical, invalid_after_write))
+            .unwrap();
         let scripts = BoundScriptRuntime {
             runtime,
             entries: vec![InstalledScriptBinding {
@@ -1257,11 +1266,16 @@ mod tests {
                 instance_id: Some(7),
             }],
         };
-        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let map_locals = scripts
+            .script_local_state(&world.snapshot.variables)
+            .unwrap();
         let object_queries = world.object_query_snapshot().unwrap();
-        let script_owners =
-            MapScriptOwners::from_map(&world.snapshot.scripts, &world.snapshot.objects, &object_queries)
-                .unwrap();
+        let script_owners = MapScriptOwners::from_map(
+            &world.snapshot.scripts,
+            &world.snapshot.objects,
+            &object_queries,
+        )
+        .unwrap();
         let env = PreparedScriptEnvironment {
             scripts,
             map_locals,
@@ -1278,8 +1292,14 @@ mod tests {
     #[test]
     fn object_use_dispatch_runs_critical_native_source_and_target_quest_mutation() {
         let (world, mut env) = object_use_fixture(true, false);
-        let source = ObjectKey { elevation: 0, ordinal: 0 };
-        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 100 },
             last_visit_ticks: Some(0),
@@ -1305,16 +1325,30 @@ mod tests {
     #[test]
     fn object_use_noncritical_is_deferred_and_rejects_unbound_participants() {
         let (world, mut env) = object_use_fixture(false, false);
-        let source = ObjectKey { elevation: 0, ordinal: 0 };
-        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 100 },
             last_visit_ticks: Some(0),
         };
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, ObjectKey { elevation: 0, ordinal: 99 },
-                6, clock, 25, 100,
+                &mut env,
+                source,
+                ObjectKey {
+                    elevation: 0,
+                    ordinal: 99
+                },
+                6,
+                clock,
+                25,
+                100,
             )
             .is_err());
         assert!(env.spatial_sources.is_empty());
@@ -1351,8 +1385,14 @@ mod tests {
     #[test]
     fn object_use_critical_native_failure_does_not_commit_event_or_quest() {
         let (world, mut env) = object_use_fixture(true, true);
-        let source = ObjectKey { elevation: 0, ordinal: 0 };
-        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 100 },
             last_visit_ticks: Some(0),
