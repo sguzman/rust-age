@@ -52,7 +52,11 @@ fn procedure_with_flags(main: &[u8], timed_critical: bool) -> ScriptVm {
         (b"timed_event_p_proc".as_slice(), 24_i32),
     ] {
         let offset = 4 + names.len() as i32;
-        let flags = if timed_critical && body == 24 { 0x10 } else { 0 };
+        let flags = if timed_critical && body == 24 {
+            0x10
+        } else {
+            0
+        };
         for field in [offset, flags, 0, 0, body, 0] {
             bytes.extend_from_slice(&field.to_be_bytes());
         }
@@ -327,7 +331,13 @@ fn ce_game_time_advance_polls_script_timers_after_each_day_and_final_zero() {
         .add(0, DAY, EventType::Script, Some(OWNER), timed_payload(11))
         .unwrap();
     queue
-        .add(0, DAY * 2, EventType::Script, Some(OWNER), timed_payload(22))
+        .add(
+            0,
+            DAY * 2,
+            EventType::Script,
+            Some(OWNER),
+            timed_payload(22),
+        )
         .unwrap();
     let completed = env
         .advance_game_time_with_script_timers_transactional_bounded(
@@ -399,7 +409,9 @@ fn later_due_foreign_queue_event_reverts_earlier_day_quest_and_time_progress() {
         .is_err());
     assert_eq!(clock.ticks, 0);
     assert_eq!(queue.len(), 2);
-    let mut over = ScriptGameClock { ticks: i32::MAX - 1 };
+    let mut over = ScriptGameClock {
+        ticks: i32::MAX - 1,
+    };
     assert!(env
         .advance_game_time_with_script_timers_transactional_bounded(
             &mut queue,

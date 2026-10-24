@@ -17,9 +17,8 @@ use crate::script_binding::{
     bind_script_procedures, bind_scripts, install_map_scripts, BoundScriptRuntime, ScriptBinding,
     ScriptProcedureBinding,
 };
-use crate::script_data::ScriptTables;
 use crate::script_clock::ScriptGameClock;
-use crate::script_time_advance::TimeAdvancePlan;
+use crate::script_data::ScriptTables;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
@@ -37,6 +36,7 @@ use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
+use crate::script_time_advance::TimeAdvancePlan;
 use crate::script_timer::{ScriptTimerEvent, TimerObjectBinding};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
