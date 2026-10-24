@@ -31,9 +31,11 @@ int main(int argc, char** argv) {
         }
         const bool due = (flags & 0x01) != 0 &&
                          static_cast<std::uint32_t>(time) < now;
-        // Imported local procedure host unavailable; an already STOPPED
-        // interpreter cannot prepare a valid modeled local CE return.
-        if (due && ((flags & 0x04) != 0 || burst == 3)) {
+        // Imported local procedure host unavailable. Pinned CE
+        // setupCall saves and clears the STOPPED low flag, so a script
+        // whose main program STOPPED may still receive an interrupt;
+        // op_pop_flags restores STOPPED after its later local return.
+        if (due && (flags & 0x04) != 0) {
             std::cout << id << " ERR\n";
             continue;
         }
