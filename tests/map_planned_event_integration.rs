@@ -355,7 +355,9 @@ fn critical_map_enter_executes_immediately_and_commits_native_quest_mutation() {
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [15]);
     assert_eq!(env.invocations.get(&1).unwrap().action(), 15);
     assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 1);
-    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    // CE setupCall stores returnAddress=20 for interrupt-context calls.
+    // POP_FLAGS_EXIT leaves that source marker, not the original PC zero.
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
     assert!(!env.scripts.runtime.vm(1).unwrap().critical_section());
     assert!(env.map_locals.globals().is_empty());
 }
