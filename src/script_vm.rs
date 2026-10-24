@@ -899,7 +899,9 @@ impl ScriptVm {
                 candidate.runtime_procedures = condition.procedures;
                 if condition.satisfied {
                     if entry.flags & 0x04 != 0 {
-                        return Err(invalid("CE imported conditional procedure host unavailable"));
+                        return Err(invalid(
+                            "CE imported conditional procedure host unavailable",
+                        ));
                     }
                     candidate.runtime_procedures[index].flags = 0;
                     candidate.stage_local_core_call_frame(index, false)?;

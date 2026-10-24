@@ -9,7 +9,12 @@ fn build(flags: i32, result: i32, bad: bool) -> Result<ScriptVm, Box<dyn Error>>
     let mut bytes = vec![0_u8; 42];
     bytes[..4].copy_from_slice(&[0x80, 0x00, 0x80, 0x00]);
     bytes[20..22].copy_from_slice(
-        &(if bad { 0x80FC_u16 } else { 0xC001_u16 }).to_be_bytes(),
+        &(if bad {
+            0x80FC_u16
+        } else {
+            0xC001_u16
+        })
+        .to_be_bytes(),
     );
     bytes[22..26].copy_from_slice(&result.to_be_bytes());
     bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
