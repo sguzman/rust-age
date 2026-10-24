@@ -111,14 +111,7 @@ fn critical_due_callback_requeues_source_owned_timer_on_same_queue() {
         .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
         .unwrap();
     let applied = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue,
-            clock(105),
-            105,
-            1005,
-            1,
-            6,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 6)
         .unwrap();
     assert_eq!(applied.len(), 1);
     assert_eq!(applied[0].0.fixed_parameter, 11);
@@ -136,10 +129,7 @@ fn critical_due_callback_requeues_source_owned_timer_on_same_queue() {
 
 #[test]
 fn critical_due_requeue_same_tick_or_late_opcode_failure_rolls_back() {
-    for (delay, terminator, max_events) in [
-        (0_i32, 0x8021_u16, 1_usize),
-        (5, 0x80FF, 2),
-    ] {
+    for (delay, terminator, max_events) in [(0_i32, 0x8021_u16, 1_usize), (5, 0x80FF, 2)] {
         let mut env = environment(critical_timed_timer_opcode(delay, 99, terminator));
         let mut queue = EventQueue::new();
         queue

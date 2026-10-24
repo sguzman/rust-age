@@ -529,7 +529,10 @@ impl PreparedScriptEnvironment {
             .iter()
             .filter_map(|entry| {
                 let id = entry.instance_id?;
-                match next.script_owners.resolution_for_instance(&next.scripts, id) {
+                match next
+                    .script_owners
+                    .resolution_for_instance(&next.scripts, id)
+                {
                     Some(ScriptOwnerResolution::Bound { key, handle, .. }) => {
                         Some(TimerObjectBinding {
                             handle,
@@ -738,13 +741,14 @@ impl PreparedScriptEnvironment {
             let steps = if let Some(plan) = candidate.scripts.plan_script_timer(&timer)? {
                 if candidate.local_frame_for_planned(&plan)?.critical {
                     Some(
-                        candidate.execute_critical_map_action_with_timer_queue_transactional_bounded(
-                            &plan,
-                            clock,
-                            now_millis,
-                            max_critical_steps,
-                            Some(&mut pending),
-                        )?,
+                        candidate
+                            .execute_critical_map_action_with_timer_queue_transactional_bounded(
+                                &plan,
+                                clock,
+                                now_millis,
+                                max_critical_steps,
+                                Some(&mut pending),
+                            )?,
                     )
                 } else {
                     candidate.prepare_noncritical_map_action_transactional(&plan)?;
