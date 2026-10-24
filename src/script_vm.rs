@@ -1717,6 +1717,31 @@ mod tests {
         assert_eq!(vm.modeled_program_flags(), 0x80000000);
     }
 
+    #[test]
+    fn ce_pop_flags_erases_opcode_high_word_and_transaction_keeps_it_erased() {
+        let mut standalone = local_return_fixture(0, 0x8021, 0, 0, 0, 36);
+        assert_eq!(standalone.run_bounded(6).unwrap(), 6);
+        assert_eq!(standalone.last_opcode(), None);
+        assert_eq!(standalone.modeled_program_flags(), 0);
+        assert_eq!(
+            standalone.halt_reason(),
+            Some(super::ScriptHaltReason::ReturnFromCall)
+        );
+
+        let mut installed = local_action_vm(&[0x80, 0x1A, 0x80, 0x21], 0, 0);
+        installed.last_opcode = Some(0x8000);
+        assert_eq!(installed.modeled_program_flags(), 0x80000000);
+        assert_eq!(
+            installed
+                .execute_local_action_core_transactional_bounded(0, 2)
+                .unwrap(),
+            None
+        );
+        assert_eq!(installed.last_opcode(), None);
+        assert_eq!(installed.modeled_program_flags(), 0);
+        assert!(!installed.halted());
+    }
+
     fn local_action_vm(instructions: &[u8], flags: i32, argument_count: i32) -> ScriptVm {
         assert!(instructions.len() <= 22);
         let mut bytes = vec![0_u8; 42];
