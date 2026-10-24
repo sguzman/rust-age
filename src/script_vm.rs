@@ -775,6 +775,56 @@ impl ScriptVm {
         ))
     }
 
+    /// Explicit, CORE-ONLY, transactional local executeProc transition.
+    /// Unlike detached preview, a successful supported call replaces this
+    /// VM's owned stacks, schedule and PC with the candidate post-call state.
+    /// No native host, MAP/quest writes, imported calls or gameplay callbacks
+    /// can run. Any interpreter error or budget exhaustion leaves the entire
+    /// installed VM intact. This atomic failure rule is a Rust adapter safety
+    /// property, NOT original CE's longjmp/error-side-effect behavior.
+    ///
+    /// CE setupCall's original PC remains on the return stack, and the
+    /// local POP_FLAGS_EXIT return marker sets PC to 20 before interpret
+    /// clears transient 0x40. A subsequent real CE engine integration must
+    /// handle caller continuation and full program flags explicitly.
+    pub fn execute_local_action_core_transactional_bounded(
+        &mut self,
+        procedure_index: usize,
+        max_steps: usize,
+    ) -> io::Result<Option<ScriptValue>> {
+        let frame = self.preview_local_action_frame_with_host_bounded(
+            procedure_index,
+            max_steps,
+            &mut |_, _| Err(invalid("CE local core transaction has no native host")),
+        )?;
+        let original_pc =
+            i32::try_from(self.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
+        if frame.program_counter != 20
+            || frame.return_stack.last() != Some(&ScriptValue::Int(original_pc))
+            || frame.saved_low_flags != frame.restored_low_flags
+            || frame.restored_low_flags & !0x80 != 0
+            || frame.procedures.len() != self.runtime_procedures.len()
+        {
+            return Err(invalid("CE local core transaction has invalid return frame"));
+        }
+
+        // All preflight and execution occurs before modifying the installed
+        // VM. Replacing only this VM after successful completion prevents
+        // partial stack/schedule commits on malformed synthetic scripts.
+        let mut next = self.clone();
+        next.pc = frame.program_counter;
+        next.stack = frame.data_stack;
+        next.return_stack = frame.return_stack;
+        next.frame_pointer = frame.frame_pointer;
+        next.base_pointer = frame.base_pointer;
+        next.runtime_procedures = frame.procedures;
+        next.critical_section = frame.restored_low_flags & 0x80 != 0;
+        next.halted = false; // interpret cleared its transient 0x40 return.
+        next.halt_reason = None;
+        *self = next;
+        Ok(frame.returned)
+    }
+
     pub fn preview_local_interrupt_bounded(
         &self,
         procedure_index: usize,
@@ -1848,6 +1898,91 @@ mod tests {
             vm.preview_local_action_core_bounded(0, 6).unwrap(),
             Some(ScriptValue::Int(37))
         );
+    }
+
+    #[test]
+    fn core_only_transactional_local_call_commits_ce_schedule_and_return_frame() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x801A); // setupCall argument marker
+        push_int(&mut first, 91); // return value retained beneath CALL_AT
+        push_int(&mut first, 3); // timer delay in seconds
+        push_int(&mut first, 1); // later procedure index
+        opcode(&mut first, 0x8006); // CE CALL_AT at return address 20
+        opcode(&mut first, 0x8025); // POP_FLAGS_RETURN_VAL_EXIT
+        let mut vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        vm.set_clock_millis(4000);
+        let preview = vm
+            .preview_local_action_frame_with_host_bounded(0, 6, &mut |_, _| {
+                Err(super::invalid("CE transaction has no native host"))
+            })
+            .unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(
+            vm.execute_local_action_core_transactional_bounded(0, 6)
+                .unwrap(),
+            Some(ScriptValue::Int(91))
+        );
+        assert_eq!(vm.pc(), preview.program_counter);
+        assert_eq!(vm.pc(), 20);
+        assert_eq!(vm.stack(), preview.data_stack);
+        assert_eq!(vm.return_stack(), preview.return_stack);
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(0)]);
+        assert_eq!(vm.runtime_procedures(), preview.procedures);
+        assert_eq!(vm.runtime_procedures()[1].event_time, 7000);
+        assert_eq!(vm.runtime_procedures()[1].flags & 0x01, 0x01);
+        assert_eq!(vm.modeled_program_low_flags(), 0);
+        assert!(!vm.halted());
+        assert_eq!(vm.halt_reason(), None);
+    }
+
+    #[test]
+    fn core_only_transactional_local_call_failure_preserves_entire_installed_vm() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x801A); // setupCall argument marker
+        push_int(&mut first, 2);
+        push_int(&mut first, 1);
+        opcode(&mut first, 0x8006); // candidate CALL_AT update
+        opcode(&mut first, 0x80FC); // unsupported gameplay native opcode
+        opcode(&mut first, 0x8021); // unreachable POP_FLAGS_EXIT
+        let mut vm = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        vm.set_clock_millis(2000);
+        let old_pc = vm.pc();
+        let old_stack = vm.stack().to_vec();
+        let old_return = vm.return_stack().to_vec();
+        let old_procedures = vm.runtime_procedures().to_vec();
+        let old_flags = vm.modeled_program_low_flags();
+        assert!(vm
+            .execute_local_action_core_transactional_bounded(0, 8)
+            .is_err());
+        assert!(vm
+            .execute_local_action_core_transactional_bounded(0, 3)
+            .is_err());
+        assert_eq!(vm.pc(), old_pc);
+        assert_eq!(vm.stack(), old_stack);
+        assert_eq!(vm.return_stack(), old_return);
+        assert_eq!(vm.runtime_procedures(), old_procedures);
+        assert_eq!(vm.modeled_program_low_flags(), old_flags);
+    }
+
+    #[test]
+    fn core_only_transactional_local_call_rejects_imported_procedures_and_host_changes() {
+        let mut first = Vec::new();
+        opcode(&mut first, 0x801A);
+        opcode(&mut first, 0x8021);
+        let mut imported = synthetic_due_vm(&first, &[0x80, 0x11], 0);
+        imported.runtime_procedures[0].flags |= 0x04;
+        assert!(imported
+            .execute_local_action_core_transactional_bounded(0, 3)
+            .is_err());
+        assert_eq!(imported.runtime_procedures()[0].flags & 0x04, 0x04);
+        assert_eq!(imported.pc(), 0);
+        let mut no_return = synthetic_due_vm(&[0x80, 0x11], &[0x80, 0x11], 0);
+        assert!(no_return
+            .execute_local_action_core_transactional_bounded(0, 3)
+            .is_err());
+        assert_eq!(no_return.pc(), 0);
+        assert!(no_return.stack().is_empty());
     }
 
     #[test]
