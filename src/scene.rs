@@ -361,6 +361,121 @@ impl PreparedScriptEnvironment {
         Ok(executed)
     }
 
+    /// Execute source CE game_time_advance (0x80FC) from an actually
+    /// interpreting installed MAP script, with explicit Rust-owned game
+    /// clock and original-order native opcode reads/writes. Every
+    /// whole-day/remainder queue_process boundary is checked, even the
+    /// final zero remainder; any due event rejects the entire transaction.
+    /// This narrower subset intentionally does NOT reenter the current
+    /// script to execute a due callback; the existing external
+    /// advance_game_time_with_script_timers_transactional_bounded handles
+    /// explicitly requested event processing separately.
+    ///
+    /// Original MAP ownership, source/target event context, native object
+    /// handle validation and caller-owned GAME_GLOBAL_VARS are retained.
+    /// Clock, VMs, quest state and event queue all commit or roll back as
+    /// one transaction. The source MAP header's lastVisitTime is used for
+    /// native DAYS_SINCE_VISITED; it is not guessed from a wall clock.
+    pub fn advance_script_state_with_game_time_no_due_bounded(
+        &mut self,
+        queue: &mut EventQueue,
+        clock: &mut ScriptGameClock,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        max_queue_polls: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let mut queued = queue.clone();
+        let mut pending_clock = *clock;
+        let mut events = BTreeMap::new();
+        let mut timer_bindings = Vec::new();
+        for entry in &next.scripts.entries {
+            let Some(id) = entry.instance_id else {
+                continue;
+            };
+            let owner = next
+                .script_owners
+                .resolution_for_instance(&next.scripts, id);
+            if let Some(ScriptOwnerResolution::Bound { key, handle, .. }) = owner {
+                timer_bindings.push(TimerObjectBinding {
+                    handle,
+                    owner: key,
+                    sid: entry.binding.script_id,
+                });
+            }
+            let source = next
+                .spatial_sources
+                .get(&id)
+                .map(|key| {
+                    next.object_queries.handle_for(*key).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "CE native game-time script source handle unavailable",
+                        )
+                    })
+                })
+                .transpose()?;
+            let event = ReadOnlyConditionEvent {
+                event: ScriptNativeEventSnapshot {
+                    owner: ScriptNativeOwnerSnapshot {
+                        native: ScriptNativeSnapshot {
+                            clock: ScriptClockContext {
+                                clock: pending_clock,
+                                last_visit_ticks: Some(next.map_last_visit_ticks),
+                            },
+                            objects: Some(next.object_queries.snapshots()),
+                        },
+                        resolution: owner,
+                    },
+                    source,
+                    target: source.map(|_| 0),
+                },
+                invocation: next
+                    .invocations
+                    .get(&id)
+                    .copied()
+                    .unwrap_or_else(ScriptInvocationState::installed),
+            };
+            if events.insert(id, event).is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE native game-time script instance occurs twice",
+                ));
+            }
+        }
+        let bound = next.scripts.clone();
+        let game = next.game_globals.as_mut().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE native game-time script requires loaded GAME_GLOBAL_VARS",
+            )
+        })?;
+        let result = next
+            .scripts
+            .runtime
+            .advance_tick_with_native_game_time_no_due_transactional_bounded(
+                &mut pending_clock,
+                now_millis,
+                cpu_burst,
+                max_steps_per_condition,
+                TimerNativeTickContext {
+                    map: &mut next.map_locals,
+                    game,
+                    queue: &mut queued,
+                    now_game_ticks: clock.ticks,
+                    bound: &bound,
+                    timer_bindings: &timer_bindings,
+                    events: &events,
+                },
+                max_queue_polls,
+            )?;
+        *self = next;
+        *queue = queued;
+        *clock = pending_clock;
+        Ok(result)
+    }
+
     /// Persist a source-verified, planned NONCRITICAL MAP lifecycle
     /// executeProc frame and its action/fixedParam invocation context.
     /// Source script selection and owner identity must match the original
