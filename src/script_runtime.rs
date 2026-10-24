@@ -7,7 +7,8 @@
 use crate::game_globals::GameGlobalState;
 use crate::script_locals::MapScriptLocals;
 use crate::script_native_vars::{
-    apply_readonly_event_native_with_vars, ScriptInvocationState, ScriptNativeEventSnapshot,
+    apply_mutable_condition_native_with_vars, apply_readonly_event_native_with_vars,
+    ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use crate::script_vm::{
@@ -615,6 +616,70 @@ impl ScriptRuntime {
             }
         }
         *self = next;
+        Ok(prepared)
+    }
+
+    /// Persist CE doEvents conditional expressions against owned MAP and
+    /// GAME_GLOBAL_VARS state with source-order native reads AND writes.
+    /// The entire runtime, MAP local/global banks (including lazy local
+    /// allocation), and game-global values are cloned before evaluation.
+    /// Later conditions and programs observe earlier successful writes.
+    ///
+    /// On any unsupported opcode, malformed interpreter frame, or exhausted
+    /// instruction budget, ALL VM and variable-state mutations roll back.
+    /// Original CE may preserve partial changes on longjmp; this Rust safety
+    /// boundary intentionally differs. All event object/clock information
+    /// must be supplied explicitly, and remains immutable; no gameplay
+    /// natives or engine callbacks execute. The caller's data represents
+    /// Rust-owned MAP/quest state, not an automatic savegame mutation.
+    pub fn prepare_due_with_mutable_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        map: &mut MapScriptLocals,
+        game: &mut GameGlobalState,
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut next = self.clone();
+        let mut next_map = map.clone();
+        let mut next_game = game.clone();
+        let mut prepared = Vec::new();
+        for program in &mut next.programs {
+            let id = program.id;
+            let event = events.get(&id).copied();
+            let ready = program
+                .vm
+                .prepare_due_with_condition_host_transactional_bounded(
+                    now_millis,
+                    max_steps_per_condition,
+                    &mut |opcode, stack| {
+                        let snapshot = event.ok_or_else(|| {
+                            invalid("CE mutable condition event context not provided")
+                        })?;
+                        apply_mutable_condition_native_with_vars(
+                            snapshot.event,
+                            &snapshot.invocation,
+                            &mut next_map,
+                            &mut next_game,
+                            id,
+                            opcode,
+                            stack,
+                        )
+                    },
+                )?;
+            for procedure_index in ready {
+                prepared.push(DueProcedure {
+                    program_id: id,
+                    procedure_index,
+                });
+            }
+        }
+        *self = next;
+        *map = next_map;
+        *game = next_game;
         Ok(prepared)
     }
 

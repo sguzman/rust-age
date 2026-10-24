@@ -547,6 +547,35 @@ pub fn apply_readonly_event_native_with_vars(
     }
 }
 
+/// Transactional, mutable native condition-state adapter for CE doEvents.
+///
+/// Unlike the immutable event-preview host, this applies the original
+/// 0x80C1..0x80C6 local/MAP/game-global reads and writes to caller-owned
+/// state. The runtime MUST supply cloned state so all effects, including
+/// lazy script-local allocation, can be discarded when any later script
+/// fails. Other source-derived object, clock, and invocation reads remain
+/// allowed through the immutable event snapshot. Script overrides, native
+/// gameplay callbacks, imported procedures and unimplemented effects
+/// remain hard errors. Never invoke this with untracked external state.
+pub fn apply_mutable_condition_native_with_vars(
+    snapshot: ScriptNativeEventSnapshot<'_>,
+    invocation: &ScriptInvocationState,
+    map: &mut MapScriptLocals,
+    game: &mut GameGlobalState,
+    instance_id: u64,
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+) -> io::Result<()> {
+    match opcode {
+        LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
+            apply_map_variable_opcode(map, instance_id, opcode, stack)
+        }
+        crate::game_globals::GLOBAL_VAR_OPCODE
+        | crate::game_globals::SET_GLOBAL_VAR_OPCODE => game.apply_opcode(opcode, stack),
+        _ => apply_readonly_event_native_opcode(snapshot, invocation, opcode, stack),
+    }
+}
+
 /// Execute the owner/clock/quest subset plus CE source_obj and target_obj
 /// through an explicit snapshot of one script event. The ordinary and
 /// owner-only hosts still refuse these opcodes.
