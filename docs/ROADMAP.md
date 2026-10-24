@@ -55,7 +55,7 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `████░░░░░░ 43%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `████░░░░░░ 44%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
 ### 🔣 P6 — Script interpreter and native opcodes — `███████░░░ 66%`
@@ -68,8 +68,8 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 ### 📜 P7 — Quests, dialogue and triggers — `██░░░░░░░░ 21%`
 
 - 🗣️ T701 — Port dialogue branches and NPC reactions — `░░░░░░░░░░ 0%`
-- 🚩 T702 — Port map scripts, spatial triggers and timers — `█████░░░░░ 51%`
-- 🧮 T703 — Port global/local state and quest flags — `███░░░░░░░ 31%`
+- 🚩 T702 — Port map scripts, spatial triggers and timers — `█████░░░░░ 53%`
+- 🧮 T703 — Port global/local state and quest flags — `███░░░░░░░ 32%`
 - 🤝 T704 — Port companion scripts and party interactions — `░░░░░░░░░░ 0%`
 
 ## ⚔️ M4 — Gameplay and combat parity — `░░░░░░░░░░ 1%`
