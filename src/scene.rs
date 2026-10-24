@@ -1157,6 +1157,32 @@ impl PreparedScriptEnvironment {
                     "CE planned spatial record identity or owner changed",
                 ));
             }
+        } else if self.owner_for_instance(planned.instance_id)
+            == Some(ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine)
+        {
+            // Pinned map_load_file manufactures a category-0 system
+            // script plus a HIDDEN runtime Object. Its native self_obj
+            // and target_obj remain unavailable, but a verified local
+            // procedure can still execute safe game-global and timer
+            // natives without dereferencing that missing engine owner.
+            // Never treat the hidden Object as a NULL owner.
+            let matching = self
+                .scripts
+                .entries
+                .iter()
+                .filter(|entry| entry.instance_id == Some(planned.instance_id))
+                .collect::<Vec<_>>();
+            if matching.len() != 1
+                || matching[0].binding.category != 0
+                || matching[0].binding.script_id != planned.script_id
+                || matching[0].binding.ordinal != planned.ordinal
+                || matching[0].binding.script_index < 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE generated MAP system-script identity changed",
+                ));
+            }
         } else {
             let _ = self.detached_event_for_planned(planned)?;
         }
@@ -2049,6 +2075,87 @@ impl StaticScene {
         staged.map_locals.add_generated_system_instance(instance_id)?;
         *environment = staged;
         Ok(Some((instance_id, rust_sid)))
+    }
+
+    /// Dispatch only the engine-generated header map script's initial
+    /// MAP_ENTER call, using the source's map_data.flags fixedParam rule.
+    /// Original CE map_load_file calls this BEFORE ordinary non-map
+    /// scr_exec_map_enter_scripts. An absent MAP_ENTER procedure is a
+    /// no-op; a critical procedure executes synchronously, while a
+    /// noncritical one stages a frame for a subsequent interpreter tick.
+    ///
+    /// The generated SID is a Rust-local stand-in returned by
+    /// install_header_system_script, never a claimed original session
+    /// SID. Native owner/target queries remain unavailable until CE
+    /// creates its hidden Object. The supplied environment is cloned and
+    /// commits only after the supported action succeeds.
+    pub fn enter_header_system_script_transactional_bounded(
+        &self,
+        environment: &mut PreparedScriptEnvironment,
+        header_instance: u64,
+        rust_sid: i32,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<Option<(PlannedMapAction, Option<usize>)>> {
+        if self.header.script_index <= 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE MAP header does not declare a system script",
+            ));
+        }
+        let mut matches = environment.scripts.entries.iter().filter(|entry| {
+            entry.instance_id == Some(header_instance)
+                && entry.binding.category == 0
+                && entry.binding.script_id == rust_sid
+                && entry.binding.script_index == self.header.script_index - 1
+                && environment.owner_for_instance(header_instance)
+                    == Some(ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine)
+        });
+        let binding = matches.next().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE generated map script not installed")
+        })?;
+        if matches.next().is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE generated map script binding duplicated",
+            ));
+        }
+        let (category, ordinal, script_id) = (
+            binding.binding.category,
+            binding.binding.ordinal,
+            binding.binding.script_id,
+        );
+        let Some(procedure) = environment
+            .scripts
+            .runtime
+            .resolve_action(header_instance, 15)?
+        else {
+            return Ok(None);
+        };
+        let plan = PlannedMapAction {
+            instance_id: header_instance,
+            script_id,
+            category,
+            ordinal,
+            action: 15,
+            procedure_index: procedure.procedure_index,
+            external_parameter: Some(i32::from(self.header.flags & 1 == 0)),
+        };
+        let mut staged = environment.clone();
+        let now = if staged.local_frame_for_planned(&plan)?.critical {
+            Some(staged.execute_critical_map_action_transactional_bounded(
+                &plan,
+                clock,
+                now_millis,
+                max_critical_steps,
+            )?)
+        } else {
+            staged.prepare_noncritical_map_action_transactional(&plan)?;
+            None
+        };
+        *environment = staged;
+        Ok(Some((plan, now)))
     }
 
     /// CE-style numeric route through the initial static object collision.
