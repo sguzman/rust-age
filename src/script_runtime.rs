@@ -1915,6 +1915,82 @@ mod tests {
         }
     }
 
+    #[test]
+    fn ce_object_pid_condition_persists_quest_flag_via_owned_map_state() {
+        // Source-derived, explicitly bound self_obj -> obj_pid -> equality
+        // writes GAME_GLOBAL_VARS before a local due procedure is prepared.
+        // Object data are supplied as an immutable MAP object snapshot,
+        // never as a guessed native engine pointer.
+        for (actual_pid, expected) in [(77_i32, 1_i32), (78, 0)] {
+            let mut code = Vec::new();
+            native_condition_put(&mut code, 0); // game-global index
+            code.extend_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+            code.extend_from_slice(&0x8100_u16.to_be_bytes()); // OBJ_PID
+            native_condition_put(&mut code, 77);
+            code.extend_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+            code.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+            native_condition_put(&mut code, 1); // true condition
+            code.extend_from_slice(&0x8011_u16.to_be_bytes()); // STOP
+            let mut runtime = ScriptRuntime::new();
+            runtime.register(1, mutable_condition_vm(&code)).unwrap();
+            let mut map = mutable_condition_state(&runtime, 0);
+            let mut game = GameGlobalState::from_initial_values(&[-1]).unwrap();
+            let objects = [crate::script_object_read::ScriptObjectSnapshot {
+                handle: 42,
+                tile: 7,
+                elevation: 0,
+                table_elevation: 0,
+                pid: actual_pid,
+                fid: 0,
+            }];
+            let mut events = BTreeMap::new();
+            events.insert(
+                1,
+                ReadOnlyConditionEvent {
+                    event: ScriptNativeEventSnapshot {
+                        owner: ScriptNativeOwnerSnapshot {
+                            native: ScriptNativeSnapshot {
+                                clock: ScriptClockContext {
+                                    clock: ScriptGameClock { ticks: 0 },
+                                    last_visit_ticks: None,
+                                },
+                                objects: Some(&objects),
+                            },
+                            resolution: Some(
+                                crate::script_owner_binding::ScriptOwnerResolution::Bound {
+                                    key: crate::collision::ObjectKey {
+                                        elevation: 0,
+                                        ordinal: 0,
+                                    },
+                                    handle: 42,
+                                    saved_oid_matches: true,
+                                },
+                            ),
+                        },
+                        source: None,
+                        target: None,
+                    },
+                    invocation: ScriptInvocationState::installed(),
+                },
+            );
+            let ready = runtime
+                .prepare_due_with_mutable_conditions_transactional_bounded(
+                    100, 9, &mut map, &mut game, &events,
+                )
+                .unwrap();
+            assert_eq!(
+                ready,
+                [DueProcedure {
+                    program_id: 1,
+                    procedure_index: 1,
+                }]
+            );
+            assert_eq!(game.values(), [expected]);
+            assert_eq!(map.globals(), [0]);
+            assert_eq!(runtime.vm(1).unwrap().pc(), 36);
+        }
+    }
+
     fn main_native_vm(code: &[u8]) -> ScriptVm {
         assert!(code.len() <= 42);
         let mut bytes = vec![0_u8; 54]; // no CE procedure records
