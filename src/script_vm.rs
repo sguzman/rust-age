@@ -816,6 +816,31 @@ impl ScriptVm {
         Ok(())
     }
 
+    /// Persist the source's NONCRITICAL local executeProc/setupCall frame.
+    /// The source does not immediately run its bytecode until the next
+    /// interpreter burst. Critical executeProc would invoke interpret(0)
+    /// synchronously and therefore MUST remain unsupported by this
+    /// deferred-only entry point.
+    pub(crate) fn prepare_noncritical_local_action_transactional(
+        &mut self,
+        procedure_index: usize,
+    ) -> io::Result<()> {
+        let mut next = self.clone();
+        let flags = next
+            .runtime_procedures
+            .get(procedure_index)
+            .ok_or_else(|| invalid("CE lifecycle action procedure index outside table"))?
+            .flags;
+        if flags & 0x10 != 0 {
+            return Err(invalid(
+                "CE critical lifecycle actions require immediate interpreter dispatch",
+            ));
+        }
+        next.stage_local_core_call_frame(procedure_index, false)?;
+        *self = next;
+        Ok(())
+    }
+
     /// Persist only the CE doEvents **timed local call setup** in this VM.
     /// Due timers clear their flags before executeProc calls setupCall. In
     /// the pinned source, executeProc does not immediately interpret that

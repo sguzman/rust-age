@@ -432,6 +432,35 @@ impl ScriptRuntime {
         Ok(Some(PreviewedLocalAction { frame, returned }))
     }
 
+    /// Stage exactly one source-verified noncritical built-in action for a
+    /// future bounded interpreter tick. executeProc's local setupCall does
+    /// not execute noncritical bytecode immediately in pinned CE. The
+    /// caller must provide the original action/fixedParam invocation
+    /// context when later resolving game native reads; this standalone VM
+    /// API does not invent one. Unsupported critical/imported/argumented
+    /// procedures fail without changing the installed program list.
+    pub fn prepare_noncritical_local_action_transactional(
+        &mut self,
+        program_id: u64,
+        action: usize,
+    ) -> io::Result<Option<PlannedLocalActionFrame>> {
+        let Some(frame) = self.inspect_local_action_frame(program_id, action)? else {
+            return Ok(None);
+        };
+        if frame.critical {
+            return Err(invalid(
+                "CE critical built-in action cannot be deferred without immediate interpret",
+            ));
+        }
+        let mut next = self.clone();
+        let vm = next
+            .vm_mut(program_id)
+            .ok_or_else(|| invalid("CE lifecycle action VM missing after preflight"))?;
+        vm.prepare_noncritical_local_action_transactional(frame.procedure_index)?;
+        *self = next;
+        Ok(Some(frame))
+    }
+
     /// Opt-in host dispatch of one resolved CE built-in action, independent
     /// of the timed/conditional event scheduler. A missing script action
     /// returns false; any callback is supplied explicitly by the caller.

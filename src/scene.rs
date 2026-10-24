@@ -63,6 +63,10 @@ pub struct PreparedScriptEnvironment {
     /// Original serialized MAP lastVisitTime in 1/10-second game ticks.
     /// Zero indicates no recorded visit; no gameplay time is advanced.
     pub map_last_visit_ticks: i32,
+    /// Rust-owned source action/fixedParam state for actions explicitly
+    /// staged through prepare_noncritical_map_action_transactional.
+    /// Absent IDs retain their original initial action value zero.
+    pub invocations: BTreeMap<u64, ScriptInvocationState>,
 }
 
 /// Pure sandbox result from a CLONED CE local script preview.
@@ -183,7 +187,11 @@ impl PreparedScriptEnvironment {
                     source: None,
                     target: None,
                 },
-                invocation: ScriptInvocationState::installed(),
+                invocation: self
+                    .invocations
+                    .get(&id)
+                    .copied()
+                    .unwrap_or_else(ScriptInvocationState::installed),
             };
             if events.insert(id, event).is_some() {
                 return Err(io::Error::new(
@@ -208,6 +216,51 @@ impl PreparedScriptEnvironment {
                 game,
                 &events,
             )
+    }
+
+    /// Persist a source-verified, planned NONCRITICAL MAP lifecycle
+    /// executeProc frame and its action/fixedParam invocation context.
+    /// Source script selection and owner identity must match the original
+    /// MAP bindings; no invented action names, procedure bytecode or object
+    /// identities are permitted. The original CE noncritical setupCall
+    /// defers bytecode until a later interpreter burst. Critical actions
+    /// must execute immediately in CE and are intentionally refused here.
+    ///
+    /// This is source-faithful CALL PREPARATION, not automatic START,
+    /// MAP_ENTER, spatial events, gameplay-native effects, or any actor
+    /// interaction. A failure leaves VM, MAP and invocation state intact.
+    pub fn prepare_noncritical_map_action_transactional(
+        &mut self,
+        planned: &PlannedMapAction,
+    ) -> io::Result<PlannedLocalActionFrame> {
+        let verified = self.local_frame_for_planned(planned)?;
+        if verified.critical {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "CE critical MAP action requires immediate interpretation",
+            ));
+        }
+        let invocation = planned.detached_invocation()?;
+        let mut next = self.clone();
+        let installed = next
+            .scripts
+            .runtime
+            .prepare_noncritical_local_action_transactional(
+                planned.instance_id,
+                planned.action,
+            )?
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE planned MAP action no longer exists")
+            })?;
+        if installed != verified {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE planned MAP action frame changed before commit",
+            ));
+        }
+        next.invocations.insert(planned.instance_id, invocation);
+        *self = next;
+        Ok(verified)
     }
 
     /// Find the source-derived CE owner of an installed, unstarted Rust VM.
@@ -1019,6 +1072,7 @@ impl StaticScene {
             object_queries,
             script_owners,
             map_last_visit_ticks: self.header.last_visit_time,
+            invocations: BTreeMap::new(),
         })
     }
 
