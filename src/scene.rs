@@ -683,6 +683,9 @@ impl PreparedScriptEnvironment {
     /// call frames and may use timer natives in a later timer-aware tick.
     /// Every selected VM, all MAP/quest banks and the queue commit together
     /// only after the entire original-order lifecycle phase succeeds.
+    // Each explicit argument corresponds to a distinct CE event, clock, or
+    // bounded-execution input. Keep source call sites typed and reviewable.
+    #[allow(clippy::too_many_arguments)]
     pub fn apply_map_lifecycle_phase_with_timer_queue_transactional_bounded(
         &mut self,
         queue: &mut EventQueue,
@@ -704,6 +707,9 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    // Each explicit argument corresponds to a distinct CE event, clock, or
+    // bounded-execution input. Keep source call sites typed and reviewable.
+    #[allow(clippy::too_many_arguments)]
     fn apply_map_lifecycle_phase_with_optional_timer_queue_transactional_bounded(
         &mut self,
         phase: MapLifecyclePhase,
