@@ -152,9 +152,10 @@ impl BoundScriptRuntime {
             if !matches {
                 continue;
             }
-            let mut candidates = self.entries.iter().filter(|entry| {
-                entry.binding.category == 1 && entry.binding.ordinal == ordinal
-            });
+            let mut candidates = self
+                .entries
+                .iter()
+                .filter(|entry| entry.binding.category == 1 && entry.binding.ordinal == ordinal);
             let entry = candidates.next().ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -371,8 +372,14 @@ mod tests {
         assert!(matches.iter().all(|p| p.procedure_index == 1));
         let upper = bound.plan_spatial_at(&scripts, &view, 20098, 1).unwrap();
         assert_eq!(upper.iter().map(|p| p.instance_id).collect::<Vec<_>>(), [3]);
-        assert!(bound.plan_spatial_at(&scripts, &view, 20097, 0).unwrap().is_empty());
-        assert!(bound.plan_spatial_at(&scripts, &view, 9, 0).unwrap().is_empty());
+        assert!(bound
+            .plan_spatial_at(&scripts, &view, 20097, 0)
+            .unwrap()
+            .is_empty());
+        assert!(bound
+            .plan_spatial_at(&scripts, &view, 9, 0)
+            .unwrap()
+            .is_empty());
         assert!(bound.plan_spatial_at(&scripts, &view, 40000, 0).is_err());
         assert!(bound.plan_spatial_at(&scripts, &view, 20098, 3).is_err());
     }
@@ -396,7 +403,9 @@ mod tests {
             runtime: runtime.clone(),
             entries: vec![],
         };
-        assert!(uninstalled.plan_spatial_at(&scripts, &view, 20098, 0).is_err());
+        assert!(uninstalled
+            .plan_spatial_at(&scripts, &view, 20098, 0)
+            .is_err());
         let mut active = ScriptRuntime::new();
         active
             .register(1, vm(&[b"main", b"spatial_p_proc"]))
@@ -409,7 +418,13 @@ mod tests {
         scripts.categories[1][0].subtype.clear();
         assert!(bound.plan_spatial_at(&scripts, &view, 20098, 0).is_err());
         scripts.categories[1][0].subtype = vec![20098, 0];
-        assert_eq!(bound.plan_spatial_at(&scripts, &view, 20098, 0).unwrap().len(), 1);
+        assert_eq!(
+            bound
+                .plan_spatial_at(&scripts, &view, 20098, 0)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
