@@ -808,9 +808,22 @@ impl ScriptRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::{DueProcedure, PlannedLocalActionFrame, ScriptRuntime};
+    use super::{
+        DueProcedure, PlannedLocalActionFrame, ReadOnlyConditionEvent, ScriptRuntime,
+    };
+    use crate::game_globals::GameGlobalState;
+    use crate::map::MapVariables;
+    use crate::script_binding::{
+        BoundScriptRuntime, InstalledScriptBinding, ScriptBinding,
+    };
+    use crate::script_clock::ScriptGameClock;
+    use crate::script_native_vars::{
+        ScriptClockContext, ScriptInvocationState, ScriptNativeEventSnapshot,
+        ScriptNativeOwnerSnapshot, ScriptNativeSnapshot,
+    };
     use crate::script_program::ScriptProgram;
     use crate::script_vm::{ScriptValue, ScriptVm};
+    use std::collections::BTreeMap;
 
     fn vm(flags: i32, time: i32, condition: i32) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
@@ -1420,6 +1433,153 @@ mod tests {
         assert_eq!(unchanged.core_wait_state(), None);
         assert_eq!(unchanged.runtime_procedures()[1].flags, 0);
         assert!(unchanged.return_stack().is_empty());
+    }
+
+    fn readonly_condition_vm(native: u16) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[26..28].copy_from_slice(&native.to_be_bytes());
+        bytes[28..30].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0x02, 0, 20, 36, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn readonly_condition_test_map(
+        runtime: &ScriptRuntime,
+        global_value: i32,
+    ) -> crate::script_locals::MapScriptLocals {
+        let entries = [1_u64, 2].into_iter().filter(|id| runtime.vm(*id).is_some()).map(
+            |id| InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 1,
+                    ordinal: (id - 1) as usize,
+                    script_id: id as i32,
+                    script_index: 0,
+                    owner_id: -1,
+                    path: None,
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(id),
+            },
+        ).collect();
+        BoundScriptRuntime {
+            runtime: runtime.clone(),
+            entries,
+        }
+        .script_local_state(&MapVariables {
+            globals: vec![global_value],
+            locals: vec![],
+        })
+        .unwrap()
+    }
+
+    fn readonly_condition_events(ids: &[u64]) -> BTreeMap<u64, ReadOnlyConditionEvent<'static>> {
+        let native = ScriptNativeSnapshot {
+            clock: ScriptClockContext {
+                clock: ScriptGameClock { ticks: 864_000 },
+                last_visit_ticks: None,
+            },
+            objects: None,
+        };
+        ids.iter().map(|id| {
+            (*id, ReadOnlyConditionEvent {
+                event: ScriptNativeEventSnapshot {
+                    owner: ScriptNativeOwnerSnapshot {
+                        native,
+                        resolution: None,
+                    },
+                    source: None,
+                    target: None,
+                },
+                invocation: ScriptInvocationState::installed(),
+            })
+        }).collect()
+    }
+
+    #[test]
+    fn persistent_native_condition_reads_actual_map_and_game_global_snapshots() {
+        for (map_value, game_value, expected_ready) in [
+            (1, 0, vec![1_u64]),
+            (0, 1, vec![2_u64]),
+            (1, 1, vec![2_u64, 1_u64]),
+            (0, 0, vec![]),
+        ] {
+            let mut runtime = ScriptRuntime::new();
+            runtime.register(1, readonly_condition_vm(0x80C3)).unwrap(); // MAP_VAR
+            runtime.register(2, readonly_condition_vm(0x80C5)).unwrap(); // GLOBAL_VAR
+            let map = readonly_condition_test_map(&runtime, map_value);
+            let game = GameGlobalState::from_initial_values(&[game_value]).unwrap();
+            let events = readonly_condition_events(&[1, 2]);
+            let tick = runtime
+                .advance_core_tick_with_readonly_conditions_transactional_bounded(
+                    100, 1, 3, &map, Some(&game), &events,
+                )
+                .unwrap();
+            assert_eq!(tick.executed_steps, [(2, 1), (1, 1)]);
+            assert_eq!(
+                tick.prepared_calls.iter().map(|c| c.program_id).collect::<Vec<_>>(),
+                expected_ready
+            );
+            for (id, was_ready) in [
+                (1, map_value != 0),
+                (2, game_value != 0),
+            ] {
+                let vm = runtime.vm(id).unwrap();
+                assert_eq!(vm.runtime_procedures()[1].flags, if was_ready { 0 } else { 2 });
+                assert_eq!(vm.pc(), if was_ready { 36 } else { 2 });
+                assert_eq!(vm.first_interpret_clock_millis(), 100);
+            }
+            assert_eq!(map.globals(), [map_value]);
+            assert_eq!(game.values(), [game_value]);
+        }
+    }
+
+    #[test]
+    fn persistent_native_conditions_reject_writes_and_rollback_all_programs() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, readonly_condition_vm(0x80C4)).unwrap(); // SET_MAP_VAR
+        runtime.register(2, readonly_condition_vm(0x80C3)).unwrap(); // MAP_VAR
+        let map = readonly_condition_test_map(&runtime, 1);
+        let game = GameGlobalState::from_initial_values(&[1]).unwrap();
+        let events = readonly_condition_events(&[1, 2]);
+        assert!(runtime
+            .advance_core_tick_with_readonly_conditions_transactional_bounded(
+                100, 1, 3, &map, Some(&game), &events,
+            )
+            .is_err());
+        for id in [1_u64, 2] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.runtime_procedures()[1].flags, 2);
+            assert_eq!(vm.first_interpret_clock_millis(), -1);
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+        }
+        assert_eq!(map.globals(), [1]);
+        assert_eq!(game.values(), [1]);
+
+        // Missing or partial event contexts must not create a fabricated
+        // engine-native value or modify a registered interpreter.
+        let missing = BTreeMap::new();
+        assert!(runtime
+            .prepare_due_with_readonly_conditions_transactional_bounded(
+                100, 3, &map, Some(&game), &missing,
+            )
+            .is_err());
+        assert_eq!(runtime.vm(2).unwrap().pc(), 0);
     }
 
     fn conditional_core_vm(result: i32, flags: i32, invalid_condition: bool) -> ScriptVm {
