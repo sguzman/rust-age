@@ -426,6 +426,7 @@ mod tests {
             script_owners: owners,
             map_last_visit_ticks: 0,
             invocations: std::collections::BTreeMap::new(),
+            spatial_sources: std::collections::BTreeMap::new(),
         };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
@@ -534,6 +535,7 @@ mod tests {
             .unwrap(),
             map_last_visit_ticks: 0,
             invocations: std::collections::BTreeMap::new(),
+            spatial_sources: std::collections::BTreeMap::new(),
         };
         let before_queries = environment.object_queries.clone();
         let clock = ScriptClockContext {

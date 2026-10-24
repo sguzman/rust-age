@@ -166,6 +166,7 @@ fn environment() -> PreparedScriptEnvironment {
         script_owners: owners,
         map_last_visit_ticks: 0,
         invocations: std::collections::BTreeMap::new(),
+        spatial_sources: std::collections::BTreeMap::new(),
     }
 }
 
