@@ -1669,6 +1669,190 @@ mod tests {
         assert_eq!(runtime.vm(2).unwrap().pc(), 0);
     }
 
+    fn mutable_condition_vm(code: &[u8]) -> ScriptVm {
+        // Conditional expression at PC 0, distinct local body at PC 36.
+        assert!(code.len() <= 34);
+        let mut bytes = vec![0_u8; 42];
+        bytes[..code.len()].copy_from_slice(code);
+        bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0x02, 0, 0, 36, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn native_condition_put(code: &mut Vec<u8>, value: i32) {
+        code.extend_from_slice(&0xC001_u16.to_be_bytes());
+        code.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn mutable_condition_state(
+        runtime: &ScriptRuntime,
+        local_slots: i32,
+    ) -> crate::script_locals::MapScriptLocals {
+        let entries = [1_u64, 2]
+            .into_iter()
+            .filter(|id| runtime.vm(*id).is_some())
+            .map(|id| InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 1,
+                    ordinal: (id - 1) as usize,
+                    script_id: id as i32,
+                    script_index: 0,
+                    owner_id: -1,
+                    path: None,
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: local_slots,
+                },
+                instance_id: Some(id),
+            })
+            .collect();
+        BoundScriptRuntime {
+            runtime: runtime.clone(),
+            entries,
+        }
+        .script_local_state(&MapVariables {
+            globals: vec![0],
+            locals: vec![],
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn ce_persistent_conditional_global_mutation_is_visible_to_later_script() {
+        // Newest ID2 sets GAME_GLOBAL_VARS[0] = 1 but returns false.
+        // Older ID1 then reads the updated quest flag and stages a call.
+        let mut write = Vec::new();
+        native_condition_put(&mut write, 0);
+        native_condition_put(&mut write, 1);
+        write.extend_from_slice(&0x80C6_u16.to_be_bytes());
+        native_condition_put(&mut write, 0);
+        write.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let mut read = Vec::new();
+        native_condition_put(&mut read, 0);
+        read.extend_from_slice(&0x80C5_u16.to_be_bytes());
+        read.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, mutable_condition_vm(&read)).unwrap();
+        runtime.register(2, mutable_condition_vm(&write)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 0);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = readonly_condition_events(&[1, 2]);
+        let prepared = runtime
+            .prepare_due_with_mutable_conditions_transactional_bounded(
+                100,
+                5,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap();
+        assert_eq!(
+            prepared,
+            [DueProcedure {
+                program_id: 1,
+                procedure_index: 1,
+            }]
+        );
+        assert_eq!(game.values(), [1]);
+        assert_eq!(map.globals(), [0]);
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[1].flags, 2);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[1].flags, 0);
+        assert_eq!(runtime.vm(1).unwrap().pc(), 36);
+
+        // A subsequent scan continues to observe the committed quest flag,
+        // without re-running a cleared conditional procedure.
+        assert!(runtime
+            .prepare_due_with_mutable_conditions_transactional_bounded(
+                101,
+                5,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap()
+            .is_empty());
+        assert_eq!(game.values(), [1]);
+    }
+
+    #[test]
+    fn ce_conditional_map_and_lazy_local_writes_commit_atomically() {
+        let mut write = Vec::new();
+        native_condition_put(&mut write, 0);
+        native_condition_put(&mut write, 33);
+        write.extend_from_slice(&0x80C2_u16.to_be_bytes()); // SET_LOCAL_VAR
+        native_condition_put(&mut write, 0);
+        native_condition_put(&mut write, 5);
+        write.extend_from_slice(&0x80C4_u16.to_be_bytes()); // SET_MAP_VAR
+        native_condition_put(&mut write, 0);
+        write.extend_from_slice(&0x80C1_u16.to_be_bytes()); // LOCAL_VAR
+        write.extend_from_slice(&0x8011_u16.to_be_bytes());
+        assert_eq!(write.len(), 32);
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, mutable_condition_vm(&write)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 1);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = readonly_condition_events(&[1]);
+        assert_eq!(map.locals(), []);
+        let prepared = runtime
+            .prepare_due_with_mutable_conditions_transactional_bounded(
+                100,
+                8,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap();
+        assert_eq!(prepared.len(), 1);
+        assert_eq!(map.globals(), [5]);
+        assert_eq!(map.locals(), [33]);
+        assert_eq!(map.range(1).unwrap().offset, Some(0));
+        assert_eq!(game.values(), [0]);
+    }
+
+    #[test]
+    fn ce_conditional_quest_mutation_rolls_back_on_later_native_error() {
+        let mut write = Vec::new();
+        native_condition_put(&mut write, 0);
+        native_condition_put(&mut write, 111);
+        write.extend_from_slice(&0x80C6_u16.to_be_bytes());
+        native_condition_put(&mut write, 1);
+        write.extend_from_slice(&0x8011_u16.to_be_bytes());
+        let bad = [0x80_u8, 0xFF, 0x80, 0x11];
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, mutable_condition_vm(&bad)).unwrap();
+        runtime.register(2, mutable_condition_vm(&write)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 2);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = readonly_condition_events(&[1, 2]);
+        assert!(runtime
+            .prepare_due_with_mutable_conditions_transactional_bounded(
+                100,
+                5,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .is_err());
+        assert_eq!(game.values(), [0]);
+        assert_eq!(map.globals(), [0]);
+        assert!(map.locals().is_empty());
+        for id in [1, 2] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.runtime_procedures()[1].flags, 2);
+            assert_eq!(vm.first_interpret_clock_millis(), -1);
+            assert!(vm.stack().is_empty());
+        }
+    }
+
     fn conditional_core_vm(result: i32, flags: i32, invalid_condition: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         bytes[0..4].copy_from_slice(&[0x80, 0x00, 0x80, 0x00]);
