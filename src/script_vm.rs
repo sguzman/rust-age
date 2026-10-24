@@ -243,6 +243,8 @@ pub struct ScriptVm {
     // Retain the decoded source table unchanged for read-only inspection.
     runtime_procedures: Vec<crate::script_program::ProcedureEntry>,
     clock_millis: i32,
+    // Pinned CE field_78: -1 is the uninitialized sentinel.
+    first_interpret_clock: i32,
     pc: usize,
     stack: Vec<ScriptValue>,
     return_stack: Vec<ScriptValue>,
@@ -265,6 +267,7 @@ impl ScriptVm {
             program,
             runtime_procedures,
             clock_millis: 0,
+            first_interpret_clock: -1,
             pc: 0,
             stack: Vec::new(),
             return_stack: Vec::new(),
@@ -377,6 +380,21 @@ impl ScriptVm {
     /// Deterministic CE timer snapshot in milliseconds; no wall clock used.
     pub fn set_clock_millis(&mut self, now: i32) {
         self.clock_millis = now;
+    }
+
+    /// Pinned CE Program::field_78. A raw -1 stays the uninitialized
+    /// sentinel, including when a u32 timer wraps to 0xFFFFFFFF.
+    pub fn first_interpret_clock_millis(&self) -> i32 {
+        self.first_interpret_clock
+    }
+
+    /// CE interpret initializes field_78 once before checking its CPU
+    /// budget, including a zero-budget invocation. This is ONLY called
+    /// from the explicitly transaction-safe Rust updatePrograms slice.
+    pub(crate) fn prepare_core_interpreter_entry(&mut self) {
+        if self.first_interpret_clock == -1 {
+            self.first_interpret_clock = self.clock_millis;
+        }
     }
 
     /// Mutable interpreter view of CE procedure flags and scheduling fields.

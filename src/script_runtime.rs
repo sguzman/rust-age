@@ -538,6 +538,7 @@ impl ScriptRuntime {
         let mut executed_steps = Vec::with_capacity(next.programs.len());
         for program in &mut next.programs {
             program.vm.set_clock_millis(now_millis as i32);
+            program.vm.prepare_core_interpreter_entry();
             // Pinned CE interpret: if already critical with fewer than three
             // normal-budget iterations, use at least three. The while-loop
             // tests CRITICAL_SECTION before decrementing a2, so critical
@@ -1142,6 +1143,57 @@ mod tests {
         assert_eq!(vm.pc(), 8);
         assert_eq!(vm.modeled_program_flags(), 0x80470010);
         assert_eq!(vm.core_wait_state(), Some((100, 105)));
+    }
+
+    #[test]
+    fn ce_first_interpret_timestamp_is_stable_through_wait_resumption() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(41, core_wait_vm(2, 0x8000)).unwrap();
+        assert_eq!(runtime.vm(41).unwrap().first_interpret_clock_millis(), -1);
+        let zero = runtime
+            .advance_core_tick_transactional_bounded(50, 0)
+            .unwrap();
+        assert_eq!(zero.executed_steps, [(41, 0)]);
+        assert_eq!(runtime.vm(41).unwrap().first_interpret_clock_millis(), 50);
+        runtime
+            .advance_core_tick_transactional_bounded(300, 2)
+            .unwrap();
+        assert_eq!(runtime.vm(41).unwrap().first_interpret_clock_millis(), 50);
+        assert_eq!(runtime.vm(41).unwrap().core_wait_state(), Some((300, 302)));
+        runtime
+            .advance_core_tick_transactional_bounded(301, 1)
+            .unwrap();
+        assert_eq!(runtime.vm(41).unwrap().first_interpret_clock_millis(), 50);
+        assert_eq!(runtime.vm(41).unwrap().core_wait_state(), None);
+    }
+
+    #[test]
+    fn ce_first_interpret_negative_one_sentinel_and_tick_error_rollback() {
+        let mut wrapped = ScriptRuntime::new();
+        wrapped.register(1, core_wait_vm(1, 0x8000)).unwrap();
+        wrapped
+            .advance_core_tick_transactional_bounded(u32::MAX, 0)
+            .unwrap();
+        // Original field_78 is signed and retains -1 until a subsequent
+        // interpreter entry with a non-sentinel timer reading.
+        assert_eq!(wrapped.vm(1).unwrap().first_interpret_clock_millis(), -1);
+        wrapped
+            .advance_core_tick_transactional_bounded(4, 0)
+            .unwrap();
+        assert_eq!(wrapped.vm(1).unwrap().first_interpret_clock_millis(), 4);
+
+        let mut rejected = ScriptRuntime::new();
+        rejected.register(1, core_wait_vm(3, 0x80FC)).unwrap();
+        rejected.register(2, core_wait_vm(3, 0x8000)).unwrap();
+        assert!(rejected
+            .advance_core_tick_transactional_bounded(900, 3)
+            .is_err());
+        for id in [1, 2] {
+            let vm = rejected.vm(id).unwrap();
+            assert_eq!(vm.first_interpret_clock_millis(), -1);
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.core_wait_state(), None);
+        }
     }
 
     fn core_wait_after_call_at_vm(delay_seconds: i32) -> ScriptVm {
