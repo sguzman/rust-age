@@ -33,7 +33,7 @@ use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
-    ReadOnlyConditionEvent,
+    ReadOnlyConditionEvent, TimerNativeTickContext,
 };
 use crate::script_timer::{ScriptTimerEvent, TimerObjectBinding};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
@@ -324,13 +324,15 @@ impl PreparedScriptEnvironment {
                 now_millis,
                 cpu_burst,
                 max_steps_per_condition,
-                &mut next.map_locals,
-                game,
-                &mut queued,
-                clock.clock.ticks,
-                &bound,
-                &timer_bindings,
-                &events,
+                TimerNativeTickContext {
+                    map: &mut next.map_locals,
+                    game,
+                    queue: &mut queued,
+                    now_game_ticks: clock.clock.ticks,
+                    bound: &bound,
+                    timer_bindings: &timer_bindings,
+                    events: &events,
+                },
             )?;
         *self = next;
         *queue = queued;

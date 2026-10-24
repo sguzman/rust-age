@@ -97,6 +97,18 @@ pub struct ReadOnlyConditionEvent<'a> {
     pub invocation: ScriptInvocationState,
 }
 
+/// Explicit Rust-owned game state and source-verified CE timer-object
+/// bindings for an all-or-nothing installed interpreter tick.
+pub struct TimerNativeTickContext<'a> {
+    pub map: &'a mut MapScriptLocals,
+    pub game: &'a mut GameGlobalState,
+    pub queue: &'a mut EventQueue,
+    pub now_game_ticks: i32,
+    pub bound: &'a BoundScriptRuntime,
+    pub timer_bindings: &'a [TimerObjectBinding],
+    pub events: &'a BTreeMap<u64, ReadOnlyConditionEvent<'a>>,
+}
+
 #[derive(Debug, Clone)]
 struct ProgramInstance {
     id: u64,
@@ -855,30 +867,24 @@ impl ScriptRuntime {
         now_millis: u32,
         cpu_burst: usize,
         max_steps_per_condition: usize,
-        map: &mut MapScriptLocals,
-        game: &mut GameGlobalState,
-        queue: &mut EventQueue,
-        now_game_ticks: i32,
-        bound: &BoundScriptRuntime,
-        timer_bindings: &[TimerObjectBinding],
-        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+        context: TimerNativeTickContext<'_>,
     ) -> io::Result<PreparedCoreTick> {
         let mut next = self.clone();
-        let mut next_map = map.clone();
-        let mut next_game = game.clone();
-        let mut next_queue = queue.clone();
+        let mut next_map = (*context.map).clone();
+        let mut next_game = (*context.game).clone();
+        let mut next_queue = (*context.queue).clone();
         let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
             if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
                 apply_timer_native_opcode(
-                    bound,
+                    context.bound,
                     &mut next_queue,
-                    now_game_ticks,
-                    timer_bindings,
+                    context.now_game_ticks,
+                    context.timer_bindings,
                     opcode,
                     stack,
                 )
             } else {
-                let snapshot = events.get(&id).ok_or_else(|| {
+                let snapshot = context.events.get(&id).ok_or_else(|| {
                     invalid("CE timer-aware interpreter event context unavailable")
                 })?;
                 apply_mutable_condition_native_with_vars(
@@ -914,9 +920,9 @@ impl ScriptRuntime {
             }
         }
         *self = next;
-        *map = next_map;
-        *game = next_game;
-        *queue = next_queue;
+        *context.map = next_map;
+        *context.game = next_game;
+        *context.queue = next_queue;
         Ok(PreparedCoreTick {
             executed_steps,
             prepared_calls,
