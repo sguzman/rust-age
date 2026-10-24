@@ -801,7 +801,10 @@ impl PreparedScriptEnvironment {
                 now_millis,
                 max_steps,
                 &mut |opcode, stack| {
-                    if opcode == GAME_TIME_ADVANCE_OPCODE {
+                    if opcode == SCRIPT_OVERRIDES_OPCODE {
+                        invocation.mark_overrides();
+                        Ok(())
+                    } else if opcode == GAME_TIME_ADVANCE_OPCODE {
                         if writable_clock.is_none() {
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
