@@ -1915,6 +1915,122 @@ mod tests {
         }
     }
 
+    fn main_native_vm(code: &[u8]) -> ScriptVm {
+        assert!(code.len() <= 42);
+        let mut bytes = vec![0_u8; 54]; // no CE procedure records
+        bytes[..code.len()].copy_from_slice(code);
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn native_global_write_program(value: i32) -> ScriptVm {
+        let mut code = Vec::new();
+        native_condition_put(&mut code, 0);
+        native_condition_put(&mut code, value);
+        code.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+        code.extend_from_slice(&0x8011_u16.to_be_bytes()); // STOP
+        main_native_vm(&code)
+    }
+
+    #[test]
+    fn ce_native_main_burst_writes_quest_flag_before_due_condition_reads_it() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, readonly_condition_vm(0x80C5)).unwrap();
+        runtime.register(2, native_global_write_program(37)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 0);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = readonly_condition_events(&[1, 2]);
+        let tick = runtime
+            .advance_tick_with_mutable_native_state_transactional_bounded(
+                100,
+                4,
+                3,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(2, 4), (1, 4)]);
+        assert_eq!(
+            tick.prepared_calls,
+            [DueProcedure {
+                program_id: 1,
+                procedure_index: 1,
+            }]
+        );
+        assert_eq!(game.values(), [37]);
+        assert_eq!(map.globals(), [0]);
+        assert!(runtime.vm(2).unwrap().halted());
+        assert_eq!(runtime.vm(1).unwrap().pc(), 36);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[1].flags, 0);
+        // Not a passive preview: the same Rust-owned variable state remains
+        // committed for the caller's subsequent interpreter ticks.
+        assert_eq!(runtime.vm(1).unwrap().first_interpret_clock_millis(), 100);
+    }
+
+    #[test]
+    fn ce_native_main_burst_rolls_back_quest_mutation_when_older_program_fails() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, main_native_vm(&0x80FF_u16.to_be_bytes()))
+            .unwrap();
+        runtime.register(2, native_global_write_program(37)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 0);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = readonly_condition_events(&[1, 2]);
+        assert!(runtime
+            .advance_tick_with_mutable_native_state_transactional_bounded(
+                100,
+                4,
+                3,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .is_err());
+        assert_eq!(game.values(), [0]);
+        assert_eq!(map.globals(), [0]);
+        for id in [1, 2] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.first_interpret_clock_millis(), -1);
+            assert!(vm.stack().is_empty());
+            assert!(!vm.halted());
+        }
+    }
+
+    #[test]
+    fn ce_native_core_burst_keeps_original_clocked_wait_semantics() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, core_wait_vm(5, 0x8000)).unwrap();
+        let mut map = mutable_condition_state(&runtime, 0);
+        let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
+        let events = BTreeMap::new();
+        let first = runtime
+            .advance_tick_with_mutable_native_state_transactional_bounded(
+                1000,
+                2,
+                3,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap();
+        assert_eq!(first.executed_steps, [(1, 2)]);
+        assert_eq!(runtime.vm(1).unwrap().core_wait_state(), Some((1000, 1005)));
+        let still_blocked = runtime
+            .advance_tick_with_mutable_native_state_transactional_bounded(
+                1006,
+                2,
+                3,
+                &mut map,
+                &mut game,
+                &events,
+            )
+            .unwrap();
+        assert_eq!(still_blocked.executed_steps, [(1, 0)]);
+        assert_eq!(runtime.vm(1).unwrap().pc(), 8);
+        assert_eq!(game.values(), [0]);
+    }
+
     fn conditional_core_vm(result: i32, flags: i32, invalid_condition: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         bytes[0..4].copy_from_slice(&[0x80, 0x00, 0x80, 0x00]);
