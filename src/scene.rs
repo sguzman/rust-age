@@ -84,6 +84,26 @@ pub struct PreparedScriptEnvironment {
     pub spatial_sources: BTreeMap<u64, ObjectKey>,
 }
 
+/// Source-order bounded script phases applied after static CE MAP decode:
+/// map_load_file's generated system MAP_ENTER, scr_load_all_scripts START,
+/// scr_exec_map_enter_scripts, then scr_exec_map_update_scripts.
+///
+/// Noncritical frames remain queued on their installed Rust VMs for later
+/// updatePrograms execution. Critical frames execute immediately against
+/// Rust-owned MAP and quest storage. No actor/world loop or game saving is
+/// implied by this initially prepared environment.
+#[derive(Debug, Clone)]
+pub struct LoadedMapScriptLifecycle {
+    pub environment: PreparedScriptEnvironment,
+    /// Opaque Rust instance and collision-free local SID stand-in. Original
+    /// CE's nextScriptId counter and generated hidden Object are not copied.
+    pub header_script: Option<(u64, i32)>,
+    pub header_enter: Option<(PlannedMapAction, Option<usize>)>,
+    pub start: Vec<(PlannedMapAction, Option<usize>)>,
+    pub enter: Vec<(PlannedMapAction, Option<usize>)>,
+    pub update: Vec<(PlannedMapAction, Option<usize>)>,
+}
+
 /// Finite queue-process limits for source-shaped game_time_advance.
 /// These do not change CE's whole-day/remainder callback order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2176,6 +2196,79 @@ impl StaticScene {
         };
         *environment = staged;
         Ok(Some((plan, now)))
+    }
+
+    /// Load and apply the pinned CE MAP initialization script order in one
+    /// explicit, bounded transaction. The MAP bytes have already been
+    /// decoded; this method reads only legitimately installed scripts.lst,
+    /// .INT and game-global defaults through GameAssets, without copying
+    /// assets or creating an invented gameplay event loop.
+    ///
+    /// Pinned map_load_file first creates the header system script and
+    /// enters its MAP_ENTER, if scriptIndex > 0. It subsequently calls
+    /// scr_load_all_scripts (START), scr_exec_map_enter_scripts (excluding
+    /// map_script_id), and scr_exec_map_update_scripts (map script first).
+    /// Every supported critical procedure executes immediately; ordinary
+    /// procedures retain original-shaped deferred call frames.
+    ///
+    /// Any unresolved engine-generated Object owner, native timer without
+    /// supplied queue, imported script call, other gameplay-native effect,
+    /// or execution budget exhaustion aborts this assembly. This is an
+    /// opt-in Rust-owned boundary and does not change the original scene.
+    pub fn load_initial_script_lifecycle_bounded(
+        &self,
+        assets: &mut GameAssets,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<LoadedMapScriptLifecycle> {
+        let mut environment = self.unstarted_script_environment(assets)?;
+        let header_script = self.install_header_system_script(assets, &mut environment)?;
+        let header_sid = header_script.map_or(-1, |(_, sid)| sid);
+        let header_enter = if let Some((id, sid)) = header_script {
+            self.enter_header_system_script_transactional_bounded(
+                &mut environment,
+                id,
+                sid,
+                clock,
+                now_millis,
+                max_critical_steps,
+            )?
+        } else {
+            None
+        };
+        let start = environment.apply_map_lifecycle_phase_transactional_bounded(
+            MapLifecyclePhase::Start,
+            header_sid,
+            self.header.flags,
+            clock,
+            now_millis,
+            max_critical_steps,
+        )?;
+        let enter = environment.apply_map_lifecycle_phase_transactional_bounded(
+            MapLifecyclePhase::Enter,
+            header_sid,
+            self.header.flags,
+            clock,
+            now_millis,
+            max_critical_steps,
+        )?;
+        let update = environment.apply_map_lifecycle_phase_transactional_bounded(
+            MapLifecyclePhase::Update,
+            header_sid,
+            self.header.flags,
+            clock,
+            now_millis,
+            max_critical_steps,
+        )?;
+        Ok(LoadedMapScriptLifecycle {
+            environment,
+            header_script,
+            header_enter,
+            start,
+            enter,
+            update,
+        })
     }
 
     /// CE-style numeric route through the initial static object collision.
