@@ -22,12 +22,16 @@ use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
 use crate::script_native_vars::{
     apply_map_variable_opcode, apply_readonly_event_native_opcode,
-    apply_readonly_event_native_with_vars, ScriptClockContext, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE,
-    SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+    apply_readonly_event_native_with_vars, ScriptClockContext, ScriptInvocationState,
+    ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, LOCAL_VAR_OPCODE,
+    MAP_VAR_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
 };
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
-use crate::script_runtime::{PlannedLocalActionFrame, PreviewedBoundLocalActionVmFrame};
+use crate::script_runtime::{
+    PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
+    ReadOnlyConditionEvent,
+};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
@@ -138,6 +142,74 @@ impl PreviewedSandboxAction {
 }
 
 impl PreparedScriptEnvironment {
+    /// Run a bounded Rust-owned source-ordered CE script tick on the MAP
+    /// environment assembled by StaticScene::unstarted_script_environment.
+    /// All instances inherit their verified original MAP owner joins and
+    /// object-query handles. Source/target event pointers remain UNSET (not
+    /// fictional NULL objects), and a caller supplies the explicit game
+    /// clock. The event invocation starts at the initial CE action value
+    /// zero; full gameplay event lifecycle and overrides remain unavailable.
+    ///
+    /// Mutations to attached script VMs, MAP/local variables and loaded
+    /// GAME_GLOBAL_VARS commit only after the entire tick succeeds. Failure
+    /// preserves all owned state; source MAP bytes and objects are not
+    /// mutated, nor are native game callbacks, spatial engine owners,
+    /// dialogue or savegame effects synthesized. A missing game-global
+    /// bank rejects this opt-in mutable subset rather than inventing one.
+    pub fn advance_script_state_tick_bounded(
+        &mut self,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut events = BTreeMap::new();
+        for entry in &self.scripts.entries {
+            let Some(id) = entry.instance_id else {
+                continue;
+            };
+            let owner = self
+                .script_owners
+                .resolution_for_instance(&self.scripts, id);
+            let event = ReadOnlyConditionEvent {
+                event: ScriptNativeEventSnapshot {
+                    owner: ScriptNativeOwnerSnapshot {
+                        native: ScriptNativeSnapshot {
+                            clock,
+                            objects: Some(self.object_queries.snapshots()),
+                        },
+                        resolution: owner,
+                    },
+                    source: None,
+                    target: None,
+                },
+                invocation: ScriptInvocationState::installed(),
+            };
+            if events.insert(id, event).is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "duplicate installed CE MAP interpreter instance",
+                ));
+            }
+        }
+        let game = self.game_globals.as_mut().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE mutable script tick requires loaded GAME_GLOBAL_VARS",
+            )
+        })?;
+        self.scripts
+            .runtime
+            .advance_tick_with_mutable_native_state_transactional_bounded(
+                now_millis,
+                cpu_burst,
+                max_steps_per_condition,
+                &mut self.map_locals,
+                game,
+                &events,
+            )
+    }
+
     /// Find the source-derived CE owner of an installed, unstarted Rust VM.
     /// Returns None when no verified instance/record mapping is available.
     pub fn owner_for_instance(&self, instance_id: u64) -> Option<ScriptOwnerResolution> {
