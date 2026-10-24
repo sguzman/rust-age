@@ -1529,6 +1529,11 @@ impl ScriptVm {
         &mut self,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<()> {
+        // A caller-owned native callback cannot bypass an installed clocked
+        // WAIT. Only advance_core_tick's source checkWait branch may resume it.
+        if self.core_wait.is_some() {
+            return Err(invalid("CE WAIT cannot run through native preview host"));
+        }
         if self.halted {
             return Ok(());
         }
