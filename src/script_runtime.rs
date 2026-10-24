@@ -1009,7 +1009,10 @@ mod tests {
             .unwrap();
         assert_eq!(blocked.executed_steps, [(77, 0)]);
         assert_eq!(runtime.vm(77).unwrap().pc(), 8);
-        assert_eq!(runtime.vm(77).unwrap().core_wait_state(), Some((1000, 1005)));
+        assert_eq!(
+            runtime.vm(77).unwrap().core_wait_state(),
+            Some((1000, 1005))
+        );
 
         // Back inside the source predicate, the wait clears and execution
         // resumes. This records the original behavior, not an intended sleep.
