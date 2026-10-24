@@ -12,7 +12,12 @@ use crate::script_native_vars::ScriptClockContext;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::MapScriptOwners;
 use crate::script_runtime::PreparedCoreTick;
+use crate::script_vm::ScriptValue;
 use std::io;
+
+const SET_OBJ_VISIBILITY_OPCODE: u16 = 0x80E3;
+const OBJECT_HIDDEN: i32 = 0x01;
+const OBJECT_NO_BLOCK: i32 = 0x10;
 
 fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
@@ -304,6 +309,62 @@ impl RuntimeScene {
         })
     }
 
+    /// Source CE op_set_obj_visibility (0x80E3) mutates the current
+    /// serialized object's flags AND the runtime collision index.
+    /// This adapter refuses NULL, generated system, inventory-child and
+    /// arbitrary integer pointers, and accepts typed native operands only.
+    /// Sprite invalidation and savegame persistence are separate systems.
+    fn apply_set_obj_visibility_native(
+        &mut self,
+        bindings: &MapObjectReadBindings,
+        opcode: u16,
+        stack: &mut Vec<ScriptValue>,
+    ) -> io::Result<bool> {
+        if opcode != SET_OBJ_VISIBILITY_OPCODE {
+            return Ok(false);
+        }
+        if stack.len() < 2 {
+            return Err(invalid("CE set_obj_visibility missing operands"));
+        }
+        let length = stack.len();
+        let ScriptValue::Int(invisible) = stack[length - 1] else {
+            return Err(invalid("CE set_obj_visibility requires integer visibility"));
+        };
+        let ScriptValue::Pointer(handle) = stack[length - 2] else {
+            return Err(invalid("CE set_obj_visibility requires an object pointer"));
+        };
+        let key = bindings
+            .key_for(handle)
+            .ok_or_else(|| invalid("CE set_obj_visibility has no bound serialized Object"))?;
+        let header = &self
+            .snapshot
+            .objects
+            .elevations
+            .get(key.elevation)
+            .and_then(|objects| objects.get(key.ordinal))
+            .ok_or_else(|| invalid("CE set_obj_visibility target disappeared"))?
+            .record
+            .header;
+        let critter = ((header.pid as u32 >> 24) & 0x0F) == 1;
+        let mut flags = header.flags;
+        if invisible != 0 && flags & OBJECT_HIDDEN == 0 {
+            flags |= OBJECT_HIDDEN;
+            if critter {
+                flags |= OBJECT_NO_BLOCK;
+            }
+        } else if invisible == 0 && flags & OBJECT_HIDDEN != 0 {
+            flags &= !OBJECT_HIDDEN;
+            if critter {
+                flags &= !OBJECT_NO_BLOCK;
+            }
+        }
+        if flags != header.flags {
+            self.set_object_flags(key, flags)?;
+        }
+        stack.truncate(length - 2);
+        Ok(true)
+    }
+
     /// Dispatch source-backed DESCRIPTION (3), USE (6) or LOOK_AT (21)
     /// against a source-verified serialized MAP object owner.
     /// The interacting actor becomes CE source_obj and the script owner
@@ -314,7 +375,7 @@ impl RuntimeScene {
     /// All script/quest/event changes are transactional. This is a native
     /// object-event entry point, not a mouse/HUD interaction or gameplay AI.
     pub fn dispatch_object_action_transactional_bounded(
-        &self,
+        &mut self,
         environment: &mut PreparedScriptEnvironment,
         participants: (ObjectKey, ObjectKey),
         action: usize,
@@ -328,7 +389,8 @@ impl RuntimeScene {
             ));
         }
         let (source, target) = participants;
-        let mut candidate = self.refreshed_script_environment(environment)?;
+        let mut candidate_world = self.clone();
+        let mut candidate = candidate_world.refreshed_script_environment(environment)?;
         if candidate.object_queries.handle_for(source).is_none()
             || candidate.object_queries.handle_for(target).is_none()
         {
@@ -379,16 +441,22 @@ impl RuntimeScene {
         candidate.spatial_sources.insert(instance_id, source);
         let frame = candidate.local_frame_for_planned(&planned)?;
         let executed = if frame.critical {
-            Some(candidate.execute_critical_map_action_transactional_bounded(
+            let bindings = candidate.object_queries.clone();
+            let mut world_native = |opcode, stack| {
+                candidate_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+            };
+            Some(candidate.execute_critical_map_action_with_world_natives_transactional_bounded(
                 &planned,
                 clock,
                 now_millis,
                 max_critical_steps,
+                &mut world_native,
             )?)
         } else {
             candidate.prepare_noncritical_map_action_transactional(&planned)?;
             None
         };
+        *self = candidate_world;
         *environment = candidate;
         Ok(Some((planned, executed)))
     }
@@ -1326,7 +1394,7 @@ mod tests {
 
     #[test]
     fn object_use_dispatch_runs_critical_native_source_and_target_quest_mutation() {
-        let (world, mut env) = object_action_fixture(true, false, false, b"use_p_proc");
+        let (mut world, mut env) = object_action_fixture(true, false, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1364,7 +1432,7 @@ mod tests {
 
     #[test]
     fn object_use_noncritical_is_deferred_and_rejects_unbound_participants() {
-        let (world, mut env) = object_action_fixture(false, false, false, b"use_p_proc");
+        let (mut world, mut env) = object_action_fixture(false, false, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1457,7 +1525,7 @@ mod tests {
             (3_usize, &b"description_p_proc"[..]),
             (21_usize, &b"look_at_p_proc"[..]),
         ] {
-            let (world, mut env) = object_action_fixture(true, false, false, name);
+            let (mut world, mut env) = object_action_fixture(true, false, false, name);
             let (planned, executed) = world
                 .dispatch_object_action_transactional_bounded(
                     &mut env,
@@ -1494,7 +1562,7 @@ mod tests {
             clock: ScriptGameClock { ticks: 100 },
             last_visit_ticks: Some(0),
         };
-        let (world, mut env) = object_action_fixture(true, false, true, b"use_p_proc");
+        let (mut world, mut env) = object_action_fixture(true, false, true, b"use_p_proc");
         let (_, executed) = world
             .dispatch_object_action_transactional_bounded(
                 &mut env,
@@ -1513,7 +1581,7 @@ mod tests {
             [20099 + 0x0300_0001]
         );
 
-        let (world, mut rejected) = object_action_fixture(true, true, true, b"use_p_proc");
+        let (mut world, mut rejected) = object_action_fixture(true, true, true, b"use_p_proc");
         assert!(world
             .dispatch_object_action_transactional_bounded(
                 &mut rejected,
@@ -1531,7 +1599,7 @@ mod tests {
 
     #[test]
     fn object_use_critical_native_failure_does_not_commit_event_or_quest() {
-        let (world, mut env) = object_action_fixture(true, true, false, b"use_p_proc");
+        let (mut world, mut env) = object_action_fixture(true, true, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
