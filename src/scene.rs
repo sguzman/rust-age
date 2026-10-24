@@ -1103,6 +1103,81 @@ mod tests {
         );
         assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
         assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
+        // An installed MAP-owned Rust VM now reaches the transactional
+        // normal CE interpreter tick through PreparedScriptEnvironment.
+        // The synthetic INT writes a source-backed GAME_GLOBAL_VARS slot,
+        // while the decoded MAP source and its own variables stay intact.
+        let mut active = scene.unstarted_script_environment(&mut assets).unwrap();
+        let mut int_bytes = vec![0_u8; 54];
+        int_bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        int_bytes[2..6].copy_from_slice(&0_i32.to_be_bytes());
+        int_bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        int_bytes[8..12].copy_from_slice(&99_i32.to_be_bytes());
+        int_bytes[12..14].copy_from_slice(&0x80C6_u16.to_be_bytes());
+        int_bytes[14..16].copy_from_slice(&0x8011_u16.to_be_bytes());
+        let vm = crate::script_vm::ScriptVm::new(
+            crate::script_program::ScriptProgram::decode(&int_bytes).unwrap(),
+        );
+        active.scripts.runtime.register(1, vm).unwrap();
+        let binding = crate::script_binding::ScriptBinding {
+            category: 0,
+            ordinal: 0,
+            script_id: 0,
+            script_index: 0,
+            owner_id: -1,
+            path: None,
+            run_info: None,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+        };
+        active.scripts.entries.push(crate::script_binding::InstalledScriptBinding {
+            binding,
+            instance_id: Some(1),
+        });
+        active.map_locals = active.scripts.script_local_state(&scene.variables).unwrap();
+        let mut map_scripts = crate::script_data::ScriptTables {
+            categories: std::array::from_fn(|_| Vec::new()),
+            bytes_consumed: 0,
+        };
+        map_scripts.categories[0].push(crate::script_data::ScriptRecord {
+            script_id: 0,
+            next: -1,
+            subtype: vec![],
+            flags: 0,
+            script_index: 0,
+            program_token: 0,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        });
+        active.script_owners = crate::script_owner_binding::MapScriptOwners::from_map(
+            &map_scripts,
+            &scene.objects,
+            &active.object_queries,
+        )
+        .unwrap();
+        assert_eq!(
+            active.owner_for_instance(1),
+            Some(crate::script_owner_binding::ScriptOwnerResolution::NullOwner)
+        );
+        let tick = active
+            .advance_script_state_tick_bounded(
+                crate::script_native_vars::ScriptClockContext {
+                    clock: crate::script_clock::ScriptGameClock { ticks: 0 },
+                    last_visit_ticks: Some(scene.header.last_visit_time),
+                },
+                100,
+                4,
+                0,
+            )
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(1, 4)]);
+        assert!(tick.prepared_calls.is_empty());
+        assert_eq!(active.game_globals.as_ref().unwrap().values(), [99, -13]);
+        assert_eq!(active.map_locals.globals(), [12, -8]);
+        assert_eq!(scene.variables.globals, [12, -8]);
+
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
         assert!(scene
             .unstarted_script_environment(&mut assets)
