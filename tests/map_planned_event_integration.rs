@@ -3,6 +3,7 @@
 use rust_age::collision::ObjectKey;
 use rust_age::event_queue::{EventQueue, EventType};
 use rust_age::game_globals::GameGlobalState;
+use rust_age::event_queue::{EventQueue, EventType};
 use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
@@ -696,6 +697,96 @@ fn map_update_retains_prior_enter_fixed_parameter_during_native_execution() {
         .unwrap();
     assert_eq!(tick.executed_steps, [(1, 5)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [1]);
+}
+
+fn native_game_time_advance_vm(delta: i32, invalid_tail: bool) -> ScriptVm {
+    let mut code = Vec::new();
+    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&0_i32.to_be_bytes()); // GAME_GLOBAL_VARS slot
+    code.extend_from_slice(&0xC001_u16.to_be_bytes());
+    code.extend_from_slice(&delta.to_be_bytes());
+    code.extend_from_slice(&0x80FC_u16.to_be_bytes()); // GAME_TIME_ADVANCE
+    code.extend_from_slice(&0x80EA_u16.to_be_bytes()); // GAME_TIME
+    code.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+    code.extend_from_slice(
+        &(if invalid_tail { 0x80FF_u16 } else { 0x8011_u16 }).to_be_bytes(),
+    );
+    let mut bytes = vec![0_u8; 54];
+    bytes[..code.len()].copy_from_slice(&code);
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+#[test]
+fn installed_ce_game_time_advance_updates_native_clock_reads_and_quest_flag_in_one_tick() {
+    for (initial, delta, polls, expected) in [
+        (100, 864_000, 2_usize, 864_100),
+        (4, -1, 1, 3),
+        (17, 0, 1, 17),
+        (1, -864_000, 1, 1),
+    ] {
+        let mut env = environment();
+        *env.scripts.runtime.vm_mut(1).unwrap() = native_game_time_advance_vm(delta, false);
+        env.game_globals = Some(GameGlobalState::from_initial_values(&[-1]).unwrap());
+        let mut clock = ScriptGameClock { ticks: initial };
+        let mut queue = EventQueue::new();
+        let tick = env
+            .advance_script_state_with_game_time_no_due_bounded(
+                &mut queue,
+                &mut clock,
+                100,
+                6,
+                0,
+                polls,
+            )
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(1, 6)]);
+        assert!(tick.prepared_calls.is_empty());
+        assert_eq!(clock.ticks, expected);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [expected]);
+        assert!(queue.is_empty());
+        assert!(env.scripts.runtime.vm(1).unwrap().halted());
+    }
+}
+
+#[test]
+fn ce_running_game_time_advance_rolls_back_quest_clock_vm_and_queue_on_due_callback() {
+    for (initial, delta, poll_budget, due, invalid_tail) in [
+        (100, 864_000, 2_usize, Some(864_100), false),
+        (100, 0, 1, Some(100), false),
+        (100, 2 * 864_000 + 7, 3, Some(864_100), false),
+        (100, 864_000, 1, None, false), // underbounded final zero poll
+        (i32::MAX - 1, 2, 1, None, false), // signed overflow
+        (100, 1, 1, None, true), // later invalid native instruction
+    ] {
+        let mut env = environment();
+        *env.scripts.runtime.vm_mut(1).unwrap() =
+            native_game_time_advance_vm(delta, invalid_tail);
+        env.game_globals = Some(GameGlobalState::from_initial_values(&[-1]).unwrap());
+        let mut clock = ScriptGameClock { ticks: initial };
+        let mut queue = EventQueue::new();
+        if let Some(due) = due {
+            queue.add(0, due, EventType::Script, None, vec![]).unwrap();
+        }
+        let saved_queue = queue.clone();
+        assert!(env
+            .advance_script_state_with_game_time_no_due_bounded(
+                &mut queue,
+                &mut clock,
+                100,
+                6,
+                0,
+                poll_budget,
+            )
+            .is_err());
+        assert_eq!(clock.ticks, initial);
+        assert_eq!(queue, saved_queue);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [-1]);
+        let vm = env.scripts.runtime.vm(1).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert_eq!(vm.first_interpret_clock_millis(), -1);
+        assert!(!vm.halted());
+        assert!(vm.stack().is_empty());
+    }
 }
 
 #[test]
