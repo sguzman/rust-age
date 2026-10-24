@@ -1236,6 +1236,95 @@ mod tests {
         assert_eq!(active.map_locals.globals(), [12, -8]);
         assert_eq!(scene.variables.globals, [12, -8]);
 
+        // Pinned executeProc prepares a NONCRITICAL START procedure; the
+        // next Rust CE burst interprets its own SCRIPT_ACTION native using
+        // the installed action value, not an invented default action zero.
+        let mut start_bytes = vec![0_u8; 42];
+        start_bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP arg
+        start_bytes[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
+        start_bytes[24..28].copy_from_slice(&1_i32.to_be_bytes());
+        start_bytes[28..30].copy_from_slice(&0x80C7_u16.to_be_bytes()); // SCRIPT_ACTION
+        start_bytes[30..32].copy_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GAME_GLOBAL
+        start_bytes[32..34].copy_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
+        start_bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0, 0, 0, 20, 0]] {
+            for field in fields {
+                start_bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        start_bytes.extend_from_slice(&11_i32.to_be_bytes());
+        start_bytes.extend_from_slice(b"main\0start\0");
+        start_bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let start_vm = crate::script_vm::ScriptVm::new(
+            crate::script_program::ScriptProgram::decode(&start_bytes).unwrap(),
+        );
+        active.scripts.runtime.register(2, start_vm).unwrap();
+        active
+            .scripts
+            .entries
+            .push(crate::script_binding::InstalledScriptBinding {
+                binding: crate::script_binding::ScriptBinding {
+                    category: 0,
+                    ordinal: 1,
+                    script_id: 1,
+                    script_index: 1,
+                    owner_id: -1,
+                    path: None,
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(2),
+            });
+        map_scripts.categories[0].push(crate::script_data::ScriptRecord {
+            script_id: 1,
+            next: -1,
+            subtype: vec![],
+            flags: 0,
+            script_index: 1,
+            program_token: 0,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        });
+        active.map_locals = active.scripts.script_local_state(&scene.variables).unwrap();
+        active.script_owners = crate::script_owner_binding::MapScriptOwners::from_map(
+            &map_scripts,
+            &scene.objects,
+            &active.object_queries,
+        )
+        .unwrap();
+        let plans = active
+            .scripts
+            .plan_map_lifecycle(crate::script_lifecycle::MapLifecyclePhase::Start, -1, 0)
+            .unwrap();
+        assert_eq!(plans.len(), 1);
+        assert_eq!(plans[0].instance_id, 2);
+        assert_eq!(plans[0].action, 1);
+        let frame = active
+            .prepare_noncritical_map_action_transactional(&plans[0])
+            .unwrap();
+        assert_eq!(frame.body_offset, 20);
+        assert_eq!(active.scripts.runtime.vm(2).unwrap().pc(), 20);
+        assert_eq!(active.invocations.get(&2).unwrap().action(), 1);
+        assert_eq!(active.game_globals.as_ref().unwrap().values(), [99, -13]);
+        let action_tick = active
+            .advance_script_state_tick_bounded(
+                crate::script_native_vars::ScriptClockContext {
+                    clock: crate::script_clock::ScriptGameClock { ticks: 0 },
+                    last_visit_ticks: Some(scene.header.last_visit_time),
+                },
+                101,
+                5,
+                0,
+            )
+            .unwrap();
+        assert_eq!(action_tick.executed_steps, [(2, 5), (1, 0)]);
+        assert_eq!(active.game_globals.as_ref().unwrap().values(), [99, 1]);
+        assert_eq!(active.map_locals.globals(), [12, -8]);
+        assert_eq!(scene.variables.globals, [12, -8]);
+
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
         assert!(scene
             .unstarted_script_environment(&mut assets)
