@@ -822,16 +822,20 @@ fn source_order_due_conditions_observe_native_game_time_advance_within_same_scan
     let mut queue = EventQueue::new();
     let mut clock = ScriptGameClock { ticks: 100 };
     let tick = env
-        .advance_script_state_with_game_time_no_due_bounded(
-            &mut queue, &mut clock, 100, 0, 6, 2,
-        )
+        .advance_script_state_with_game_time_no_due_bounded(&mut queue, &mut clock, 100, 0, 6, 2)
         .unwrap();
     assert_eq!(tick.executed_steps, [(1, 0)]);
     assert_eq!(tick.prepared_calls.len(), 1);
     assert_eq!(tick.prepared_calls[0].program_id, 1);
     assert_eq!(tick.prepared_calls[0].procedure_index, 2);
-    assert_eq!(env.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags, 2);
-    assert_eq!(env.scripts.runtime.vm(1).unwrap().runtime_procedures()[2].flags, 0);
+    assert_eq!(
+        env.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags,
+        2
+    );
+    assert_eq!(
+        env.scripts.runtime.vm(1).unwrap().runtime_procedures()[2].flags,
+        0
+    );
     assert_eq!(clock.ticks, 864_100);
     assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 36);
     assert!(queue.is_empty());
