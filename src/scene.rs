@@ -210,10 +210,12 @@ impl PreparedScriptEnvironment {
     /// Run a bounded Rust-owned source-ordered CE script tick on the MAP
     /// environment assembled by StaticScene::unstarted_script_environment.
     /// All instances inherit their verified original MAP owner joins and
-    /// object-query handles. Source/target event pointers remain UNSET (not
-    /// fictional NULL objects), and a caller supplies the explicit game
-    /// clock. The event invocation starts at the initial CE action value
-    /// zero; full gameplay event lifecycle and overrides remain unavailable.
+    /// object-query handles. Before an explicit lifecycle invocation,
+    /// source/target event pointers remain UNSET (not fictional NULLs).
+    /// A prepared local MAP action authorizes source=NULL and the CE
+    /// target fallback to its unique verified owner, including the
+    /// nonserialized generated system Object. Caller supplies the clock.
+    /// Full gameplay event lifecycle and overrides remain unavailable.
     ///
     /// Mutations to attached script VMs, MAP/local variables and loaded
     /// GAME_GLOBAL_VARS commit only after the entire tick succeeds. Failure
@@ -2884,6 +2886,27 @@ mod tests {
         assert_eq!(target_tick.executed_steps, [(id, 5)]);
         assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [-1, -1]);
         assert_eq!(unbound.map_locals.locals(), [99]);
+
+        // Merely installing the source-created owner does not fabricate
+        // active scr_set_objs/exec_script_proc participants. A TARGET_OBJ
+        // native in an unstarted interpreter must still fail closed.
+        let mut unprepared = header_scene
+            .unstarted_script_environment(&mut assets)
+            .unwrap();
+        let (unprepared_id, _) = header_scene
+            .install_header_system_script(&mut assets, &mut unprepared)
+            .unwrap()
+            .unwrap();
+        *unprepared.scripts.runtime.vm_mut(unprepared_id).unwrap() =
+            crate::script_vm::ScriptVm::new(
+                crate::script_program::ScriptProgram::decode(&inherited_target).unwrap(),
+            );
+        assert!(unprepared
+            .advance_script_state_tick_bounded(context, 202, 5, 0)
+            .is_err());
+        assert!(unprepared.invocations.is_empty());
+        assert_eq!(unprepared.game_globals.as_ref().unwrap().values(), [7, -13]);
+        assert_eq!(unprepared.scripts.runtime.vm(unprepared_id).unwrap().pc(), 0);
 
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
         assert!(scene
