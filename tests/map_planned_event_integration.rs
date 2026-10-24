@@ -169,6 +169,134 @@ fn environment() -> PreparedScriptEnvironment {
     }
 }
 
+fn synthetic_map_enter_with_flags(flags: i32) -> ScriptVm {
+    let mut bytes = vec![0_u8; 42];
+    bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+    bytes.extend_from_slice(&2_i32.to_be_bytes());
+    let mut strings = Vec::new();
+    for (name, flag, body) in [
+        (b"main".as_slice(), 0_i32, 0_i32),
+        (b"map_enter_p_proc".as_slice(), flags, 20_i32),
+    ] {
+        let offset = 4 + strings.len() as i32;
+        for field in [offset, flag, 0, 0, body, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        strings.extend_from_slice(name);
+        strings.push(0);
+    }
+    bytes.extend_from_slice(&(strings.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&strings);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+fn two_enter_scripts(second_flags: i32) -> PreparedScriptEnvironment {
+    let mut env = environment();
+    env.scripts
+        .runtime
+        .register(2, synthetic_map_enter_with_flags(second_flags))
+        .unwrap();
+    let second = InstalledScriptBinding {
+        binding: ScriptBinding {
+            category: 0,
+            ordinal: 1,
+            script_id: 18,
+            script_index: 1,
+            owner_id: -1,
+            path: Some("scripts/SECOND.int".to_owned()),
+            run_info: None,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+        },
+        instance_id: Some(2),
+    };
+    env.scripts.entries.push(second);
+    let records = [17, 18]
+        .into_iter()
+        .map(|script_id| ScriptRecord {
+            script_id,
+            next: -1,
+            subtype: vec![],
+            flags: 0,
+            script_index: 0,
+            program_token: -1,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        })
+        .collect();
+    let tables = ScriptTables {
+        categories: [records, vec![], vec![], vec![], vec![]],
+        bytes_consumed: 0,
+    };
+    let empty_objects = ObjectTables {
+        elevations: [vec![], vec![], vec![]],
+        total_objects: 0,
+        bytes_consumed: 0,
+    };
+    env.script_owners =
+        MapScriptOwners::from_map(&tables, &empty_objects, &env.object_queries).unwrap();
+    env.map_locals = env
+        .scripts
+        .script_local_state(&MapVariables {
+            globals: vec![],
+            locals: vec![],
+        })
+        .unwrap();
+    env
+}
+
+#[test]
+fn entire_map_enter_phase_stages_source_order_and_fixed_param_atomically() {
+    let mut env = two_enter_scripts(0);
+    let staged = env
+        .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap();
+    assert_eq!(
+        staged.iter().map(|frame| frame.program_id).collect::<Vec<_>>(),
+        [1, 2]
+    );
+    for id in [1, 2] {
+        let vm = env.scripts.runtime.vm(id).unwrap();
+        assert_eq!(vm.pc(), 20);
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+        assert_eq!(env.invocations.get(&id).unwrap().action(), 15);
+        assert_eq!(env.invocations.get(&id).unwrap().fixed_parameter(), 1);
+    }
+    assert!(env.map_locals.globals().is_empty());
+    assert!(env.invocations.len() == 2);
+}
+
+#[test]
+fn failed_later_critical_lifecycle_action_rolls_back_all_prepared_scripts() {
+    let mut env = two_enter_scripts(0x10);
+    assert!(env
+        .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Enter, 999, 1)
+        .is_err());
+    assert!(env.invocations.is_empty());
+    for id in [1, 2] {
+        let vm = env.scripts.runtime.vm(id).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.return_stack().is_empty());
+        assert!(vm.stack().is_empty());
+    }
+    // Duplicate aliases must not stage nested calls or persist partial
+    // action metadata even when both aliases refer to valid procedures.
+    let mut duplicate = two_enter_scripts(0);
+    let mut alias = duplicate.scripts.entries[1].clone();
+    alias.binding.ordinal = 2;
+    alias.binding.script_id = 19;
+    duplicate.scripts.entries.push(alias);
+    assert!(duplicate
+        .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Enter, 999, 0)
+        .is_err());
+    assert!(duplicate.invocations.is_empty());
+    assert_eq!(duplicate.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert_eq!(duplicate.scripts.runtime.vm(2).unwrap().pc(), 0);
+}
+
 #[test]
 fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     let env = environment();
