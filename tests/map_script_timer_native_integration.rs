@@ -6,7 +6,7 @@ use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
-use rust_age::scene::PreparedScriptEnvironment;
+use rust_age::scene::{PreparedScriptEnvironment, ScriptTimeAdvanceBudget};
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
 use rust_age::script_clock::ScriptGameClock;
 use rust_age::script_data::{ScriptRecord, ScriptTables};
@@ -25,6 +25,10 @@ const OWNER: ObjectKey = ObjectKey {
 };
 
 fn procedure(main: &[u8]) -> ScriptVm {
+    procedure_with_flags(main, false)
+}
+
+fn procedure_with_flags(main: &[u8], timed_critical: bool) -> ScriptVm {
     assert!(main.len() <= 24);
     let mut bytes = vec![0_u8; 42];
     bytes[..main.len()].copy_from_slice(main);
@@ -48,7 +52,8 @@ fn procedure(main: &[u8]) -> ScriptVm {
         (b"timed_event_p_proc".as_slice(), 24_i32),
     ] {
         let offset = 4 + names.len() as i32;
-        for field in [offset, 0, 0, 0, body, 0] {
+        let flags = if timed_critical && body == 24 { 0x10 } else { 0 };
+        for field in [offset, flags, 0, 0, body, 0] {
             bytes.extend_from_slice(&field.to_be_bytes());
         }
         names.extend_from_slice(name);
@@ -295,6 +300,117 @@ fn timer_remove_native_clears_all_event_types_owned_by_same_ce_object() {
     assert!(!queue.find(Some(OWNER), EventType::Script));
     assert_eq!(queue.next_time(), 109);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+}
+
+fn timed_payload(value: i32) -> Vec<u8> {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&SID.to_be_bytes());
+    payload.extend_from_slice(&value.to_be_bytes());
+    payload
+}
+
+fn budget() -> ScriptTimeAdvanceBudget {
+    ScriptTimeAdvanceBudget {
+        max_queue_polls: 3,
+        max_events_per_poll: 1,
+        max_critical_steps: 5,
+    }
+}
+
+#[test]
+fn ce_game_time_advance_polls_script_timers_after_each_day_and_final_zero() {
+    const DAY: i32 = 864_000;
+    let mut env = environment(procedure_with_flags(&0x8000_u16.to_be_bytes(), true));
+    let mut queue = EventQueue::new();
+    let mut clock = ScriptGameClock { ticks: 0 };
+    queue
+        .add(0, DAY, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    queue
+        .add(0, DAY * 2, EventType::Script, Some(OWNER), timed_payload(22))
+        .unwrap();
+    let completed = env
+        .advance_game_time_with_script_timers_transactional_bounded(
+            &mut queue,
+            &mut clock,
+            DAY * 2,
+            1000,
+            budget(),
+        )
+        .unwrap();
+    assert_eq!(completed.increments, [DAY, DAY, 0]);
+    assert_eq!(
+        completed
+            .due_events_per_poll
+            .iter()
+            .map(Vec::len)
+            .collect::<Vec<_>>(),
+        [1, 1, 0]
+    );
+    assert_eq!(completed.due_events_per_poll[0][0].0.fixed_parameter, 11);
+    assert_eq!(completed.due_events_per_poll[1][0].0.fixed_parameter, 22);
+    assert_eq!(completed.due_events_per_poll[0][0].1, Some(5));
+    assert_eq!(completed.due_events_per_poll[1][0].1, Some(5));
+    assert_eq!(clock.ticks, DAY * 2);
+    assert!(queue.is_empty());
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [22]);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 22);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 22);
+}
+
+#[test]
+fn later_due_foreign_queue_event_reverts_earlier_day_quest_and_time_progress() {
+    const DAY: i32 = 864_000;
+    let mut env = environment(procedure_with_flags(&0x8000_u16.to_be_bytes(), true));
+    let mut queue = EventQueue::new();
+    let mut clock = ScriptGameClock { ticks: 0 };
+    queue
+        .add(0, DAY, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    queue
+        .add(0, DAY * 2, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    assert!(env
+        .advance_game_time_with_script_timers_transactional_bounded(
+            &mut queue,
+            &mut clock,
+            DAY * 2,
+            1000,
+            budget(),
+        )
+        .is_err());
+    assert_eq!(clock.ticks, 0);
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.next_time(), DAY);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+
+    let mut limited = budget();
+    limited.max_queue_polls = 2;
+    assert!(env
+        .advance_game_time_with_script_timers_transactional_bounded(
+            &mut queue,
+            &mut clock,
+            DAY * 2,
+            1000,
+            limited,
+        )
+        .is_err());
+    assert_eq!(clock.ticks, 0);
+    assert_eq!(queue.len(), 2);
+    let mut over = ScriptGameClock { ticks: i32::MAX - 1 };
+    assert!(env
+        .advance_game_time_with_script_timers_transactional_bounded(
+            &mut queue,
+            &mut over,
+            10,
+            1000,
+            budget(),
+        )
+        .is_err());
+    assert_eq!(over.ticks, i32::MAX - 1);
+    assert_eq!(queue.len(), 2);
 }
 
 #[test]
