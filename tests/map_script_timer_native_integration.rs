@@ -69,6 +69,103 @@ fn procedure_with_flags(main: &[u8], timed_critical: bool) -> ScriptVm {
     ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
 }
 
+fn critical_timed_timer_opcode(delay: i32, fixed_param: i32, terminator: u16) -> ScriptVm {
+    // CE timed_event_p_proc at offset 20. It consumes the setupCall
+    // argument, resolves SELF_OBJ from the installed MAP owner, then
+    // schedules one more timer on the original queue. All instructions
+    // fit before the source-format procedure table at byte offset 42.
+    let mut bytes = vec![0_u8; 42];
+    bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+    bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
+    bytes[22..24].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+    bytes[24..26].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT delay
+    bytes[26..30].copy_from_slice(&delay.to_be_bytes());
+    bytes[30..32].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT param
+    bytes[32..36].copy_from_slice(&fixed_param.to_be_bytes());
+    bytes[36..38].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
+    bytes[38..40].copy_from_slice(&terminator.to_be_bytes());
+    bytes.extend_from_slice(&2_i32.to_be_bytes());
+    let mut names = Vec::new();
+    for (name, flags, body) in [
+        (b"main".as_slice(), 0_i32, 0_i32),
+        (b"timed_event_p_proc".as_slice(), 0x10_i32, 20_i32),
+    ] {
+        let offset = 4 + names.len() as i32;
+        for field in [offset, flags, 0, 0, body, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        names.extend_from_slice(name);
+        names.push(0);
+    }
+    bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&names);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+#[test]
+fn critical_due_callback_requeues_source_owned_timer_on_same_queue() {
+    let mut env = environment(critical_timed_timer_opcode(5, 99, 0x8021));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    let applied = env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue,
+            clock(105),
+            105,
+            1005,
+            1,
+            6,
+        )
+        .unwrap();
+    assert_eq!(applied.len(), 1);
+    assert_eq!(applied[0].0.fixed_parameter, 11);
+    assert_eq!(applied[0].1, Some(6));
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 110);
+    let fresh = queue.pop_due(110).unwrap();
+    let decoded = rust_age::script_timer::ScriptTimerEvent::decode(&fresh).unwrap();
+    assert_eq!(decoded.owner, Some(OWNER));
+    assert_eq!(decoded.sid, SID);
+    assert_eq!(decoded.fixed_parameter, 99);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 22);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 11);
+}
+
+#[test]
+fn critical_due_requeue_same_tick_or_late_opcode_failure_rolls_back() {
+    for (delay, terminator, max_events) in [
+        (0_i32, 0x8021_u16, 1_usize),
+        (5, 0x80FF, 2),
+    ] {
+        let mut env = environment(critical_timed_timer_opcode(delay, 99, terminator));
+        let mut queue = EventQueue::new();
+        queue
+            .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+            .unwrap();
+        assert!(env
+            .process_due_script_timers_transactional_bounded(
+                &mut queue,
+                clock(105),
+                105,
+                1005,
+                max_events,
+                6,
+            )
+            .is_err());
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.next_time(), 105);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert!(env.invocations.is_empty());
+        let vm = env.scripts.runtime.vm(1).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+    }
+}
+
 fn main_add(handle: Option<i32>, terminal: u16) -> ScriptVm {
     let mut code = Vec::new();
     if let Some(handle) = handle {
