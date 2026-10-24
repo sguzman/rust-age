@@ -1322,6 +1322,231 @@ mod tests {
         assert!(unchanged.return_stack().is_empty());
     }
 
+    fn conditional_core_vm(result: i32, flags: i32, invalid_condition: bool) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..4].copy_from_slice(&[0x80, 0x00, 0x80, 0x00]);
+        bytes[20..22].copy_from_slice(
+            &(if invalid_condition { 0x80FC_u16 } else { 0xC001_u16 }).to_be_bytes(),
+        );
+        bytes[22..26].copy_from_slice(&result.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, flags, 10, 20, 36, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn core_condition_tick_stages_true_local_call_for_next_burst() {
+        let mut rt = ScriptRuntime::new();
+        rt.register(7, conditional_core_vm(1, 0x03, false)).unwrap();
+        // Old timed-only entrypoint remains unavailable for a conditional
+        // even though its simultaneous timed bit is strictly due.
+        assert!(rt.advance_core_tick_transactional_bounded(100, 1).is_err());
+        assert_eq!(rt.vm(7).unwrap().pc(), 0);
+
+        let first = rt
+            .advance_core_tick_with_conditions_transactional_bounded(100, 1, 2)
+            .unwrap();
+        assert_eq!(first.executed_steps, [(7, 1)]);
+        assert_eq!(
+            first.prepared_calls,
+            [DueProcedure {
+                program_id: 7,
+                procedure_index: 1,
+            }]
+        );
+        let vm = rt.vm(7).unwrap();
+        assert_eq!(vm.pc(), 36);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(2), ScriptValue::Int(20)]);
+        assert_eq!(vm.stack().len(), 4);
+
+        // The deferred local procedure's POP marker and POP_FLAGS_EXIT
+        // are interpreted only by the subsequent explicit core tick.
+        let second = rt
+            .advance_core_tick_with_conditions_transactional_bounded(101, 2, 2)
+            .unwrap();
+        assert_eq!(second.executed_steps, [(7, 2)]);
+        assert!(second.prepared_calls.is_empty());
+        let vm = rt.vm(7).unwrap();
+        assert_eq!(vm.pc(), 20);
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(2)]);
+        assert!(vm.stack().is_empty());
+        assert!(!vm.halted());
+    }
+
+    #[test]
+    fn core_conditional_false_preserves_flags_despite_overdue_timer() {
+        let mut rt = ScriptRuntime::new();
+        rt.register(7, conditional_core_vm(0, 0x03, false)).unwrap();
+        let tick = rt
+            .advance_core_tick_with_conditions_transactional_bounded(100, 0, 2)
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(7, 0)]);
+        assert!(tick.prepared_calls.is_empty());
+        assert_eq!(rt.vm(7).unwrap().runtime_procedures()[1].flags, 0x03);
+        assert_eq!(rt.vm(7).unwrap().pc(), 0);
+        assert!(rt.vm(7).unwrap().stack().is_empty());
+        assert!(rt.vm(7).unwrap().return_stack().is_empty());
+    }
+
+    #[test]
+    fn core_condition_failure_rolls_back_newer_program_and_clock() {
+        let mut rt = ScriptRuntime::new();
+        rt.register(1, conditional_core_vm(1, 0x02, true)).unwrap();
+        rt.register(2, conditional_core_vm(1, 0x02, false)).unwrap();
+        assert!(rt
+            .advance_core_tick_with_conditions_transactional_bounded(900, 1, 2)
+            .is_err());
+        for id in [1, 2] {
+            let vm = rt.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.first_interpret_clock_millis(), -1);
+            assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+        }
+        // A condition needs two instructions (PUSH, STOP); one step
+        // must reject transactionally without consuming event flags.
+        let mut too_short = ScriptRuntime::new();
+        too_short
+            .register(3, conditional_core_vm(1, 0x02, false))
+            .unwrap();
+        assert!(too_short
+            .advance_core_tick_with_conditions_transactional_bounded(10, 0, 1)
+            .is_err());
+        assert_eq!(too_short.vm(3).unwrap().pc(), 0);
+        assert_eq!(too_short.vm(3).unwrap().runtime_procedures()[1].flags, 0x02);
+    }
+
+    #[test]
+    fn core_conditions_persist_newest_program_first_with_explicit_suspension() {
+        let mut rt = ScriptRuntime::new();
+        rt.register(1, conditional_core_vm(1, 0x02, false)).unwrap();
+        rt.register(2, conditional_core_vm(1, 0x02, false)).unwrap();
+        rt.set_suspended(true);
+        assert!(rt
+            .prepare_due_core_with_conditions_transactional_bounded(100, 2)
+            .unwrap()
+            .is_empty());
+        assert_eq!(rt.vm(1).unwrap().runtime_procedures()[1].flags, 0x02);
+        rt.set_suspended(false);
+        let calls = rt
+            .prepare_due_core_with_conditions_transactional_bounded(100, 2)
+            .unwrap();
+        assert_eq!(
+            calls,
+            [
+                DueProcedure {
+                    program_id: 2,
+                    procedure_index: 1,
+                },
+                DueProcedure {
+                    program_id: 1,
+                    procedure_index: 1,
+                },
+            ]
+        );
+        for id in [1, 2] {
+            assert_eq!(rt.vm(id).unwrap().pc(), 36);
+            assert_eq!(rt.vm(id).unwrap().runtime_procedures()[1].flags, 0);
+        }
+    }
+
+    #[test]
+    fn same_burst_call_when_can_arm_and_prepare_local_condition() {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&20_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[12..14].copy_from_slice(&0x8007_u16.to_be_bytes()); // CALL_WHEN
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0, 0, 0, 36, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+
+        let mut rt = ScriptRuntime::new();
+        rt.register(7, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let tick = rt
+            .advance_core_tick_with_conditions_transactional_bounded(200, 3, 2)
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(7, 3)]);
+        assert_eq!(tick.prepared_calls.len(), 1);
+        let vm = rt.vm(7).unwrap();
+        assert_eq!(vm.pc(), 36);
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(14), ScriptValue::Int(20)]);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(vm.runtime_procedures()[1].condition_offset, 20);
+    }
+
+    #[test]
+    fn sequential_conditions_retain_stack_for_later_procedure_in_same_poll() {
+        let mut bytes = vec![0_u8; 62];
+        bytes[0..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&77_i32.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[28..32].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[32..34].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[36..38].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[38..42].copy_from_slice(&77_i32.to_be_bytes());
+        bytes[42..44].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+        bytes[44..46].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[52..56].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&3_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, 0x02, 0, 20, 52, 0],
+            [13_i32, 0x02, 0, 36, 52, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&13_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0one\0two\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+
+        let mut rt = ScriptRuntime::new();
+        rt.register(7, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let calls = rt
+            .prepare_due_core_with_conditions_transactional_bounded(100, 3)
+            .unwrap();
+        assert_eq!(
+            calls,
+            [DueProcedure {
+                program_id: 7,
+                procedure_index: 2,
+            }]
+        );
+        let vm = rt.vm(7).unwrap();
+        assert_eq!(vm.pc(), 52);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[2].flags, 0);
+        assert_eq!(vm.stack().len(), 4); // zero-arg call frame
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+    }
+
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
