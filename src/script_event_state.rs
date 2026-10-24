@@ -387,6 +387,74 @@ mod tests {
     }
 
     #[test]
+    fn source_created_header_object_supports_native_self_and_inherited_target() {
+        let empty = ObjectTables {
+            elevations: std::array::from_fn(|_| vec![]),
+            total_objects: 0,
+            bytes_consumed: 0,
+        };
+        let mut objects = MapObjectReadBindings::from_tables(&empty).unwrap();
+        let owner_handle = objects.add_generated_header_system_object().unwrap();
+        assert_eq!(owner_handle, 1);
+        assert_eq!(objects.key_for(owner_handle), None);
+        assert!(objects.add_generated_header_system_object().is_err());
+
+        let mut event =
+            DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
+                handle: owner_handle,
+            });
+        event.begin_action(15, Some(1), &objects).unwrap();
+        let snapshot = event.snapshot(&objects, clock()).unwrap();
+        assert_eq!(snapshot.target, Some(owner_handle));
+        assert_eq!(snapshot.source, Some(0));
+        for (which, property, expected) in [
+            (
+                crate::script_native_vars::SELF_OBJ_OPCODE,
+                crate::script_object_read::OBJ_PID_OPCODE,
+                -1,
+            ),
+            (
+                crate::script_native_vars::TARGET_OBJ_OPCODE,
+                crate::script_object_read::TILE_NUM_OPCODE,
+                1,
+            ),
+            (
+                crate::script_native_vars::SELF_OBJ_OPCODE,
+                crate::script_object_read::OBJ_ART_FID_OPCODE,
+                0x0500_000C,
+            ),
+        ] {
+            let mut stack = Vec::new();
+            crate::script_native_vars::apply_readonly_event_native_opcode(
+                snapshot,
+                event.invocation(),
+                which,
+                &mut stack,
+            )
+            .unwrap();
+            assert_eq!(stack, [ScriptValue::Pointer(owner_handle)]);
+            crate::script_native_vars::apply_readonly_event_native_opcode(
+                snapshot,
+                event.invocation(),
+                property,
+                &mut stack,
+            )
+            .unwrap();
+            assert_eq!(stack, [ScriptValue::Int(expected)]);
+        }
+        event.finish_action().unwrap();
+
+        // No ObjectKey or forged native pointer can alias the nonserialized
+        // header object. Explicitly reject unregistered owner handles.
+        let mut forged =
+            DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
+                handle: owner_handle + 1,
+            });
+        assert!(forged.begin_action(15, None, &objects).is_err());
+        assert!(!forged.is_active());
+    }
+
+    #[test]
     fn invalid_updates_are_atomic_and_unowned_nonspatial_is_null() {
         let objects = keys();
         let mut event = DetachedScriptEvent::new(ScriptOwnerResolution::NullOwner);
