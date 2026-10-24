@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare C++ and Rust source-ordered CE core-only interpreter ticks
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_core_tick_oracle.cc -o /tmp/rust-age-ce-core-tick
+          /tmp/rust-age-ce-core-tick tests/script_core_tick_cases.txt > /tmp/rust-age-ce-core-tick.txt
+          cargo run --quiet --bin script_core_tick_probe > /tmp/rust-age-rust-core-tick.txt
+          diff -u /tmp/rust-age-ce-core-tick.txt /tmp/rust-age-rust-core-tick.txt
       - name: Compare C++ and Rust CE deferred timed local call preparation
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_due_prepare_oracle.cc -o /tmp/rust-age-ce-due-prepare
