@@ -17,8 +17,8 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
-use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_event_state::DetachedScriptEvent;
+use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
 use crate::script_native_vars::{
@@ -249,9 +249,11 @@ impl PreparedScriptEnvironment {
             .get(&planned.instance_id)
             .copied()
             .unwrap_or_else(ScriptInvocationState::installed);
-        if !invocation.begin_action(i32::try_from(planned.action).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE MAP action outside i32")
-        })?) {
+        if !invocation.begin_action(
+            i32::try_from(planned.action).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE MAP action outside i32")
+            })?,
+        ) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE MAP lifecycle invocation is absent",
