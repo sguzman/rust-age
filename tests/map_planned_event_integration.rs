@@ -165,6 +165,7 @@ fn environment() -> PreparedScriptEnvironment {
         object_queries: queries,
         script_owners: owners,
         map_last_visit_ticks: 0,
+        invocations: std::collections::BTreeMap::new(),
     }
 }
 
