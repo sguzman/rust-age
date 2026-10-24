@@ -2150,8 +2150,11 @@ impl StaticScene {
                 && entry.binding.category == 0
                 && entry.binding.script_id == rust_sid
                 && entry.binding.script_index == self.header.script_index - 1
-                && environment.owner_for_instance(header_instance)
-                    .is_some_and(|owner| matches!(owner, ScriptOwnerResolution::GeneratedSystemBound { .. }))
+                && environment
+                    .owner_for_instance(header_instance)
+                    .is_some_and(|owner| {
+                        matches!(owner, ScriptOwnerResolution::GeneratedSystemBound { .. })
+                    })
         });
         let binding = matches.next().ok_or_else(|| {
             io::Error::new(
@@ -2639,13 +2642,23 @@ mod tests {
         assert_eq!(fresh.scripts.runtime.len(), 1);
         assert_eq!(
             fresh.owner_for_instance(instance),
-            Some(crate::script_owner_binding::ScriptOwnerResolution::GeneratedSystemBound {
-                handle: 1,
-            })
+            Some(
+                crate::script_owner_binding::ScriptOwnerResolution::GeneratedSystemBound {
+                    handle: 1,
+                }
+            )
         );
         let object = fresh.object_queries.snapshots()[0];
-        assert_eq!((object.handle, object.tile, object.elevation, object.pid, object.fid),
-            (1, 1, 0, -1, 0x0500_000C));
+        assert_eq!(
+            (
+                object.handle,
+                object.tile,
+                object.elevation,
+                object.pid,
+                object.fid
+            ),
+            (1, 1, 0, -1, 0x0500_000C)
+        );
         assert_eq!(fresh.map_locals.locals(), [99]);
         assert_eq!(fresh.map_locals.globals(), [12, -8]);
         assert!(header_scene
