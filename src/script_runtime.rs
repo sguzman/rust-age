@@ -563,11 +563,10 @@ impl ScriptRuntime {
     ) -> io::Result<PreparedCoreTick> {
         let mut next = self.clone();
         let executed_steps = next.interpret_core_bursts_bounded(now_millis, cpu_burst)?;
-        let prepared_calls =
-            next.prepare_due_core_with_conditions_transactional_bounded(
-                now_millis,
-                max_steps_per_condition,
-            )?;
+        let prepared_calls = next.prepare_due_core_with_conditions_transactional_bounded(
+            now_millis,
+            max_steps_per_condition,
+        )?;
         *self = next;
         Ok(PreparedCoreTick {
             executed_steps,
@@ -1326,7 +1325,12 @@ mod tests {
         let mut bytes = vec![0_u8; 42];
         bytes[0..4].copy_from_slice(&[0x80, 0x00, 0x80, 0x00]);
         bytes[20..22].copy_from_slice(
-            &(if invalid_condition { 0x80FC_u16 } else { 0xC001_u16 }).to_be_bytes(),
+            &(if invalid_condition {
+                0x80FC_u16
+            } else {
+                0xC001_u16
+            })
+            .to_be_bytes(),
         );
         bytes[22..26].copy_from_slice(&result.to_be_bytes());
         bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
@@ -1366,7 +1370,10 @@ mod tests {
         let vm = rt.vm(7).unwrap();
         assert_eq!(vm.pc(), 36);
         assert_eq!(vm.runtime_procedures()[1].flags, 0);
-        assert_eq!(vm.return_stack(), [ScriptValue::Int(2), ScriptValue::Int(20)]);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(2), ScriptValue::Int(20)]
+        );
         assert_eq!(vm.stack().len(), 4);
 
         // The deferred local procedure's POP marker and POP_FLAGS_EXIT
@@ -1493,7 +1500,10 @@ mod tests {
         assert_eq!(tick.prepared_calls.len(), 1);
         let vm = rt.vm(7).unwrap();
         assert_eq!(vm.pc(), 36);
-        assert_eq!(vm.return_stack(), [ScriptValue::Int(14), ScriptValue::Int(20)]);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(14), ScriptValue::Int(20)]
+        );
         assert_eq!(vm.runtime_procedures()[1].flags, 0);
         assert_eq!(vm.runtime_procedures()[1].condition_offset, 20);
     }
@@ -1544,7 +1554,10 @@ mod tests {
         assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
         assert_eq!(vm.runtime_procedures()[2].flags, 0);
         assert_eq!(vm.stack().len(), 4); // zero-arg call frame
-        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(0), ScriptValue::Int(20)]
+        );
     }
 
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
