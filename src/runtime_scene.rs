@@ -304,8 +304,8 @@ impl RuntimeScene {
         })
     }
 
-    /// Dispatch an explicitly requested USE (6) object
-    /// action against a source-verified serialized MAP object owner.
+    /// Dispatch source-backed DESCRIPTION (3), USE (6) or LOOK_AT (21)
+    /// against a source-verified serialized MAP object owner.
     /// The interacting actor becomes CE source_obj and the script owner
     /// becomes target_obj; never infer either from a saved object ID.
     ///
@@ -322,8 +322,8 @@ impl RuntimeScene {
         now_millis: u32,
         max_critical_steps: usize,
     ) -> io::Result<Option<(PlannedMapAction, Option<usize>)>> {
-        if action != 6 {
-            return Err(invalid("CE object event requires USE procedure"));
+        if !matches!(action, 3 | 6 | 21) {
+            return Err(invalid("CE object event action lacks verified participant semantics"));
         }
         let (source, target) = participants;
         let mut candidate = self.refreshed_script_environment(environment)?;
@@ -1188,7 +1188,7 @@ mod tests {
             .is_err());
     }
 
-    fn object_use_vm(critical: bool, invalid_after_write: bool, with_overrides: bool) -> ScriptVm {
+    fn object_action_vm(critical: bool, invalid_after_write: bool, with_overrides: bool, name: &[u8]) -> ScriptVm {
         // Real source-shaped CE local setupCall followed by SOURCE_OBJ,
         // TARGET_OBJ, object-property reads and a quest-global mutation.
         let mut body = Vec::new();
@@ -1237,16 +1237,20 @@ mod tests {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }
         }
-        bytes.extend_from_slice(&16_i32.to_be_bytes());
-        bytes.extend_from_slice(b"main\0use_p_proc\0");
+        let mut names = b"main\0".to_vec();
+        names.extend_from_slice(name);
+        names.push(0);
+        bytes.extend_from_slice(&i32::try_from(names.len()).unwrap().to_be_bytes());
+        bytes.extend_from_slice(&names);
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
     }
 
-    fn object_use_fixture(
+    fn object_action_fixture(
         critical: bool,
         invalid_after_write: bool,
         with_overrides: bool,
+        name: &[u8],
     ) -> (RuntimeScene, PreparedScriptEnvironment) {
         let mut world = scene();
         let sid = 0x0300_0001;
@@ -1270,7 +1274,7 @@ mod tests {
         runtime
             .register(
                 7,
-                object_use_vm(critical, invalid_after_write, with_overrides),
+                object_action_vm(critical, invalid_after_write, with_overrides, name),
             )
             .unwrap();
         let scripts = BoundScriptRuntime {
@@ -1315,7 +1319,7 @@ mod tests {
 
     #[test]
     fn object_use_dispatch_runs_critical_native_source_and_target_quest_mutation() {
-        let (world, mut env) = object_use_fixture(true, false, false);
+        let (world, mut env) = object_action_fixture(true, false, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1353,7 +1357,7 @@ mod tests {
 
     #[test]
     fn object_use_noncritical_is_deferred_and_rejects_unbound_participants() {
-        let (world, mut env) = object_use_fixture(false, false, false);
+        let (world, mut env) = object_action_fixture(false, false, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1442,7 +1446,7 @@ mod tests {
             clock: ScriptGameClock { ticks: 100 },
             last_visit_ticks: Some(0),
         };
-        let (world, mut env) = object_use_fixture(true, false, true);
+        let (world, mut env) = object_action_fixture(true, false, true, b"use_p_proc");
         let (_, executed) = world
             .dispatch_object_action_transactional_bounded(
                 &mut env,
@@ -1461,7 +1465,7 @@ mod tests {
             [20099 + 0x0300_0001]
         );
 
-        let (world, mut rejected) = object_use_fixture(true, true, true);
+        let (world, mut rejected) = object_action_fixture(true, true, true, b"use_p_proc");
         assert!(world
             .dispatch_object_action_transactional_bounded(
                 &mut rejected,
@@ -1479,7 +1483,7 @@ mod tests {
 
     #[test]
     fn object_use_critical_native_failure_does_not_commit_event_or_quest() {
-        let (world, mut env) = object_use_fixture(true, true, false);
+        let (world, mut env) = object_action_fixture(true, true, false, b"use_p_proc");
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
