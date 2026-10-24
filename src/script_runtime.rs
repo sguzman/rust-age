@@ -1025,6 +1025,38 @@ mod tests {
     }
 
     #[test]
+    fn ce_noncritical_lifecycle_action_prepares_real_deferred_frame() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(9, local_action_vm(0, 0, 20)).unwrap();
+        let frame = runtime
+            .prepare_noncritical_local_action_transactional(9, 1)
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.program_id, 9);
+        assert_eq!(frame.procedure_index, 1);
+        assert!(!frame.critical);
+        assert_eq!(runtime.vm(9).unwrap().pc(), 20);
+        assert_eq!(
+            runtime.vm(9).unwrap().return_stack(),
+            [ScriptValue::Int(0), ScriptValue::Int(20)]
+        );
+        // Noncritical executeProc only sets up a call; the following source
+        // tick, not the action planner, executes the body STOP instruction.
+        let tick = runtime.advance_core_tick_transactional_bounded(100, 1).unwrap();
+        assert_eq!(tick.executed_steps, [(9, 1)]);
+        assert!(runtime.vm(9).unwrap().halted());
+
+        let mut critical = ScriptRuntime::new();
+        critical.register(9, local_action_vm(0x10, 0, 20)).unwrap();
+        assert!(critical
+            .prepare_noncritical_local_action_transactional(9, 1)
+            .is_err());
+        assert_eq!(critical.vm(9).unwrap().pc(), 0);
+        assert!(critical.vm(9).unwrap().return_stack().is_empty());
+        assert!(critical.vm(9).unwrap().stack().is_empty());
+    }
+
+    #[test]
     fn local_action_frame_matches_ce_setup_call_without_mutating_vm() {
         let mut runtime = ScriptRuntime::new();
         runtime.register(7, local_action_vm(0x10, 0, 20)).unwrap();
