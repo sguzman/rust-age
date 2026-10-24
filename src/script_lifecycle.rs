@@ -1,7 +1,9 @@
 //! Read-only selection/order for CE MAP scripts at lifecycle boundaries.
 //! Pinned reference: src/game/scripts.cc scr_load_all_scripts,
 //! scr_exec_map_enter_scripts, scr_exec_map_update_scripts, scr_exec_map_exit_scripts.
+use crate::hex::HexViewport;
 use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding};
+use crate::script_data::ScriptTables;
 use crate::script_native_vars::ScriptInvocationState;
 use crate::script_procedures::SCRIPT_PROC_NAMES;
 use std::io;
@@ -82,6 +84,93 @@ impl BoundScriptRuntime {
             procedure_index: proc.procedure_index,
             external_parameter,
         }))
+    }
+
+    /// Select the original scr_chk_spatials_in spatial_p_proc calls
+    /// after the caller has checked that an ordinary, non-flat, visible
+    /// actor moved to this tile and spatial dispatch is enabled.
+    ///
+    /// Pinned scr_find_first_at/scr_find_next_at scan only non-disabled
+    /// spatial records at the current elevation. Exact built-tile match
+    /// takes precedence; nonzero radius falls back to CE tile_dist <=
+    /// radius. The packed tile/elevation bits match object_types.h.
+    /// Do not silently synthesize missing map scripts, VM instances,
+    /// deferred procedure tables or native object participants.
+    ///
+    /// This is a source-ordered *selection*, not scr_set_objs or live
+    /// exec_script_proc dispatch. The spatial source object's verified
+    /// handle and NULL target must be supplied by a real scene adapter.
+    pub fn plan_spatial_at(
+        &self,
+        tables: &ScriptTables,
+        view: &HexViewport,
+        tile: i32,
+        elevation: usize,
+    ) -> io::Result<Vec<PlannedMapAction>> {
+        if elevation >= 3 || view.tile_distance(tile, tile).is_none() || tile < 10 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE spatial event tile or elevation is outside supported MAP bounds",
+            ));
+        }
+        let built_current = (tile as u32) | ((elevation as u32) << 29);
+        let mut selected = Vec::new();
+        for (ordinal, script) in tables.categories[1].iter().enumerate() {
+            if script.flags & 0x02 != 0 {
+                continue;
+            }
+            if script.subtype.len() != 2 || ((script.script_id as u32) >> 24) != 1 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE spatial record has invalid category or subtype",
+                ));
+            }
+            let built = script.subtype[0] as u32;
+            if built >> 29 != elevation as u32 {
+                continue;
+            }
+            let script_tile = (built & 0x03FF_FFFF) as i32;
+            let radius = script.subtype[1];
+            let matches = if built == built_current {
+                true
+            } else if radius > 0 {
+                let distance = view.tile_distance(script_tile, tile).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "CE spatial script radius source tile outside MAP",
+                    )
+                })?;
+                distance <= radius as u32
+            } else {
+                false
+            };
+            if !matches {
+                continue;
+            }
+            let mut candidates = self.entries.iter().filter(|entry| {
+                entry.binding.category == 1 && entry.binding.ordinal == ordinal
+            });
+            let entry = candidates.next().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE matching spatial script has no installed MAP binding",
+                )
+            })?;
+            if candidates.next().is_some()
+                || entry.binding.script_id != script.script_id
+                || entry.binding.script_index != script.script_index
+                || entry.instance_id.is_none()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE spatial script has missing or ambiguous VM identity",
+                ));
+            }
+            if let Some(planned) = self.plan_one(entry, 2, false, None)? {
+                selected.push(planned);
+            }
+        }
+        Ok(selected)
     }
 
     /// Select only existing named actions, never execute any procedure.
