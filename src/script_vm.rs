@@ -246,6 +246,9 @@ pub struct ScriptVm {
     critical_section: bool,
     // Pinned CE checkWait callback timing, gated to core tick only.
     core_wait: Option<(u32, u32)>,
+    // Upper Program::flags word from CE interpret's last fetched opcode.
+    // This is a trace, not an implementation of all lower lifecycle flags.
+    last_opcode: Option<u16>,
     halted: bool,
     halt_reason: Option<ScriptHaltReason>,
 }
@@ -264,6 +267,7 @@ impl ScriptVm {
             base_pointer: -1,
             critical_section: false,
             core_wait: None,
+            last_opcode: None,
             halted: false,
             halt_reason: None,
         }
@@ -313,6 +317,20 @@ impl ScriptVm {
             }
         }
         flags
+    }
+
+    /// The last successfully interpreted CE opcode, not a live host callback.
+    /// Pinned interpret writes opcode << 16 on every bytecode dispatch.
+    pub fn last_opcode(&self) -> Option<u16> {
+        self.last_opcode
+    }
+
+    /// Source-shaped flags projection: last dispatched opcode in the high
+    /// word and ONLY modeled EXIT/STOP/WAIT/CRITICAL bits in the low word.
+    /// External, child/parent, error and full callback flags remain gated.
+    pub fn modeled_program_flags(&self) -> u32 {
+        (u32::from(self.last_opcode.unwrap_or(0)) << 16)
+            | u32::from(self.modeled_program_low_flags())
     }
 
     pub fn frame_pointer(&self) -> i32 {
@@ -560,6 +578,7 @@ impl ScriptVm {
         let mut probe = self.clone();
         probe.pc = offset;
         probe.critical_section = false;
+        probe.last_opcode = None; // CE doEvents zeroes condition flags.
         probe.halted = false;
         probe.halt_reason = None;
         probe.run_variable_subset_bounded(max_steps, native)?;
@@ -1514,6 +1533,14 @@ impl ScriptVm {
             }
             _ => return Err(invalid("unimplemented CE interpreter opcode")),
         }
+        // CE interpret dispatch first sets flags = (flags & 0xFFFF) |
+        // (opcode << 16). But op_pop_flags itself restores saved flags
+        // masked to 0xFFFF, erasing the high opcode word on return.
+        self.last_opcode = if matches!(opcode, 0x801F | 0x8020 | 0x8021 | 0x8025) {
+            None
+        } else {
+            Some(opcode)
+        };
         Ok(())
     }
 
@@ -1576,6 +1603,7 @@ impl ScriptVm {
         }
         self.stack = detached;
         self.pc = next_pc;
+        self.last_opcode = Some(opcode);
         Ok(())
     }
 
