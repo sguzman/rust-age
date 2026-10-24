@@ -3,7 +3,6 @@
 use rust_age::collision::ObjectKey;
 use rust_age::event_queue::{EventQueue, EventType};
 use rust_age::game_globals::GameGlobalState;
-use rust_age::event_queue::{EventQueue, EventType};
 use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
 use rust_age::object_tables::{MapObject, ObjectTables};
@@ -708,9 +707,7 @@ fn native_game_time_advance_vm(delta: i32, invalid_tail: bool) -> ScriptVm {
     code.extend_from_slice(&0x80FC_u16.to_be_bytes()); // GAME_TIME_ADVANCE
     code.extend_from_slice(&0x80EA_u16.to_be_bytes()); // GAME_TIME
     code.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
-    code.extend_from_slice(
-        &(if invalid_tail { 0x80FF_u16 } else { 0x8011_u16 }).to_be_bytes(),
-    );
+    code.extend_from_slice(&(if invalid_tail { 0x80FF_u16 } else { 0x8011_u16 }).to_be_bytes());
     let mut bytes = vec![0_u8; 54];
     bytes[..code.len()].copy_from_slice(&code);
     ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
@@ -731,12 +728,7 @@ fn installed_ce_game_time_advance_updates_native_clock_reads_and_quest_flag_in_o
         let mut queue = EventQueue::new();
         let tick = env
             .advance_script_state_with_game_time_no_due_bounded(
-                &mut queue,
-                &mut clock,
-                100,
-                6,
-                0,
-                polls,
+                &mut queue, &mut clock, 100, 6, 0, polls,
             )
             .unwrap();
         assert_eq!(tick.executed_steps, [(1, 6)]);
@@ -756,11 +748,10 @@ fn ce_running_game_time_advance_rolls_back_quest_clock_vm_and_queue_on_due_callb
         (100, 2 * 864_000 + 7, 3, Some(864_100), false),
         (100, 864_000, 1, None, false), // underbounded final zero poll
         (i32::MAX - 1, 2, 1, None, false), // signed overflow
-        (100, 1, 1, None, true), // later invalid native instruction
+        (100, 1, 1, None, true),        // later invalid native instruction
     ] {
         let mut env = environment();
-        *env.scripts.runtime.vm_mut(1).unwrap() =
-            native_game_time_advance_vm(delta, invalid_tail);
+        *env.scripts.runtime.vm_mut(1).unwrap() = native_game_time_advance_vm(delta, invalid_tail);
         env.game_globals = Some(GameGlobalState::from_initial_values(&[-1]).unwrap());
         let mut clock = ScriptGameClock { ticks: initial };
         let mut queue = EventQueue::new();

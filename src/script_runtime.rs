@@ -5,16 +5,16 @@
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
 use crate::event_queue::EventQueue;
-use crate::script_clock::ScriptGameClock;
-use crate::script_time_advance::{plan_game_time_advance_opcode, GAME_TIME_ADVANCE_OPCODE};
 use crate::game_globals::GameGlobalState;
 use crate::script_binding::BoundScriptRuntime;
+use crate::script_clock::ScriptGameClock;
 use crate::script_locals::MapScriptLocals;
 use crate::script_native_vars::{
     apply_mutable_condition_native_with_vars, apply_readonly_event_native_with_vars,
     ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
+use crate::script_time_advance::{plan_game_time_advance_opcode, GAME_TIME_ADVANCE_OPCODE};
 use crate::script_timer::{
     apply_timer_native_opcode, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,
@@ -954,7 +954,9 @@ impl ScriptRuntime {
         max_queue_polls: usize,
     ) -> io::Result<PreparedCoreTick> {
         if context.now_game_ticks != clock.ticks {
-            return Err(invalid("CE native advance input clock disagrees with queue clock"));
+            return Err(invalid(
+                "CE native advance input clock disagrees with queue clock",
+            ));
         }
         let mut next = self.clone();
         let mut next_map = (*context.map).clone();
