@@ -105,7 +105,8 @@ impl DetachedScriptEvent {
         }
         let inherited_target = if self.target == 0 {
             match self.owner {
-                ScriptOwnerResolution::Bound { handle, .. } => handle,
+                ScriptOwnerResolution::Bound { handle, .. }
+                | ScriptOwnerResolution::GeneratedSystemBound { handle } => handle,
                 ScriptOwnerResolution::NullOwner => 0,
                 _ => {
                     return Err(invalid(

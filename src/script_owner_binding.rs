@@ -38,6 +38,10 @@ pub enum ScriptOwnerResolution {
     /// tables, so its self_obj/target pointer remains unavailable until
     /// world object construction is implemented.
     GeneratedSystemOwnerRequiresEngine,
+    /// Original map_load_file creates an unsaved hidden MISC Object with
+    /// source-known PID/FID/tile/elevation. Its value is a Rust-owned
+    /// opaque handle, never a guessed original Object::id or C++ pointer.
+    GeneratedSystemBound { handle: i32 },
     /// An inventory child can own the script in CE obj_load_obj, but it is
     /// not in the top-level object-query snapshot. Refuse guessed NULL.
     InventoryOwnerNotRepresented,
@@ -161,8 +165,9 @@ impl MapScriptOwners {
         &mut self,
         ordinal: usize,
         rust_sid: i32,
+        handle: i32,
     ) -> io::Result<()> {
-        if !(0..32000).contains(&rust_sid)
+        if handle <= 0 || !(0..32000).contains(&rust_sid)
             || self.entries.iter().any(|entry| entry.script_id == rust_sid)
             || self
                 .entries
@@ -184,7 +189,7 @@ impl MapScriptOwners {
             ordinal,
             script_id: rust_sid,
             saved_owner_id: -1,
-            resolution: ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine,
+            resolution: ScriptOwnerResolution::GeneratedSystemBound { handle },
         });
         Ok(())
     }
@@ -225,7 +230,8 @@ impl MapScriptOwners {
     /// remain unavailable instead of silently becoming NULL.
     pub fn self_handle(&self, category: usize, ordinal: usize) -> Option<i32> {
         match self.entry(category, ordinal)?.resolution {
-            ScriptOwnerResolution::Bound { handle, .. } => Some(handle),
+            ScriptOwnerResolution::Bound { handle, .. }
+            | ScriptOwnerResolution::GeneratedSystemBound { handle } => Some(handle),
             ScriptOwnerResolution::NullOwner => Some(0),
             _ => None,
         }

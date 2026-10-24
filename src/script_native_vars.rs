@@ -453,7 +453,8 @@ pub fn apply_readonly_event_native_opcode(
                 .resolution
                 .ok_or_else(|| invalid("CE self_obj owner resolution not provided"))?;
             let handle = match owner {
-                ScriptOwnerResolution::Bound { handle, .. } => handle,
+                ScriptOwnerResolution::Bound { handle, .. }
+                | ScriptOwnerResolution::GeneratedSystemBound { handle } => handle,
                 ScriptOwnerResolution::NullOwner => 0,
                 _ => return Err(invalid("CE self_obj owner cannot be safely resolved")),
             };
@@ -606,7 +607,8 @@ pub fn run_invocation_with_event_snapshot_bounded(
                 .resolution
                 .ok_or_else(|| invalid("CE self_obj owner resolution not provided"))?;
             let handle = match resolution {
-                ScriptOwnerResolution::Bound { handle, .. } => {
+                ScriptOwnerResolution::Bound { handle, .. }
+                | ScriptOwnerResolution::GeneratedSystemBound { handle } => {
                     let objects = snapshot
                         .owner
                         .native

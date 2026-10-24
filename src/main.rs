@@ -448,7 +448,10 @@ fn main() {
                                 println!("unowned spatial script (requires CE runtime object)")
                             }
                             ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine => {
-                                println!("generated MAP header system script (hidden engine owner unavailable)")
+                                println!("generated MAP header system script (engine owner unavailable)")
+                            }
+                            ScriptOwnerResolution::GeneratedSystemBound { handle } => {
+                                println!("generated MAP header object, opaque handle {handle}")
                             }
                             ScriptOwnerResolution::InventoryOwnerNotRepresented => {
                                 println!("nested inventory owner not in detached object snapshot")

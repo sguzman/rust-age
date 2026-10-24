@@ -19,6 +19,9 @@ pub struct MapObjectReadBindings {
     snapshots: Vec<ScriptObjectSnapshot>,
     keys: Vec<ObjectKey>,
     handles: BTreeMap<ObjectKey, i32>,
+    /// One source-created nonserialized system MAP owner, never associated
+    /// with a decoded top-level ObjectKey or a saved original object ID.
+    generated_system_handle: Option<i32>,
 }
 
 impl MapObjectReadBindings {
@@ -52,7 +55,38 @@ impl MapObjectReadBindings {
             snapshots,
             keys,
             handles,
+            generated_system_handle: None,
         })
+    }
+
+    /// Pinned map_load_file -> obj_new(MISC FID 12, PID -1) ->
+    /// obj_move_to_tile(tile 1, elevation 0). Register exactly that
+    /// source-created *runtime* owner with a unique Rust-local opaque
+    /// handle, not a guessed native address or Object::id.
+    /// Only the snapshot's four source-known object-property natives
+    /// are available; engine flags, rendering, inventory, save slots and
+    /// actor operations remain unsupported.
+    pub fn add_generated_header_system_object(&mut self) -> io::Result<i32> {
+        if self.generated_system_handle.is_some() {
+            return Err(invalid("duplicate generated CE MAP header object"));
+        }
+        let handle = i32::try_from(
+            self.snapshots
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| invalid("generated CE MAP object handle overflow"))?,
+        )
+        .map_err(|_| invalid("generated CE MAP object handle outside i32"))?;
+        self.snapshots.push(ScriptObjectSnapshot {
+            handle,
+            tile: 1,
+            elevation: 0,
+            table_elevation: 0,
+            pid: -1,
+            fid: 0x0500_000C,
+        });
+        self.generated_system_handle = Some(handle);
+        Ok(handle)
     }
 
     pub fn snapshots(&self) -> &[ScriptObjectSnapshot] {
