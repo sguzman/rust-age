@@ -7,6 +7,7 @@ use crate::actor_route::{ActorRoute, ActorStep};
 use crate::collision::ObjectKey;
 use crate::hex::HexViewport;
 use crate::scene::{PreparedScriptEnvironment, StaticScene};
+use crate::script_lifecycle::PlannedMapAction;
 use crate::script_native_vars::ScriptClockContext;
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::MapScriptOwners;
@@ -24,6 +25,15 @@ pub struct ScriptTickBudget {
     pub now_millis: u32,
     pub cpu_burst: usize,
     pub max_steps_per_condition: usize,
+}
+
+/// Atomic actor/spatial dispatch result. Critical local procedures run
+/// immediately; noncritical calls remain prepared for the interpreter tick.
+#[derive(Debug, Clone)]
+pub struct SpatialActorTick {
+    pub actor: ActorStep,
+    pub spatial: Vec<(PlannedMapAction, Option<usize>)>,
+    pub tick: PreparedCoreTick,
 }
 
 #[derive(Debug, Clone)]
