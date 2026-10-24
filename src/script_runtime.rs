@@ -479,7 +479,9 @@ impl ScriptRuntime {
             return Ok(None);
         };
         if !frame.critical {
-            return Err(invalid("CE noncritical built-in action cannot execute synchronously"));
+            return Err(invalid(
+                "CE noncritical built-in action cannot execute synchronously",
+            ));
         }
         let mut next = self.clone();
         let vm = next

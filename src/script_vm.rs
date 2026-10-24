@@ -859,10 +859,14 @@ impl ScriptVm {
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<usize> {
         if max_steps == 0 || max_steps > 4096 {
-            return Err(invalid("CE critical local action exceeds bounded instruction budget"));
+            return Err(invalid(
+                "CE critical local action exceeds bounded instruction budget",
+            ));
         }
         if self.critical_section || self.core_wait.is_some() {
-            return Err(invalid("CE critical local action cannot nest into active critical/WAIT state"));
+            return Err(invalid(
+                "CE critical local action cannot nest into active critical/WAIT state",
+            ));
         }
         let mut candidate = self.clone();
         let entry = candidate
@@ -871,7 +875,9 @@ impl ScriptVm {
             .copied()
             .ok_or_else(|| invalid("CE critical local action procedure index outside table"))?;
         if entry.flags & 0x10 == 0 {
-            return Err(invalid("CE noncritical local action must use deferred setupCall"));
+            return Err(invalid(
+                "CE noncritical local action must use deferred setupCall",
+            ));
         }
         candidate.stage_local_core_call_frame(procedure_index, true)?;
         candidate.set_clock_millis(now_millis as i32);
@@ -879,13 +885,19 @@ impl ScriptVm {
         let mut steps = 0;
         while candidate.critical_section() {
             if steps >= max_steps {
-                return Err(invalid("CE immediate critical procedure exceeded safety bound"));
+                return Err(invalid(
+                    "CE immediate critical procedure exceeded safety bound",
+                ));
             }
             if candidate.halted() {
-                return Err(invalid("CE critical procedure halted without clearing critical section"));
+                return Err(invalid(
+                    "CE critical procedure halted without clearing critical section",
+                ));
             }
             if !candidate.poll_core_wait() {
-                return Err(invalid("CE critical procedure WAIT would stall immediate interpret"));
+                return Err(invalid(
+                    "CE critical procedure WAIT would stall immediate interpret",
+                ));
             }
             candidate.step_with_variable_host_clocked(native)?;
             steps += 1;

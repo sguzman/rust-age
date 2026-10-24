@@ -23,10 +23,10 @@ use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
 use crate::script_native_vars::{
     apply_map_variable_opcode, apply_mutable_condition_native_with_vars,
-    apply_readonly_event_native_opcode,
-    apply_readonly_event_native_with_vars, ScriptClockContext, ScriptInvocationState,
-    ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, LOCAL_VAR_OPCODE,
-    MAP_VAR_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
+    apply_readonly_event_native_opcode, apply_readonly_event_native_with_vars, ScriptClockContext,
+    ScriptInvocationState, ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot,
+    ScriptNativeSnapshot, LOCAL_VAR_OPCODE, MAP_VAR_OPCODE, SCRIPT_OVERRIDES_OPCODE,
+    SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
 };
 use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
@@ -311,16 +311,21 @@ impl PreparedScriptEnvironment {
                 "CE noncritical MAP action must be deferred to later interpreter tick",
             ));
         }
-        let owner = self.owner_for_instance(planned.instance_id).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE critical MAP owner missing")
-        })?;
+        let owner = self
+            .owner_for_instance(planned.instance_id)
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE critical MAP owner missing")
+            })?;
         let mut invocation = self
             .invocations
             .get(&planned.instance_id)
             .copied()
             .unwrap_or_else(ScriptInvocationState::installed);
         let action = i32::try_from(planned.action).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE critical MAP action outside i32")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE critical MAP action outside i32",
+            )
         })?;
         if !invocation.begin_action(action) {
             return Err(io::Error::new(
