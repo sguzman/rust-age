@@ -311,6 +311,7 @@ mod tests {
         // One due condition checks self_obj -> tile_num == destination.
         // An actual RuntimeScene actor step updates the MAP object header,
         // and the next CE doEvents condition reads the new property.
+        // When true, a later interpreter burst writes the quest-global flag.
         let mut bytes = vec![0_u8; 42];
         bytes[0..2].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
         bytes[2..4].copy_from_slice(&0x80D4_u16.to_be_bytes()); // TILE_NUM
@@ -318,8 +319,6 @@ mod tests {
         bytes[6..10].copy_from_slice(&20098_i32.to_be_bytes());
         bytes[10..12].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
         bytes[12..14].copy_from_slice(&0x8011_u16.to_be_bytes()); // STOP
-        /* After the movement condition becomes true, the scheduled local
-         * procedure writes a quest-global value in a later interpreter burst. */
         bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP arg
         bytes[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
         bytes[24..28].copy_from_slice(&0_i32.to_be_bytes()); // game-global index
