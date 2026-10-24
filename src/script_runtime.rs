@@ -1031,9 +1031,7 @@ mod tests {
     fn ce_core_tick_drains_critical_without_charging_ordinary_budget() {
         let mut bytes = vec![0_u8; 42];
         // CRITICAL_START, NOOP, CRITICAL_DONE, NOOP, STOP_PROGRAM.
-        bytes[..10].copy_from_slice(&[
-            0x80, 0x02, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
-        ]);
+        bytes[..10].copy_from_slice(&[0x80, 0x02, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11]);
         bytes.extend_from_slice(&[0_u8; 12]);
         let mut runtime = ScriptRuntime::new();
         runtime
@@ -1060,9 +1058,7 @@ mod tests {
     #[test]
     fn ce_core_tick_extends_burst_for_a_preexisting_critical_section() {
         let mut bytes = vec![0_u8; 42];
-        bytes[..10].copy_from_slice(&[
-            0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
-        ]);
+        bytes[..10].copy_from_slice(&[0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00]);
         bytes.extend_from_slice(&[0_u8; 12]);
         let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes).unwrap());
         vm.step().unwrap(); // prepare an already-entered CE critical state
@@ -1082,9 +1078,7 @@ mod tests {
     fn ce_core_tick_rolls_back_infinite_critical_section_without_hanging() {
         let mut bytes = vec![0_u8; 42];
         // CRITICAL_START, then JMP to itself at byte address 2.
-        bytes[..10].copy_from_slice(&[
-            0x80, 0x02, 0xC0, 0x01, 0, 0, 0, 2, 0x80, 0x04,
-        ]);
+        bytes[..10].copy_from_slice(&[0x80, 0x02, 0xC0, 0x01, 0, 0, 0, 2, 0x80, 0x04]);
         bytes.extend_from_slice(&[0_u8; 12]);
         let mut runtime = ScriptRuntime::new();
         runtime
