@@ -249,6 +249,24 @@ impl PreparedScriptEnvironment {
                     })
                 })
                 .transpose()?;
+            // During CE exec_script_proc, a missing event target inherits
+            // script->owner and a missing source is NULL. Only explicitly
+            // prepared lifecycle invocations qualify: an unstarted main
+            // interpreter has no asserted scr_set_objs participants. The
+            // spatial source path retains its separate verified actor join.
+            let (source, target) = if let Some(source) = source {
+                (Some(source), Some(0))
+            } else if self.invocations.contains_key(&id) {
+                let target = match owner {
+                    Some(ScriptOwnerResolution::Bound { handle, .. })
+                    | Some(ScriptOwnerResolution::GeneratedSystemBound { handle }) => Some(handle),
+                    Some(ScriptOwnerResolution::NullOwner) => Some(0),
+                    _ => None,
+                };
+                (Some(0), target)
+            } else {
+                (None, None)
+            };
             let event = ReadOnlyConditionEvent {
                 event: ScriptNativeEventSnapshot {
                     owner: ScriptNativeOwnerSnapshot {
@@ -259,7 +277,7 @@ impl PreparedScriptEnvironment {
                         resolution: owner,
                     },
                     source,
-                    target: source.map(|_| 0),
+                    target,
                 },
                 invocation: self
                     .invocations
