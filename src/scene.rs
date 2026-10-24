@@ -37,7 +37,10 @@ use crate::script_runtime::{
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
 use crate::script_time_advance::TimeAdvancePlan;
-use crate::script_timer::{ScriptTimerEvent, TimerObjectBinding};
+use crate::script_timer::{
+    apply_timer_native_opcode, ScriptTimerEvent, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
+    REMOVE_TIMER_EVENT_OPCODE,
+};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
@@ -442,6 +445,24 @@ impl PreparedScriptEnvironment {
         now_millis: u32,
         max_steps: usize,
     ) -> io::Result<usize> {
+        self.execute_critical_map_action_with_timer_queue_transactional_bounded(
+            planned, clock, now_millis, max_steps, None,
+        )
+    }
+
+    /// Internal critical native host that can also route original timer
+    /// queue add/remove callbacks. The queue and script/quest state are
+    /// separately cloned before any interpreter bytecode executes.
+    /// Critical callbacks may schedule another due timer at the same
+    /// game-time tick; the enclosing queue_process loop will visit it.
+    fn execute_critical_map_action_with_timer_queue_transactional_bounded(
+        &mut self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps: usize,
+        timer_queue: Option<&mut EventQueue>,
+    ) -> io::Result<usize> {
         let verified = self.local_frame_for_planned(planned)?;
         if !verified.critical {
             return Err(io::Error::new(
@@ -498,6 +519,30 @@ impl PreparedScriptEnvironment {
             source,
             target: source.map(|_| 0),
         };
+        // A clone of the immutable MAP instance registry is needed for
+        // timer SID resolution while the interpreter is mutably borrowed.
+        // Each native object pointer is validated against its original
+        // source-owned ObjectKey, not synthesized from a numeric address.
+        let timer_bindings: Vec<_> = next
+            .scripts
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let id = entry.instance_id?;
+                match next.script_owners.resolution_for_instance(&next.scripts, id) {
+                    Some(ScriptOwnerResolution::Bound { key, handle, .. }) => {
+                        Some(TimerObjectBinding {
+                            handle,
+                            owner: key,
+                            sid: entry.binding.script_id,
+                        })
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
+        let bound = next.scripts.clone();
+        let mut queued = timer_queue.as_ref().map(|queue| (**queue).clone());
         let game = next.game_globals.as_mut().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -513,15 +558,32 @@ impl PreparedScriptEnvironment {
                 now_millis,
                 max_steps,
                 &mut |opcode, stack| {
-                    apply_mutable_condition_native_with_vars(
-                        snapshot,
-                        &invocation,
-                        &mut next.map_locals,
-                        game,
-                        planned.instance_id,
-                        opcode,
-                        stack,
-                    )
+                    if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
+                        let queue = queued.as_mut().ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "CE critical timer native requires explicitly owned event queue",
+                            )
+                        })?;
+                        apply_timer_native_opcode(
+                            &bound,
+                            queue,
+                            clock.clock.ticks,
+                            &timer_bindings,
+                            opcode,
+                            stack,
+                        )
+                    } else {
+                        apply_mutable_condition_native_with_vars(
+                            snapshot,
+                            &invocation,
+                            &mut next.map_locals,
+                            game,
+                            planned.instance_id,
+                            opcode,
+                            stack,
+                        )
+                    }
                 },
             )?
             .ok_or_else(|| {
@@ -531,6 +593,9 @@ impl PreparedScriptEnvironment {
                 )
             })?;
         next.invocations.insert(planned.instance_id, invocation);
+        if let (Some(original), Some(staged)) = (timer_queue, queued) {
+            *original = staged;
+        }
         *self = next;
         Ok(executed)
     }
@@ -672,12 +737,15 @@ impl PreparedScriptEnvironment {
             let timer = ScriptTimerEvent::decode(&event)?;
             let steps = if let Some(plan) = candidate.scripts.plan_script_timer(&timer)? {
                 if candidate.local_frame_for_planned(&plan)?.critical {
-                    Some(candidate.execute_critical_map_action_transactional_bounded(
-                        &plan,
-                        clock,
-                        now_millis,
-                        max_critical_steps,
-                    )?)
+                    Some(
+                        candidate.execute_critical_map_action_with_timer_queue_transactional_bounded(
+                            &plan,
+                            clock,
+                            now_millis,
+                            max_critical_steps,
+                            Some(&mut pending),
+                        )?,
+                    )
                 } else {
                     candidate.prepare_noncritical_map_action_transactional(&plan)?;
                     None
