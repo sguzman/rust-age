@@ -323,7 +323,9 @@ impl RuntimeScene {
         max_critical_steps: usize,
     ) -> io::Result<Option<(PlannedMapAction, Option<usize>)>> {
         if !matches!(action, 3 | 6 | 21) {
-            return Err(invalid("CE object event action lacks verified participant semantics"));
+            return Err(invalid(
+                "CE object event action lacks verified participant semantics",
+            ));
         }
         let (source, target) = participants;
         let mut candidate = self.refreshed_script_environment(environment)?;
@@ -1188,7 +1190,12 @@ mod tests {
             .is_err());
     }
 
-    fn object_action_vm(critical: bool, invalid_after_write: bool, with_overrides: bool, name: &[u8]) -> ScriptVm {
+    fn object_action_vm(
+        critical: bool,
+        invalid_after_write: bool,
+        with_overrides: bool,
+        name: &[u8],
+    ) -> ScriptVm {
         // Real source-shaped CE local setupCall followed by SOURCE_OBJ,
         // TARGET_OBJ, object-property reads and a quest-global mutation.
         let mut body = Vec::new();
