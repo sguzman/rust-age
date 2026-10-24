@@ -683,8 +683,58 @@ mod tests {
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
         assert!(env.spatial_sources.is_empty());
         assert!(env.invocations.is_empty());
+        assert!(world.spatials_enabled()); // original spatial enable survives failed callback
         assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
         assert!(env.scripts.runtime.vm(7).unwrap().stack().is_empty());
+    }
+
+    #[test]
+    fn spatial_disable_and_hidden_or_flat_source_suppress_callbacks_not_actor_movement() {
+        for case in 0..3 {
+            let (mut world, mut env) = spatial_scene_fixture(20098, 0, true, false);
+            let actor = ObjectKey {
+                elevation: 0,
+                ordinal: 0,
+            };
+            match case {
+                0 => world.disable_spatials(),
+                1 => world.set_object_flags(actor, 0x01).unwrap(), // OBJECT_HIDDEN
+                2 => world.set_object_flags(actor, 0x08).unwrap(), // OBJECT_FLAT
+                _ => unreachable!(),
+            }
+            let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+            let mut route = world
+                .plan_actor(&view, actor, 20098, true)
+                .unwrap()
+                .unwrap();
+            let clock = ScriptClockContext {
+                clock: ScriptGameClock { ticks: 0 },
+                last_visit_ticks: Some(0),
+            };
+            let result = world
+                .advance_actor_with_spatial_events_transactional_bounded(
+                    &view,
+                    &mut route,
+                    &mut env,
+                    clock,
+                    ScriptTickBudget {
+                        now_millis: 100,
+                        cpu_burst: 0,
+                        max_steps_per_condition: 0,
+                    },
+                )
+                .unwrap();
+            assert!(matches!(result.actor, ActorStep::Moved { tile: 20098, .. }));
+            assert!(result.spatial.is_empty());
+            assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+            assert!(env.spatial_sources.is_empty());
+            assert_eq!(route.current_tile(), 20098);
+            assert_eq!(world.spatials_enabled(), case != 0);
+            if case == 0 {
+                world.enable_spatials();
+                assert!(world.spatials_enabled());
+            }
+        }
     }
 
     #[test]
