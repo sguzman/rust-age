@@ -347,7 +347,9 @@ fn map_update_retains_prior_enter_fixed_parameter_during_native_execution() {
         clock: ScriptGameClock { ticks: 0 },
         last_visit_ticks: Some(0),
     };
-    let first = env.advance_script_state_tick_bounded(clock, 100, 2, 0).unwrap();
+    let first = env
+        .advance_script_state_tick_bounded(clock, 100, 2, 0)
+        .unwrap();
     assert_eq!(first.executed_steps, [(1, 2)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
 
@@ -361,7 +363,9 @@ fn map_update_retains_prior_enter_fixed_parameter_during_native_execution() {
     assert_eq!(update[0].procedure_index, 2);
     assert_eq!(env.invocations.get(&1).unwrap().action(), 23);
     assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 1);
-    let tick = env.advance_script_state_tick_bounded(clock, 101, 5, 0).unwrap();
+    let tick = env
+        .advance_script_state_tick_bounded(clock, 101, 5, 0)
+        .unwrap();
     assert_eq!(tick.executed_steps, [(1, 5)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [1]);
 }
