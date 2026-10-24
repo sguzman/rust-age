@@ -183,8 +183,17 @@ mod tests {
     use crate::map::{MapHeader, MapSquares, MapVariables};
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
-    use crate::scene::StaticScene;
-    use crate::script_data::ScriptTables;
+    use crate::game_globals::GameGlobalState;
+    use crate::scene::{PreparedScriptEnvironment, StaticScene};
+    use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
+    use crate::script_clock::ScriptGameClock;
+    use crate::script_data::{ScriptRecord, ScriptTables};
+    use crate::script_native_vars::ScriptClockContext;
+    use crate::script_object_binding::MapObjectReadBindings;
+    use crate::script_owner_binding::MapScriptOwners;
+    use crate::script_program::ScriptProgram;
+    use crate::script_runtime::{DueProcedure, ScriptRuntime};
+    use crate::script_vm::ScriptVm;
 
     fn object(id: i32, tile: i32, kind: i32) -> MapObject {
         MapObject {
@@ -271,6 +280,159 @@ mod tests {
             collision,
             bytes_consumed: 0,
         })
+    }
+
+    #[test]
+    fn moved_map_actor_tile_becomes_a_live_ce_script_condition_without_stale_snapshots() {
+        let mut world = scene();
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        world.snapshot.objects.elevations[0][0]
+            .record
+            .header
+            .script_id = 17;
+        world.snapshot.scripts.categories[0].push(ScriptRecord {
+            script_id: 17,
+            next: -1,
+            subtype: vec![],
+            flags: 0,
+            script_index: 0,
+            program_token: -1,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        });
+
+        // One due condition checks self_obj -> tile_num == destination.
+        // An actual RuntimeScene actor step updates the MAP object header,
+        // and the next CE doEvents condition reads the new property.
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+        bytes[2..4].copy_from_slice(&0x80D4_u16.to_be_bytes()); // TILE_NUM
+        bytes[4..6].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[6..10].copy_from_slice(&20098_i32.to_be_bytes());
+        bytes[10..12].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+        bytes[12..14].copy_from_slice(&0x8011_u16.to_be_bytes()); // STOP
+        bytes[28..32].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        let mut names = Vec::new();
+        for (name, flags, condition_offset, body_offset) in [
+            (b"main".as_slice(), 0_i32, 0_i32, 0_i32),
+            (b"map_enter_p_proc".as_slice(), 0x02_i32, 0_i32, 28_i32),
+        ] {
+            let offset = 4 + names.len() as i32;
+            for field in [offset, flags, 0, condition_offset, body_offset, 0] {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+            names.extend_from_slice(name);
+            names.push(0);
+        }
+        bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
+        bytes.extend_from_slice(&names);
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(1, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let scripts = BoundScriptRuntime {
+            runtime,
+            entries: vec![InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 0,
+                    ordinal: 0,
+                    script_id: 17,
+                    script_index: 0,
+                    owner_id: -1,
+                    path: None,
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(1),
+            }],
+        };
+        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let queries = MapObjectReadBindings::from_tables(&world.snapshot.objects).unwrap();
+        let owners = MapScriptOwners::from_map(
+            &world.snapshot.scripts,
+            &world.snapshot.objects,
+            &queries,
+        )
+        .unwrap();
+        let mut environment = PreparedScriptEnvironment {
+            scripts,
+            map_locals,
+            game_globals: Some(GameGlobalState::from_initial_values(&[0]).unwrap()),
+            object_queries: queries,
+            script_owners: owners,
+            map_last_visit_ticks: 0,
+            invocations: std::collections::BTreeMap::new(),
+        };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        let before = world
+            .advance_script_state_with_current_scene_bounded(
+                &mut environment,
+                clock,
+                100,
+                0,
+                5,
+            )
+            .unwrap();
+        assert!(before.prepared_calls.is_empty());
+        assert_eq!(
+            environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags,
+            0x02
+        );
+
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        assert_eq!(
+            world.advance_actor(&view, &mut route).unwrap(),
+            ActorStep::Moved {
+                tile: 20098,
+                rotation: 1,
+            }
+        );
+        let after = world
+            .advance_script_state_with_current_scene_bounded(
+                &mut environment,
+                clock,
+                101,
+                0,
+                5,
+            )
+            .unwrap();
+        assert_eq!(
+            after.prepared_calls,
+            [DueProcedure {
+                program_id: 1,
+                procedure_index: 1,
+            }]
+        );
+        assert_eq!(environment.object_queries.snapshots()[0].tile, 20098);
+        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 28);
+        assert_eq!(environment.game_globals.as_ref().unwrap().values(), [0]);
+
+        // Object identity recycling cannot silently rebind the installed
+        // script's self_obj handle to another PID after a live MAP change.
+        world.snapshot.objects.elevations[0][0].record.header.pid = 0x0100_0002;
+        assert!(world
+            .advance_script_state_with_current_scene_bounded(
+                &mut environment,
+                clock,
+                102,
+                0,
+                5,
+            )
+            .is_err());
+        assert_eq!(environment.object_queries.snapshots()[0].pid, 0x0100_0001);
+        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 28);
     }
 
     #[test]
