@@ -946,6 +946,8 @@ impl ScriptVm {
         next.base_pointer = frame.base_pointer;
         next.runtime_procedures = frame.procedures;
         next.critical_section = frame.restored_low_flags & 0x80 != 0;
+        // Pinned op_pop_flags resets Program::flags to its low 16 bits.
+        next.last_opcode = None;
         next.halted = false; // interpret cleared its transient 0x40 return.
         next.halt_reason = None;
         *self = next;
@@ -1662,6 +1664,56 @@ mod tests {
 
     fn opcode(buffer: &mut Vec<u8>, value: u16) {
         buffer.extend_from_slice(&value.to_be_bytes());
+    }
+
+    #[test]
+    fn modeled_ce_opcode_high_word_tracks_wait_critical_and_termination() {
+        let mut bytes = Vec::new();
+        opcode(&mut bytes, 0x8000); // NOOP
+        opcode(&mut bytes, 0x8002); // ENTER_CRITICAL
+        opcode(&mut bytes, 0x8003); // LEAVE_CRITICAL
+        opcode(&mut bytes, 0x8011); // STOP_PROGRAM
+        let mut vm = ScriptVm::new(fixture(&bytes));
+        assert_eq!(vm.modeled_program_flags(), 0);
+        for (opcode, low) in [(0x8000, 0), (0x8002, 0x80), (0x8003, 0), (0x8011, 0x08)] {
+            vm.step().unwrap();
+            assert_eq!(vm.last_opcode(), Some(opcode));
+            assert_eq!(vm.modeled_program_flags(), (u32::from(opcode) << 16) | low);
+        }
+        vm.step().unwrap(); // halted VMs never fetch a new opcode
+        assert_eq!(vm.last_opcode(), Some(0x8011));
+    }
+
+    #[test]
+    fn modeled_ce_native_opcode_word_only_commits_after_accepted_callback() {
+        let mut vm = ScriptVm::new(fixture(&[0x80, 0xEA, 0x80, 0x11]));
+        assert!(vm.step_with_variable_host(&mut |_, _| {
+            Err(super::invalid("synthetic failed native"))
+        }).is_err());
+        assert_eq!(vm.modeled_program_flags(), 0);
+        assert_eq!(vm.pc(), 0);
+        let mut count = 0;
+        vm.step_with_variable_host(&mut |opcode, _| {
+            assert_eq!(opcode, 0x80EA);
+            count += 1;
+            Ok(())
+        }).unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(vm.last_opcode(), Some(0x80EA));
+        assert_eq!(vm.modeled_program_flags(), 0x80EA0000);
+        vm.step().unwrap();
+        assert_eq!(vm.modeled_program_flags(), 0x80110008);
+    }
+
+    #[test]
+    fn modeled_ce_last_opcode_survives_rejected_core_instruction() {
+        let mut vm = ScriptVm::new(fixture(&[0x80, 0x00, 0x80, 0xFC]));
+        vm.step().unwrap();
+        assert_eq!(vm.modeled_program_flags(), 0x80000000);
+        assert!(vm.step().is_err());
+        // The bounded adapter does not report unsupported bytecode as
+        // successfully dispatched; full CE error longjmp is still gated.
+        assert_eq!(vm.modeled_program_flags(), 0x80000000);
     }
 
     fn local_action_vm(instructions: &[u8], flags: i32, argument_count: i32) -> ScriptVm {
