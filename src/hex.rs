@@ -223,6 +223,28 @@ impl HexViewport {
         Some(row * width + inverted_col)
     }
 
+    /// Minimum CE hex steps between two valid MAP tiles. The mirrored
+    /// odd/even column neighbor table used by tile_num_in_direction is
+    /// converted to cube coordinates; every one of the six source CE
+    /// direction offsets has distance one. This is the integer equivalent
+    /// of tile_dist for in-bounds map hexes, without an unbounded iterative
+    /// tile_dir/atan2 walk on malformed or out-of-bounds tile IDs.
+    pub fn tile_distance(&self, from: i32, to: i32) -> Option<u32> {
+        let size = self.grid_width.checked_mul(self.grid_height)?;
+        if !(0..size).contains(&from) || !(0..size).contains(&to) {
+            return None;
+        }
+        let from_col = from % self.grid_width;
+        let to_col = to % self.grid_width;
+        let from_row = from / self.grid_width;
+        let to_row = to / self.grid_width;
+        let from_axial = from_row - (from_col + (from_col & 1)) / 2;
+        let to_axial = to_row - (to_col + (to_col & 1)) / 2;
+        let dq = i64::from(to_col) - i64::from(from_col);
+        let dr = i64::from(to_axial) - i64::from(from_axial);
+        u32::try_from((dq.abs() + dr.abs() + (dq + dr).abs()) / 2).ok()
+    }
+
     pub fn center_tile(&self) -> i32 {
         self.center_tile
     }
@@ -292,6 +314,30 @@ mod tests {
         assert_eq!(view.move_in_direction(20099, 0, 1), Some(19898));
         assert_eq!(view.move_in_direction(20100, 0, 1), Some(20099));
         assert_eq!(view.move_in_direction(20099, 4, 1), Some(19900));
+    }
+
+    #[test]
+    fn source_hex_spatial_distance_matches_six_parity_neighbors() {
+        let view = HexViewport::new(200, 200, 640, 480, 20099).unwrap();
+        assert_eq!(view.tile_distance(20099, 20099), Some(0));
+        assert_eq!(view.tile_distance(20099, 20098), Some(1));
+        assert_eq!(view.tile_distance(20099, 20101), Some(2));
+        assert_eq!(view.tile_distance(-1, 20099), None);
+        assert_eq!(view.tile_distance(20099, 40000), None);
+        for row in 1..199 {
+            for col in 1..199 {
+                let from = row * 200 + col;
+                for rotation in 0..6 {
+                    let to = view.move_in_direction(from, rotation, 1).unwrap();
+                    assert_eq!(
+                        view.tile_distance(from, to),
+                        Some(1),
+                        "hex source parity at {from} rotation {rotation}"
+                    );
+                    assert_eq!(view.tile_distance(to, from), Some(1));
+                }
+            }
+        }
     }
 
     #[test]
