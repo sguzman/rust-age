@@ -229,7 +229,9 @@ impl BoundScriptRuntime {
 #[cfg(test)]
 mod tests {
     use super::MapLifecyclePhase;
+    use crate::hex::HexViewport;
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
+    use crate::script_data::{ScriptRecord, ScriptTables};
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::ScriptRuntime;
     use crate::script_vm::ScriptVm;
@@ -300,6 +302,109 @@ mod tests {
                 record(1, 1, 602, Some(4)),
             ],
         }
+    }
+
+    fn spatial_record(sid: i32, built: i32, radius: i32, flags: i32) -> ScriptRecord {
+        ScriptRecord {
+            script_id: sid,
+            next: -1,
+            subtype: vec![built, radius],
+            flags,
+            script_index: 0,
+            program_token: -1,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        }
+    }
+
+    #[test]
+    fn ce_spatial_trigger_planner_matches_packed_tile_elevation_and_radius_in_source_order() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let sid1 = 0x0100_0001;
+        let sid2 = 0x0100_0002;
+        let sid3 = 0x0100_0003;
+        let sid4 = 0x0100_0004;
+        let scripts = ScriptTables {
+            categories: [
+                vec![],
+                vec![
+                    spatial_record(sid1, 20098, 0, 0),
+                    spatial_record(sid2, 20099, 1, 0),
+                    spatial_record(sid3, (1 << 29) | 20098, 1, 0),
+                    spatial_record(sid4, 20098, 3, 0x02),
+                ],
+                vec![],
+                vec![],
+                vec![],
+            ],
+            bytes_consumed: 0,
+        };
+        let mut runtime = ScriptRuntime::new();
+        for id in [1, 2, 3] {
+            runtime
+                .register(id, vm(&[b"main", b"spatial_p_proc"]))
+                .unwrap();
+        }
+        let bound = BoundScriptRuntime {
+            runtime,
+            // Deliberately scrambled installed binding order; actual CE
+            // spatial script-list order (ordinal) decides dispatch order.
+            entries: vec![
+                record(1, 1, sid2, Some(2)),
+                record(1, 2, sid3, Some(3)),
+                record(1, 0, sid1, Some(1)),
+            ],
+        };
+        let matches = bound.plan_spatial_at(&scripts, &view, 20098, 0).unwrap();
+        assert_eq!(
+            matches.iter().map(|p| p.instance_id).collect::<Vec<_>>(),
+            [1, 2]
+        );
+        assert!(matches.iter().all(|p| p.category == 1 && p.action == 2));
+        assert!(matches.iter().all(|p| p.procedure_index == 1));
+        let upper = bound.plan_spatial_at(&scripts, &view, 20098, 1).unwrap();
+        assert_eq!(upper.iter().map(|p| p.instance_id).collect::<Vec<_>>(), [3]);
+        assert!(bound.plan_spatial_at(&scripts, &view, 20097, 0).unwrap().is_empty());
+        assert!(bound.plan_spatial_at(&scripts, &view, 9, 0).is_err());
+        assert!(bound.plan_spatial_at(&scripts, &view, 40000, 0).is_err());
+        assert!(bound.plan_spatial_at(&scripts, &view, 20098, 3).is_err());
+    }
+
+    #[test]
+    fn spatial_planner_fails_closed_on_malformed_radius_source_and_missing_vm_binding() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let sid = 0x0100_0001;
+        let mut scripts = ScriptTables {
+            categories: [
+                vec![],
+                vec![spatial_record(sid, 40000, 1, 0)],
+                vec![],
+                vec![],
+                vec![],
+            ],
+            bytes_consumed: 0,
+        };
+        let runtime = ScriptRuntime::new();
+        let uninstalled = BoundScriptRuntime {
+            runtime: runtime.clone(),
+            entries: vec![],
+        };
+        assert!(uninstalled.plan_spatial_at(&scripts, &view, 20098, 0).is_err());
+        let mut active = ScriptRuntime::new();
+        active
+            .register(1, vm(&[b"main", b"spatial_p_proc"]))
+            .unwrap();
+        let bound = BoundScriptRuntime {
+            runtime: active,
+            entries: vec![record(1, 0, sid, Some(1))],
+        };
+        assert!(bound.plan_spatial_at(&scripts, &view, 20098, 0).is_err());
+        scripts.categories[1][0].subtype.clear();
+        assert!(bound.plan_spatial_at(&scripts, &view, 20098, 0).is_err());
+        scripts.categories[1][0].subtype = vec![20098, 0];
+        assert_eq!(bound.plan_spatial_at(&scripts, &view, 20098, 0).unwrap().len(), 1);
     }
 
     #[test]
