@@ -28,6 +28,12 @@ fn procedure(main: &[u8]) -> ScriptVm {
     assert!(main.len() <= 24);
     let mut bytes = vec![0_u8; 42];
     bytes[..main.len()].copy_from_slice(main);
+    // CE executeProc uses literal return address 20 in the saved frame.
+    // Keep that address an actual opcode in invented short main scripts,
+    // even when STOP/EXIT at byte 16 prevents normal execution reaching it.
+    if main.len() <= 20 {
+        bytes[20..22].copy_from_slice(&0x8000_u16.to_be_bytes());
+    }
     // timed_event_p_proc: drop saved argument; game_global[0] = fixed_param.
     bytes[24..26].copy_from_slice(&0x801A_u16.to_be_bytes());
     bytes[26..28].copy_from_slice(&0xC001_u16.to_be_bytes());
