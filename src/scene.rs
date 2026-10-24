@@ -2407,6 +2407,135 @@ mod tests {
         assert_eq!(active.map_locals.globals(), [12, -8]);
         assert_eq!(scene.variables.globals, [12, -8]);
 
+        // Pinned map_load_file does not serialize its header system script
+        // as a MAP category-0 record. It creates one from scriptIndex - 1
+        // and executes MAP_ENTER before the remaining MAP_ENTER phase.
+        let mut header_scene = scene.clone();
+        let mut fresh = header_scene.unstarted_script_environment(&mut assets).unwrap();
+        assert!(scene
+            .install_header_system_script(&mut assets, &mut fresh)
+            .unwrap()
+            .is_none());
+        header_scene.header.script_index = 1;
+        assert!(header_scene
+            .install_header_system_script(&mut assets, &mut fresh)
+            .is_err());
+        assert_eq!(fresh.scripts.runtime.len(), 0);
+        assert_eq!(fresh.game_globals.as_ref().unwrap().values(), [7, -13]);
+
+        let dir = root.join("data").join("scripts");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("scripts.lst"), b"MAPSYS.ssl\n").unwrap();
+        let mut sys_int = vec![0_u8; 42];
+        sys_int[0..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+        sys_int[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
+        sys_int[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
+        sys_int[24..28].copy_from_slice(&0_i32.to_be_bytes());
+        sys_int[28..30].copy_from_slice(&0x80C7_u16.to_be_bytes());
+        sys_int[30..32].copy_from_slice(&0x80C6_u16.to_be_bytes());
+        sys_int[32..34].copy_from_slice(&0x8021_u16.to_be_bytes());
+        sys_int.extend_from_slice(&2_i32.to_be_bytes());
+        let mut names = Vec::new();
+        for (name, entry) in [
+            (b"main".as_slice(), 0_i32),
+            (b"map_enter_p_proc".as_slice(), 20_i32),
+        ] {
+            let offset = 4 + names.len() as i32;
+            for field in [offset, 0, 0, 0, entry, 0] {
+                sys_int.extend_from_slice(&field.to_be_bytes());
+            }
+            names.extend_from_slice(name);
+            names.push(0);
+        }
+        sys_int.extend_from_slice(&(names.len() as i32).to_be_bytes());
+        sys_int.extend_from_slice(&names);
+        sys_int.extend_from_slice(&0_i32.to_be_bytes());
+        fs::write(dir.join("MAPSYS.int"), sys_int).unwrap();
+        let (instance, virtual_sid) = header_scene
+            .install_header_system_script(&mut assets, &mut fresh)
+            .unwrap()
+            .unwrap();
+        assert_eq!(instance, 1);
+        assert_eq!(virtual_sid, 0);
+        assert_eq!(fresh.scripts.runtime.len(), 1);
+        assert_eq!(
+            fresh.owner_for_instance(instance),
+            Some(
+                crate::script_owner_binding::ScriptOwnerResolution::
+                    GeneratedSystemOwnerRequiresEngine
+            )
+        );
+        assert_eq!(fresh.map_locals.locals(), [99]);
+        assert_eq!(fresh.map_locals.globals(), [12, -8]);
+        assert!(header_scene
+            .install_header_system_script(&mut assets, &mut fresh)
+            .is_err());
+        let context = crate::script_native_vars::ScriptClockContext {
+            clock: crate::script_clock::ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(header_scene.header.last_visit_time),
+        };
+        let prepared = header_scene
+            .enter_header_system_script_transactional_bounded(
+                &mut fresh, instance, virtual_sid, context, 200, 5,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(prepared.0.action, 15);
+        assert_eq!(prepared.1, None);
+        assert_eq!(fresh.invocations.get(&instance).unwrap().action(), 15);
+        assert_eq!(fresh.invocations.get(&instance).unwrap().fixed_parameter(), 1);
+        assert_eq!(fresh.game_globals.as_ref().unwrap().values(), [7, -13]);
+        let ran = fresh
+            .advance_script_state_tick_bounded(context, 200, 5, 0)
+            .unwrap();
+        assert_eq!(ran.executed_steps, [(instance, 5)]);
+        assert_eq!(fresh.game_globals.as_ref().unwrap().values(), [15, -13]);
+        assert_eq!(scene.variables.globals, [12, -8]);
+
+        // A generated hidden owner must never turn into an invented
+        // NULL object. SELF_OBJ fails in the same installed VM while
+        // leaving Rust quest state and its PC untouched.
+        let mut unbound = header_scene.unstarted_script_environment(&mut assets).unwrap();
+        let (id, sid) = header_scene
+            .install_header_system_script(&mut assets, &mut unbound)
+            .unwrap()
+            .unwrap();
+        let vm = unbound.scripts.runtime.vm_mut(id).unwrap();
+        let mut object_int = vec![0_u8; 42];
+        object_int[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
+        object_int[22..24].copy_from_slice(&0x80BC_u16.to_be_bytes());
+        object_int[24..26].copy_from_slice(&0x8021_u16.to_be_bytes());
+        object_int.extend_from_slice(&2_i32.to_be_bytes());
+        let mut offsets = Vec::new();
+        for (name, body) in [
+            (b"main".as_slice(), 0_i32),
+            (b"map_enter_p_proc".as_slice(), 20_i32),
+        ] {
+            let offset = 4 + offsets.len() as i32;
+            for field in [offset, 0, 0, 0, body, 0] {
+                object_int.extend_from_slice(&field.to_be_bytes());
+            }
+            offsets.extend_from_slice(name);
+            offsets.push(0);
+        }
+        object_int.extend_from_slice(&(offsets.len() as i32).to_be_bytes());
+        object_int.extend_from_slice(&offsets);
+        object_int.extend_from_slice(&0_i32.to_be_bytes());
+        *vm = crate::script_vm::ScriptVm::new(
+            crate::script_program::ScriptProgram::decode(&object_int).unwrap(),
+        );
+        header_scene
+            .enter_header_system_script_transactional_bounded(
+                &mut unbound, id, sid, context, 201, 4,
+            )
+            .unwrap();
+        assert!(unbound
+            .advance_script_state_tick_bounded(context, 201, 3, 0)
+            .is_err());
+        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [7, -13]);
+        assert_eq!(unbound.scripts.runtime.vm(id).unwrap().pc(), 20);
+        assert_eq!(unbound.map_locals.locals(), [99]);
+
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
         assert!(scene
             .unstarted_script_environment(&mut assets)
