@@ -682,6 +682,95 @@ impl ScriptVm {
             .map(|frame| frame.returned)
     }
 
+    /// Stage pinned CE setupCall(program, body, 20) on a scratch VM.
+    /// The original procedure metadata must be supported before touching
+    /// stacks. A direct local call may inherit PROCEDURE_FLAG_CRITICAL;
+    /// doEvents timed procedures have their flags ZEROED before executeProc
+    /// and therefore stage a noncritical call, without interpreting it.
+    fn stage_local_core_call_frame(
+        &mut self,
+        procedure_index: usize,
+        enter_critical: bool,
+    ) -> io::Result<()> {
+        let procedure = self
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE local action procedure index outside table"))?;
+        if procedure.flags & 0x04 != 0 {
+            return Err(invalid("CE imported local action is not supported"));
+        }
+        if procedure.argument_count != 0 {
+            return Err(invalid("CE local action arguments are not supported"));
+        }
+        let body = usize::try_from(procedure.body_offset)
+            .map_err(|_| invalid("CE local action has negative body offset"))?;
+        if self.program.word_at(body)? & 0x8000 == 0 {
+            return Err(invalid("CE local action body is not an opcode"));
+        }
+        let original_pc =
+            i32::try_from(self.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
+        let saved_flags = self.modeled_program_low_flags();
+        if saved_flags & !0x80 != 0 {
+            return Err(invalid(
+                "CE local action has unsupported saved program flags",
+            ));
+        }
+        self.push_return(ScriptValue::Int(original_pc))?;
+        self.push_return(ScriptValue::Int(20))?;
+        self.push(ScriptValue::Int(i32::from(saved_flags)))?;
+        self.push(ScriptValue::Pointer(0))?;
+        self.push(ScriptValue::Int(0))?; // bounded null-host window ID
+        self.push(ScriptValue::Int(0))?; // CE setupCall argument marker
+        self.critical_section = enter_critical;
+        self.halted = false;
+        self.halt_reason = None;
+        self.pc = body;
+        Ok(())
+    }
+
+    /// Persist only the CE doEvents **timed local call setup** in this VM.
+    /// Due timers clear their flags before executeProc calls setupCall. In
+    /// the pinned source, executeProc does not immediately interpret that
+    /// noncritical call: PC and the two CE stacks are prepared for a
+    /// subsequent interpreter burst. This method never runs body bytecode
+    /// or invokes a native engine callback.
+    ///
+    /// This safe subset refuses conditional or imported procedures instead
+    /// of incorrectly ignoring them or resolving an external program.
+    /// Strict unsigned CE event-time comparison is preserved. On failure,
+    /// the original VM remains unchanged, unlike CE's error longjmp path.
+    pub fn prepare_due_timed_local_core_transactional(
+        &mut self,
+        procedure_index: usize,
+        now_millis: u32,
+    ) -> io::Result<bool> {
+        let procedure = self
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE timed procedure index outside table"))?;
+        if procedure.flags & 0x02 != 0 {
+            return Err(invalid(
+                "CE conditional event needs full evaluator before timed-only preparation",
+            ));
+        }
+        if procedure.flags & 0x01 == 0 || (procedure.event_time as u32) >= now_millis {
+            return Ok(false);
+        }
+        if procedure.flags & 0x04 != 0 {
+            return Err(invalid("CE imported scheduled procedure host not installed"));
+        }
+        let mut next = self.clone();
+        next.runtime_procedures[procedure_index].flags = 0;
+        next.clock_millis = now_millis as i32;
+        // With the schedule flags cleared, pinned executeProc sees no
+        // PROCEDURE_FLAG_CRITICAL. It only prepares the local call frame.
+        next.stage_local_core_call_frame(procedure_index, false)?;
+        *self = next;
+        Ok(true)
+    }
+
     /// Inspect the full candidate state after a source-derived local
     /// executeProc/setupCall frame returns, including procedure writes.
     /// All effects remain on a CLONE. Callers must only supply read-only
@@ -698,33 +787,11 @@ impl ScriptVm {
             .get(procedure_index)
             .copied()
             .ok_or_else(|| invalid("CE local action procedure index outside table"))?;
-        if procedure.flags & 0x04 != 0 {
-            return Err(invalid("CE imported local action is not supported"));
-        }
-        if procedure.argument_count != 0 {
-            return Err(invalid("CE local action arguments are not supported"));
-        }
-        let body = usize::try_from(procedure.body_offset)
-            .map_err(|_| invalid("CE local action has negative body offset"))?;
-        self.program.word_at(body)?;
         let mut probe = self.clone();
         let original_pc =
             i32::try_from(probe.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
-        probe.push_return(ScriptValue::Int(original_pc))?;
-        probe.push_return(ScriptValue::Int(20))?;
         let flags = probe.modeled_program_low_flags();
-        if flags & !0x80 != 0 {
-            return Err(invalid(
-                "CE local action has unsupported saved program flags",
-            ));
-        }
-        probe.push(ScriptValue::Int(i32::from(flags)))?;
-        probe.push(ScriptValue::Pointer(0))?;
-        probe.push(ScriptValue::Int(0))?; // synthetic window ID
-        probe.push(ScriptValue::Int(0))?; // CE setupCall argument marker
-        probe.critical_section = procedure.flags & 0x10 != 0;
-        probe.halted = false;
-        probe.pc = body;
+        probe.stage_local_core_call_frame(procedure_index, procedure.flags & 0x10 != 0)?;
 
         for _ in 0..max_steps {
             let opcode = probe.program.word_at(probe.pc)?;
@@ -1900,6 +1967,61 @@ mod tests {
             vm.preview_local_action_core_bounded(0, 6).unwrap(),
             Some(ScriptValue::Int(37))
         );
+    }
+
+    #[test]
+    fn ce_timed_local_call_prepares_persistent_stack_without_interpreting_body() {
+        let body = [0x80, 0x1A, 0x80, 0x21]; // POP arg; POP_FLAGS_EXIT
+        let mut vm = synthetic_due_vm(&[0x80, 0x11], &body, 0x11);
+        vm.runtime_procedures[1].event_time = 100;
+        assert!(!vm.prepare_due_timed_local_core_transactional(1, 100).unwrap());
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert!(vm.return_stack().is_empty());
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x11);
+        assert!(vm.prepare_due_timed_local_core_transactional(1, 101).unwrap());
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert_eq!(vm.runtime_procedures()[1].event_time, 100);
+        assert_eq!(vm.pc(), 28);
+        assert_eq!(
+            vm.stack(),
+            [
+                ScriptValue::Int(0),
+                ScriptValue::Pointer(0),
+                ScriptValue::Int(0),
+                ScriptValue::Int(0)
+            ]
+        );
+        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+        assert!(!vm.halted());
+        assert!(!vm.critical_section());
+        // No CE opcodes were run by the scheduler. The next interpreter
+        // burst can consume the argument marker and return via its frame.
+        vm.step().unwrap();
+        assert_eq!(vm.pc(), 30);
+        assert_eq!(vm.stack().len(), 3);
+        vm.step().unwrap();
+        assert_eq!(vm.pc(), 20);
+        assert!(vm.halted());
+        assert_eq!(vm.halt_reason(), Some(super::ScriptHaltReason::ReturnFromCall));
+    }
+
+    #[test]
+    fn ce_timed_local_setup_rejects_missing_host_or_bad_body_without_consumption() {
+        for (flags, body) in [
+            (0x03, [0x80, 0x1A]),
+            (0x05, [0x80, 0x1A]),
+            (0x01, [0x00, 0x00]),
+        ] {
+            let mut vm = synthetic_due_vm(&[0x80, 0x11], &body, flags);
+            vm.runtime_procedures[1].event_time = 5;
+            let original = vm.runtime_procedures().to_vec();
+            assert!(vm.prepare_due_timed_local_core_transactional(1, 6).is_err());
+            assert_eq!(vm.runtime_procedures(), original);
+            assert_eq!(vm.pc(), 0);
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+        }
     }
 
     #[test]
