@@ -18,6 +18,8 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
+use crate::script_clock::ScriptGameClock;
+use crate::script_time_advance::TimeAdvancePlan;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
@@ -75,6 +77,23 @@ pub struct PreparedScriptEnvironment {
     /// event, paired with an explicit NULL target. Only that event
     /// authorizes source_obj; unresolved handles fail closed on use.
     pub spatial_sources: BTreeMap<u64, ObjectKey>,
+}
+
+/// Finite queue-process limits for source-shaped game_time_advance.
+/// These do not change CE's whole-day/remainder callback order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptTimeAdvanceBudget {
+    pub max_queue_polls: usize,
+    pub max_events_per_poll: usize,
+    pub max_critical_steps: usize,
+}
+
+/// Verified chunk sequence: every signed game-time increment is followed
+/// by precisely one queue-process attempt, including a final zero chunk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutedScriptTimeAdvance {
+    pub increments: Vec<i32>,
+    pub due_events_per_poll: Vec<Vec<(ScriptTimerEvent, Option<usize>)>>,
 }
 
 /// Pure sandbox result from a CLONED CE local script preview.
@@ -677,6 +696,61 @@ impl PreparedScriptEnvironment {
         *self = candidate;
         *queue = pending;
         Ok(applied)
+    }
+
+    /// Execute pinned CE game_time_advance's whole-day and signed
+    /// remainder chunks, running a due EVENT_TYPE_SCRIPT queue poll after
+    /// EACH increment, including the mandatory final zero increment.
+    /// Timing arithmetic follows TimeAdvancePlan's signed C++ division.
+    /// Only source-backed script timers and allowlisted quest/MAP effects
+    /// are supported; other due queue kinds fail closed.
+    ///
+    /// The entire installed script environment, game clock and queue are
+    /// cloned before the first increment. Even when a later queue poll or
+    /// critical timed procedure fails, no intermediate clock, quest state
+    /// or queue events are committed. This is a Rust transactional safety
+    /// boundary, NOT a full CE game_time_advance native dispatch from an
+    /// actively interpreting script or a general world/actor time loop.
+    pub fn advance_game_time_with_script_timers_transactional_bounded(
+        &mut self,
+        queue: &mut EventQueue,
+        clock: &mut ScriptGameClock,
+        delta_ticks: i32,
+        now_millis: u32,
+        budget: ScriptTimeAdvanceBudget,
+    ) -> io::Result<ExecutedScriptTimeAdvance> {
+        let plan = TimeAdvancePlan::from_ticks(delta_ticks, budget.max_queue_polls)?;
+        let mut state = self.clone();
+        let mut queued = queue.clone();
+        let mut next_clock = *clock;
+        let mut per_poll = Vec::with_capacity(plan.queue_polls());
+        for &increment in plan.increments_before_queue_process() {
+            next_clock.ticks = next_clock.ticks.checked_add(increment).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE game_time_advance tick arithmetic exceeds signed 32-bit range",
+                )
+            })?;
+            let now = ScriptClockContext {
+                clock: next_clock,
+                last_visit_ticks: Some(state.map_last_visit_ticks),
+            };
+            per_poll.push(state.process_due_script_timers_transactional_bounded(
+                &mut queued,
+                now,
+                next_clock.ticks,
+                now_millis,
+                budget.max_events_per_poll,
+                budget.max_critical_steps,
+            )?);
+        }
+        *self = state;
+        *queue = queued;
+        *clock = next_clock;
+        Ok(ExecutedScriptTimeAdvance {
+            increments: plan.increments_before_queue_process().to_vec(),
+            due_events_per_poll: per_poll,
+        })
     }
 
     /// Find the source-derived CE owner of an installed, unstarted Rust VM.
