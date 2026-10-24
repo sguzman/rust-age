@@ -36,7 +36,9 @@ use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
-use crate::script_time_advance::{plan_game_time_advance_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE};
+use crate::script_time_advance::{
+    plan_game_time_advance_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
+};
 use crate::script_timer::{
     apply_timer_native_opcode, ScriptTimerEvent, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,
