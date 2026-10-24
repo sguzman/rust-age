@@ -6,8 +6,11 @@
 use crate::actor_route::{ActorRoute, ActorStep};
 use crate::collision::ObjectKey;
 use crate::hex::HexViewport;
-use crate::scene::StaticScene;
+use crate::scene::{PreparedScriptEnvironment, StaticScene};
+use crate::script_native_vars::ScriptClockContext;
 use crate::script_object_binding::MapObjectReadBindings;
+use crate::script_owner_binding::MapScriptOwners;
+use crate::script_runtime::PreparedCoreTick;
 use std::io;
 
 fn invalid(message: &'static str) -> io::Error {
@@ -34,6 +37,87 @@ impl RuntimeScene {
     /// Previously returned snapshots retain their earlier property values.
     pub fn object_query_snapshot(&self) -> io::Result<MapObjectReadBindings> {
         self.snapshot.object_query_snapshot()
+    }
+
+    /// Advance installed Rust-owned MAP scripts against the CURRENT
+    /// mutable scene's object positions, rather than stale decoded object
+    /// snapshots. CE object identity is tied to an existing table slot and
+    /// opaque handle; this bridge rejects changed object counts, recycled
+    /// PID slots, altered script bindings, or changed owner resolutions.
+    ///
+    /// The environment is cloned, re-bound to the live object snapshots,
+    /// and committed only after a full bounded native/script tick succeeds.
+    /// Source MAP bytes, object positions and collision state do not roll
+    /// back here because they were changed by earlier actor operations.
+    /// This tests world-property -> CE script-condition integration, NOT
+    /// automatic spatial triggers, obj_move_to_tile scripts, or save files.
+    pub fn advance_script_state_with_current_scene_bounded(
+        &self,
+        environment: &mut PreparedScriptEnvironment,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        if environment.scripts.entries.len() != self.snapshot.scripts.script_count() {
+            return Err(invalid("CE live scene script binding count changed"));
+        }
+        if environment.map_locals.globals().len() != self.snapshot.variables.globals.len() {
+            return Err(invalid("CE live scene MAP global layout changed"));
+        }
+        for entry in &environment.scripts.entries {
+            let record = self
+                .snapshot
+                .scripts
+                .categories
+                .get(entry.binding.category)
+                .and_then(|category| category.get(entry.binding.ordinal))
+                .ok_or_else(|| invalid("CE live scene script binding record unavailable"))?;
+            if record.script_id != entry.binding.script_id
+                || record.script_index != entry.binding.script_index
+                || record.local_variable_count != entry.binding.local_variable_count
+                || record.local_variable_offset != entry.binding.local_variable_offset
+            {
+                return Err(invalid("CE live scene script record identity changed"));
+            }
+        }
+        let queries = self.snapshot.object_query_snapshot()?;
+        let previous = environment.object_queries.snapshots();
+        let refreshed = queries.snapshots();
+        if previous.len() != refreshed.len()
+            || previous.iter().zip(refreshed).any(|(old, new)| {
+                old.handle != new.handle
+                    || old.pid != new.pid
+                    || old.table_elevation != new.table_elevation
+            })
+        {
+            return Err(invalid("CE live scene object handle or PID identity changed"));
+        }
+        let owners =
+            MapScriptOwners::from_map(&self.snapshot.scripts, &self.snapshot.objects, &queries)?;
+        for entry in &environment.scripts.entries {
+            let Some(instance) = entry.instance_id else {
+                continue;
+            };
+            if environment
+                .script_owners
+                .resolution_for_instance(&environment.scripts, instance)
+                != owners.resolution_for_instance(&environment.scripts, instance)
+            {
+                return Err(invalid("CE live scene script owner identity changed"));
+            }
+        }
+        let mut candidate = environment.clone();
+        candidate.object_queries = queries;
+        candidate.script_owners = owners;
+        let tick = candidate.advance_script_state_tick_bounded(
+            clock,
+            now_millis,
+            cpu_burst,
+            max_steps_per_condition,
+        )?;
+        *environment = candidate;
+        Ok(tick)
     }
 
     pub fn plan_actor(
