@@ -449,7 +449,12 @@ mod tests {
         body.extend_from_slice(&0x80D4_u16.to_be_bytes()); // TILE_NUM
         body.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
         body.extend_from_slice(
-            &(if invalid_after_write { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
+            &(if invalid_after_write {
+                0x80FF_u16
+            } else {
+                0x8021_u16
+            })
+            .to_be_bytes(),
         );
         let mut bytes = vec![0_u8; 42];
         bytes[20..20 + body.len()].copy_from_slice(&body);
@@ -509,7 +514,9 @@ mod tests {
                 instance_id: Some(7),
             }],
         };
-        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let map_locals = scripts
+            .script_local_state(&world.snapshot.variables)
+            .unwrap();
         let object_queries = world.object_query_snapshot().unwrap();
         let script_owners = MapScriptOwners::from_map(
             &world.snapshot.scripts,
@@ -538,7 +545,10 @@ mod tests {
             elevation: 0,
             ordinal: 0,
         };
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
             last_visit_ticks: Some(0),
@@ -576,7 +586,10 @@ mod tests {
             elevation: 0,
             ordinal: 0,
         };
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
             last_visit_ticks: Some(0),
@@ -613,7 +626,10 @@ mod tests {
             elevation: 0,
             ordinal: 0,
         };
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
             last_visit_ticks: Some(0),
@@ -634,7 +650,10 @@ mod tests {
         assert_eq!(route.current_tile(), 20099);
         assert_eq!(route.remaining_steps(), 1);
         assert_eq!(world.snapshot().collision.tile_of(actor), Some(20099));
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20099);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0].record.header.tile,
+            20099
+        );
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
         assert!(env.spatial_sources.is_empty());
         assert!(env.invocations.is_empty());
