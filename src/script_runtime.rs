@@ -1042,7 +1042,9 @@ mod tests {
         );
         // Noncritical executeProc only sets up a call; the following source
         // tick, not the action planner, executes the body STOP instruction.
-        let tick = runtime.advance_core_tick_transactional_bounded(100, 1).unwrap();
+        let tick = runtime
+            .advance_core_tick_transactional_bounded(100, 1)
+            .unwrap();
         assert_eq!(tick.executed_steps, [(9, 1)]);
         assert!(runtime.vm(9).unwrap().halted());
 

@@ -245,12 +245,12 @@ impl PreparedScriptEnvironment {
         let installed = next
             .scripts
             .runtime
-            .prepare_noncritical_local_action_transactional(
-                planned.instance_id,
-                planned.action,
-            )?
+            .prepare_noncritical_local_action_transactional(planned.instance_id, planned.action)?
             .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "CE planned MAP action no longer exists")
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned MAP action no longer exists",
+                )
             })?;
         if installed != verified {
             return Err(io::Error::new(
