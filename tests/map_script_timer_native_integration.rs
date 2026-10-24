@@ -281,6 +281,99 @@ fn noncritical_timed_callback_late_error_reverts_requeued_event_and_vm() {
     assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 11);
 }
 
+fn critical_map_enter_advance_then_add_timer_vm() -> ScriptVm {
+    // Return marker 20 must itself be a valid INT instruction boundary.
+    // Place the second PUSH_INT exactly there, after one NOOP at PC18.
+    let mut bytes = vec![0_u8; 42];
+    bytes[0..2].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP setupCall arg
+    bytes[2..4].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH ticks
+    bytes[4..8].copy_from_slice(&864_000_i32.to_be_bytes());
+    bytes[8..10].copy_from_slice(&0x80FC_u16.to_be_bytes()); // GAME_TIME_ADVANCE
+    bytes[10..12].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+    bytes[12..14].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH delay
+    bytes[14..18].copy_from_slice(&5_i32.to_be_bytes());
+    bytes[18..20].copy_from_slice(&0x8000_u16.to_be_bytes()); // NOOP
+    bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH parameter
+    bytes[22..26].copy_from_slice(&42_i32.to_be_bytes());
+    bytes[26..28].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
+    bytes[28..30].copy_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
+    bytes.extend_from_slice(&2_i32.to_be_bytes());
+    let mut strings = Vec::new();
+    for (name, flags) in [
+        (b"main".as_slice(), 0_i32),
+        (b"map_enter_p_proc".as_slice(), 0x10_i32),
+    ] {
+        let offset = 4 + strings.len() as i32;
+        for field in [offset, flags, 0, 0, 0, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        strings.extend_from_slice(name);
+        strings.push(0);
+    }
+    bytes.extend_from_slice(&(strings.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&strings);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+#[test]
+fn critical_map_enter_timer_uses_game_clock_advanced_earlier_in_same_procedure() {
+    let mut env = environment(critical_map_enter_advance_then_add_timer_vm());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_200, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    let count = env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action, &mut clock, &mut queue, 1000, 9, 2,
+        )
+        .unwrap();
+    assert_eq!(count, 9);
+    assert_eq!(clock.ticks, 864_100);
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.next_time(), 864_105);
+    let timer = rust_age::script_timer::ScriptTimerEvent::decode(
+        &queue.pop_due(864_105).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(timer.sid, SID);
+    assert_eq!(timer.owner, Some(OWNER));
+    assert_eq!(timer.fixed_parameter, 42);
+    assert_eq!(queue.next_time(), 864_200);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 15);
+}
+
+#[test]
+fn critical_advance_before_due_foreign_queue_event_reverts_clock_and_timer() {
+    let mut env = environment(critical_map_enter_advance_then_add_timer_vm());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_100, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    let before = queue.clone();
+    assert!(env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action, &mut clock, &mut queue, 1000, 9, 2,
+        )
+        .is_err());
+    assert_eq!(clock.ticks, 100);
+    assert_eq!(queue, before);
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert!(env.scripts.runtime.vm(1).unwrap().stack().is_empty());
+}
+
 fn critical_map_enter_timer_opcode(terminator: u16) -> ScriptVm {
     let mut body = vec![0_u8; 20];
     body[..2].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
