@@ -535,20 +535,43 @@ impl ScriptRuntime {
         let mut next = self.clone();
         let mut executed_steps = Vec::with_capacity(next.programs.len());
         for program in &mut next.programs {
-            if program.vm.critical_section() {
-                return Err(invalid(
-                    "CE unbounded critical-section execution requires full interpreter",
-                ));
-            }
             program.vm.set_clock_millis(now_millis as i32);
+            // Pinned CE interpret: if already critical with fewer than three
+            // normal-budget iterations, use at least three. The while-loop
+            // tests CRITICAL_SECTION before decrementing a2, so critical
+            // instructions DO NOT consume the ordinary CPU burst budget.
+            let mut remaining = if program.vm.critical_section() {
+                cpu_burst.max(3)
+            } else {
+                cpu_burst
+            };
             let mut steps = 0;
-            while steps < cpu_burst && !program.vm.halted() {
+            let mut critical_steps = 0;
+            loop {
+                if program.vm.halted() {
+                    break;
+                }
+                if program.vm.critical_section() {
+                    // Original CE can run critical bytecode indefinitely.
+                    // This bounded adapter MUST fail closed rather than
+                    // hang or leave a partially committed interpreter.
+                    if critical_steps >= 4096 {
+                        return Err(invalid(
+                            "CE critical section exceeded core tick safety bound",
+                        ));
+                    }
+                    critical_steps += 1;
+                } else if remaining == 0 {
+                    break;
+                } else {
+                    remaining -= 1;
+                }
                 program.vm.step()?;
                 steps += 1;
             }
             if program.vm.critical_section() {
                 return Err(invalid(
-                    "CE critical section cannot be suspended by bounded core tick",
+                    "CE terminated while critical section remained active",
                 ));
             }
             // CE interpret returns to updatePrograms after clearing
@@ -1005,29 +1028,74 @@ mod tests {
     }
 
     #[test]
-    fn ce_core_tick_rejects_interrupted_critical_section_but_allows_completion() {
+    fn ce_core_tick_drains_critical_without_charging_ordinary_budget() {
         let mut bytes = vec![0_u8; 42];
-        // Enter and then leave the CE critical section before this script
-        // can yield a CPU burst. The bounded adapter rejects the partial
-        // first instruction rather than committing a fictitious CE yield.
-        bytes[..4].copy_from_slice(&[0x80, 0x02, 0x80, 0x03]);
+        // CRITICAL_START, NOOP, CRITICAL_DONE, NOOP, STOP_PROGRAM.
+        bytes[..10].copy_from_slice(&[
+            0x80, 0x02, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
+        ]);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(1, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        // A burst of ONE still runs the two inside-critical instructions.
+        let first = runtime
+            .advance_core_tick_transactional_bounded(1, 1)
+            .unwrap();
+        assert_eq!(first.executed_steps, [(1, 3)]);
+        assert!(first.prepared_calls.is_empty());
+        assert_eq!(runtime.vm(1).unwrap().pc(), 6);
+        assert!(!runtime.vm(1).unwrap().critical_section());
+        assert!(!runtime.vm(1).unwrap().halted());
+        // The next burst resumes normally, never replaying critical code.
+        let second = runtime
+            .advance_core_tick_transactional_bounded(2, 2)
+            .unwrap();
+        assert_eq!(second.executed_steps, [(1, 2)]);
+        assert_eq!(runtime.vm(1).unwrap().pc(), 10);
+        assert!(runtime.vm(1).unwrap().halted());
+    }
+
+    #[test]
+    fn ce_core_tick_extends_burst_for_a_preexisting_critical_section() {
+        let mut bytes = vec![0_u8; 42];
+        bytes[..10].copy_from_slice(&[
+            0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
+        ]);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        let mut vm = ScriptVm::new(ScriptProgram::decode(&bytes).unwrap());
+        vm.step().unwrap(); // prepare an already-entered CE critical state
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, vm).unwrap();
+        let tick = runtime
+            .advance_core_tick_transactional_bounded(5, 0)
+            .unwrap();
+        // CE clamps an initially critical a2=0 to 3; the first critical
+        // DONE does not count against the three remaining normal NOPs.
+        assert_eq!(tick.executed_steps, [(1, 4)]);
+        assert_eq!(runtime.vm(1).unwrap().pc(), 10);
+        assert!(!runtime.vm(1).unwrap().critical_section());
+    }
+
+    #[test]
+    fn ce_core_tick_rolls_back_infinite_critical_section_without_hanging() {
+        let mut bytes = vec![0_u8; 42];
+        // CRITICAL_START, then JMP to itself at byte address 2.
+        bytes[..10].copy_from_slice(&[
+            0x80, 0x02, 0xC0, 0x01, 0, 0, 0, 2, 0x80, 0x04,
+        ]);
         bytes.extend_from_slice(&[0_u8; 12]);
         let mut runtime = ScriptRuntime::new();
         runtime
             .register(1, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
             .unwrap();
         assert!(runtime
-            .advance_core_tick_transactional_bounded(1, 1)
+            .advance_core_tick_transactional_bounded(2, 1)
             .is_err());
         assert_eq!(runtime.vm(1).unwrap().pc(), 0);
         assert!(!runtime.vm(1).unwrap().critical_section());
-        let complete = runtime
-            .advance_core_tick_transactional_bounded(1, 2)
-            .unwrap();
-        assert_eq!(complete.executed_steps, [(1, 2)]);
-        assert!(complete.prepared_calls.is_empty());
-        assert_eq!(runtime.vm(1).unwrap().pc(), 4);
-        assert!(!runtime.vm(1).unwrap().critical_section());
+        assert!(runtime.vm(1).unwrap().stack().is_empty());
     }
 
     #[test]
