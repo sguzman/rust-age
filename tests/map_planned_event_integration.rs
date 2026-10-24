@@ -1,6 +1,7 @@
 //! Synthetic CE MAP lifecycle plan -> installed VM -> inert event metadata.
 //! These are invented script and object records; no game procedure executes.
 use rust_age::collision::ObjectKey;
+use rust_age::event_queue::{EventQueue, EventType};
 use rust_age::game_globals::GameGlobalState;
 use rust_age::map::MapVariables;
 use rust_age::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
@@ -487,6 +488,153 @@ fn mixed_map_phase_rolls_back_prior_noncritical_and_critical_quest_effects_on_fa
         assert!(vm.stack().is_empty());
         assert!(!vm.critical_section());
     }
+}
+
+fn timed_event_vm(critical: bool, invalid_after_write: bool) -> ScriptVm {
+    let mut bytes = vec![0_u8; 42];
+    bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP saved argument
+    bytes[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[24..28].copy_from_slice(&0_i32.to_be_bytes());
+    bytes[28..30].copy_from_slice(&0x80F7_u16.to_be_bytes()); // FIXED_PARAM
+    bytes[30..32].copy_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+    bytes[32..34].copy_from_slice(
+        &(if invalid_after_write {
+            0x80FF_u16
+        } else {
+            0x8021_u16
+        })
+        .to_be_bytes(),
+    );
+    bytes.extend_from_slice(&2_i32.to_be_bytes());
+    let mut names = Vec::new();
+    for (name, flags, body) in [
+        (b"main".as_slice(), 0_i32, 0_i32),
+        (b"timed_event_p_proc".as_slice(), if critical { 0x10 } else { 0 }, 20_i32),
+    ] {
+        let offset = 4 + names.len() as i32;
+        for field in [offset, flags, 0, 0, body, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        names.extend_from_slice(name);
+        names.push(0);
+    }
+    bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&names);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+fn scripted_timer_queue(time: i32, sid: i32, value: i32) -> EventQueue {
+    let mut queue = EventQueue::new();
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&sid.to_be_bytes());
+    payload.extend_from_slice(&value.to_be_bytes());
+    queue
+        .add(time, 0, EventType::Script, None, payload)
+        .unwrap();
+    queue
+}
+
+#[test]
+fn due_script_timer_executes_critical_quest_event_immediately_and_preserves_future_events() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = timed_event_vm(true, false);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let mut queue = scripted_timer_queue(100, 17, 42);
+    queue
+        .add(110, 0, EventType::Script, None, [0_u8; 8].to_vec())
+        .unwrap();
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 100 },
+        last_visit_ticks: Some(0),
+    };
+    let none = env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue, clock, 99, 1000, 2, 8,
+        )
+        .unwrap();
+    assert!(none.is_empty());
+    assert_eq!(queue.len(), 2);
+    let fired = env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue, clock, 100, 1000, 2, 8,
+        )
+        .unwrap();
+    assert_eq!(fired.len(), 1);
+    assert_eq!(fired[0].0.sid, 17);
+    assert_eq!(fired[0].0.fixed_parameter, 42);
+    assert_eq!(fired[0].1, Some(5));
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 110);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [42]);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 42);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 22);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    assert!(!env.scripts.runtime.vm(1).unwrap().critical_section());
+}
+
+#[test]
+fn deferred_timed_event_resumes_in_following_interpreter_burst() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = timed_event_vm(false, false);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let mut queue = scripted_timer_queue(10, 17, -7);
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 10 },
+        last_visit_ticks: Some(0),
+    };
+    let due = env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue, clock, 10, 100, 1, 0,
+        )
+        .unwrap();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].1, None);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    let tick = env.advance_script_state_tick_bounded(clock, 101, 5, 0).unwrap();
+    assert_eq!(tick.executed_steps, [(1, 5)]);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [-7]);
+    assert!(queue.is_empty());
+}
+
+#[test]
+fn due_script_timers_roll_back_queue_and_quest_state_on_unsupported_native_or_kind() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = timed_event_vm(true, true);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[5]).unwrap());
+    let mut queue = scripted_timer_queue(10, 17, 99);
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 10 },
+        last_visit_ticks: Some(0),
+    };
+    assert!(env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue, clock, 10, 100, 1, 8,
+        )
+        .is_err());
+    assert_eq!(queue.len(), 1);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [5]);
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+
+    let mut wrong_kind = EventQueue::new();
+    wrong_kind
+        .add(10, 0, EventType::Drug, None, vec![])
+        .unwrap();
+    assert!(env
+        .process_due_script_timers_transactional_bounded(
+            &mut wrong_kind, clock, 10, 100, 5, 8,
+        )
+        .is_err());
+    assert_eq!(wrong_kind.len(), 1);
+    assert!(env
+        .process_due_script_timers_transactional_bounded(
+            &mut queue, clock, 10, 100, 0, 8,
+        )
+        .is_err());
+    assert_eq!(queue.len(), 1);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [5]);
 }
 
 fn synthetic_enter_update_vm() -> ScriptVm {
