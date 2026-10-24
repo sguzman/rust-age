@@ -545,8 +545,17 @@ mod tests {
         assert_eq!(route.current_tile(), 20099);
         assert_eq!(route.remaining_steps(), 1);
         assert_eq!(world.snapshot().collision.tile_of(actor), Some(20099));
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20099);
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.rotation, 0);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0].record.header.tile,
+            20099
+        );
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0]
+                .record
+                .header
+                .rotation,
+            0
+        );
         assert_eq!(environment.object_queries, before_queries);
         assert!(environment.scripts.entries.is_empty());
         assert!(environment.game_globals.is_none());
