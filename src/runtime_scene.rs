@@ -70,14 +70,13 @@ impl RuntimeScene {
     /// back here because they were changed by earlier actor operations.
     /// This tests world-property -> CE script-condition integration, NOT
     /// automatic spatial triggers, obj_move_to_tile scripts, or save files.
-    pub fn advance_script_state_with_current_scene_bounded(
+    /// Verify that installed script owners and MAP object identities
+    /// still refer to the same live scene, then refresh read-only native
+    /// properties without evaluating or consuming any script event.
+    fn refreshed_script_environment(
         &self,
-        environment: &mut PreparedScriptEnvironment,
-        clock: ScriptClockContext,
-        now_millis: u32,
-        cpu_burst: usize,
-        max_steps_per_condition: usize,
-    ) -> io::Result<PreparedCoreTick> {
+        environment: &PreparedScriptEnvironment,
+    ) -> io::Result<PreparedScriptEnvironment> {
         if environment.scripts.entries.len() != self.snapshot.scripts.script_count() {
             return Err(invalid("CE live scene script binding count changed"));
         }
@@ -131,6 +130,18 @@ impl RuntimeScene {
         let mut candidate = environment.clone();
         candidate.object_queries = queries;
         candidate.script_owners = owners;
+        Ok(candidate)
+    }
+
+    pub fn advance_script_state_with_current_scene_bounded(
+        &self,
+        environment: &mut PreparedScriptEnvironment,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut candidate = self.refreshed_script_environment(environment)?;
         let tick = candidate.advance_script_state_tick_bounded(
             clock,
             now_millis,
