@@ -520,6 +520,53 @@ fn ce_game_time_advance_polls_script_timers_after_each_day_and_final_zero() {
 }
 
 #[test]
+fn ce_two_day_game_time_advance_executes_critical_requeued_timer_at_next_boundary() {
+    const DAY: i32 = 864_000;
+    let mut env = environment(critical_timed_timer_opcode(DAY, 99, 0x8021));
+    let mut queue = EventQueue::new();
+    let mut game_clock = ScriptGameClock { ticks: 0 };
+    queue
+        .add(0, DAY, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    let result = env
+        .advance_game_time_with_script_timers_transactional_bounded(
+            &mut queue,
+            &mut game_clock,
+            DAY * 2,
+            1000,
+            ScriptTimeAdvanceBudget {
+                max_queue_polls: 3,
+                max_events_per_poll: 1,
+                max_critical_steps: 6,
+            },
+        )
+        .unwrap();
+    assert_eq!(result.increments, [DAY, DAY, 0]);
+    assert_eq!(
+        result
+            .due_events_per_poll
+            .iter()
+            .map(Vec::len)
+            .collect::<Vec<_>>(),
+        [1, 1, 0]
+    );
+    assert_eq!(result.due_events_per_poll[0][0].0.fixed_parameter, 11);
+    assert_eq!(result.due_events_per_poll[1][0].0.fixed_parameter, 99);
+    assert_eq!(result.due_events_per_poll[0][0].1, Some(6));
+    assert_eq!(result.due_events_per_poll[1][0].1, Some(6));
+    assert_eq!(game_clock.ticks, DAY * 2);
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), DAY * 3);
+    let successor = queue.pop_due(DAY * 3).unwrap();
+    let timer = rust_age::script_timer::ScriptTimerEvent::decode(&successor).unwrap();
+    assert_eq!(timer.sid, SID);
+    assert_eq!(timer.fixed_parameter, 99);
+    assert_eq!(timer.owner, Some(OWNER));
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 99);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+}
+
+#[test]
 fn later_due_foreign_queue_event_reverts_earlier_day_quest_and_time_progress() {
     const DAY: i32 = 864_000;
     let mut env = environment(procedure_with_flags(&0x8000_u16.to_be_bytes(), true));
