@@ -20,6 +20,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
+      - name: Compare CE C++ and Rust clocked WAIT and rollback
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_wait_oracle.cc -o /tmp/rust-age-ce-wait
+          /tmp/rust-age-ce-wait tests/script_wait_cases.txt > /tmp/rust-age-ce-wait.txt
+          cargo run --quiet --bin script_wait_probe > /tmp/rust-age-rust-wait.txt
+          diff -u /tmp/rust-age-ce-wait.txt /tmp/rust-age-rust-wait.txt
       - name: Compare CE C++ and Rust spatial projections
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/spatial_oracle.cc -o /tmp/rust-age-ce-spatial
