@@ -1061,7 +1061,9 @@ mod tests {
             (u32::MAX, 0, false),
         ] {
             let mut runtime = ScriptRuntime::new();
-            runtime.register(7, call_at_during_tick_vm(seconds)).unwrap();
+            runtime
+                .register(7, call_at_during_tick_vm(seconds))
+                .unwrap();
             let result = runtime
                 .advance_core_tick_transactional_bounded(now, 3)
                 .unwrap();
@@ -1112,7 +1114,10 @@ mod tests {
         assert!(second.prepared_calls.is_empty());
         assert_eq!(second.executed_steps, [(7, 2)]);
         assert_eq!(runtime.vm(7).unwrap().pc(), 20);
-        assert_eq!(runtime.vm(7).unwrap().return_stack(), [ScriptValue::Int(14)]);
+        assert_eq!(
+            runtime.vm(7).unwrap().return_stack(),
+            [ScriptValue::Int(14)]
+        );
         assert!(runtime.vm(7).unwrap().stack().is_empty());
         assert!(!runtime.vm(7).unwrap().halted());
         assert_eq!(runtime.vm(7).unwrap().halt_reason(), None);
