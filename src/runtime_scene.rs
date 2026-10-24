@@ -39,11 +39,33 @@ pub struct SpatialActorTick {
 #[derive(Debug, Clone)]
 pub struct RuntimeScene {
     snapshot: StaticScene,
+    // CE scrSpatialsEnabled starts true and is temporarily cleared
+    // during scr_chk_spatials_in's own script callback traversal.
+    spatials_enabled: bool,
 }
 
 impl RuntimeScene {
     pub fn new(snapshot: StaticScene) -> Self {
-        Self { snapshot }
+        Self {
+            snapshot,
+            spatials_enabled: true,
+        }
+    }
+
+    /// Source CE scr_spatials_enabled / enable / disable controls.
+    /// Suppression is applied only to opt-in spatial event dispatch; an
+    /// ordinary actor move and separately requested interpreter tick still
+    /// occur while spatial checks are disabled.
+    pub fn spatials_enabled(&self) -> bool {
+        self.spatials_enabled
+    }
+
+    pub fn disable_spatials(&mut self) {
+        self.spatials_enabled = false;
+    }
+
+    pub fn enable_spatials(&mut self) {
+        self.spatials_enabled = true;
     }
 
     /// The current per-elevation object tables can be rendered by the
@@ -231,7 +253,10 @@ impl RuntimeScene {
                 .header;
             // CE skips OBJECT_HIDDEN and OBJECT_FLAT spatial sources.
             // Mouse cursors cannot appear in the decoded MAP object table.
-            if header.flags & (0x01 | 0x08) == 0 {
+            if candidate_world.spatials_enabled && header.flags & (0x01 | 0x08) == 0 {
+                // Mirrors scr_chk_spatials_in's temporary suppression of
+                // recursive spatial callbacks until this full scan ends.
+                candidate_world.spatials_enabled = false;
                 let selected = state.scripts.plan_spatial_at(
                     &candidate_world.snapshot.scripts,
                     view,
@@ -260,6 +285,7 @@ impl RuntimeScene {
                     };
                     spatial.push((action, executed));
                 }
+                candidate_world.spatials_enabled = true;
             }
         }
         let tick = state.advance_script_state_tick_bounded(
