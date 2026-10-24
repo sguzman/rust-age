@@ -70,6 +70,10 @@ fn procedure_with_flags(main: &[u8], timed_critical: bool) -> ScriptVm {
 }
 
 fn critical_timed_timer_opcode(delay: i32, fixed_param: i32, terminator: u16) -> ScriptVm {
+    timed_timer_opcode(delay, fixed_param, terminator, true)
+}
+
+fn timed_timer_opcode(delay: i32, fixed_param: i32, terminator: u16, critical: bool) -> ScriptVm {
     // CE timed_event_p_proc at offset 20. It consumes the setupCall
     // argument, resolves SELF_OBJ from the installed MAP owner, then
     // schedules one more timer on the original queue. All instructions
@@ -83,10 +87,14 @@ fn critical_timed_timer_opcode(delay: i32, fixed_param: i32, terminator: u16) ->
     body[12..16].copy_from_slice(&fixed_param.to_be_bytes());
     body[16..18].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
     body[18..20].copy_from_slice(&terminator.to_be_bytes());
-    critical_timed_custom_opcode(&body)
+    timed_custom_opcode(&body, critical)
 }
 
 fn critical_timed_custom_opcode(body: &[u8]) -> ScriptVm {
+    timed_custom_opcode(body, true)
+}
+
+fn timed_custom_opcode(body: &[u8], critical: bool) -> ScriptVm {
     assert!(body.len() <= 22);
     let mut bytes = vec![0_u8; 42];
     bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
@@ -95,7 +103,7 @@ fn critical_timed_custom_opcode(body: &[u8]) -> ScriptVm {
     let mut names = Vec::new();
     for (name, flags, body) in [
         (b"main".as_slice(), 0_i32, 0_i32),
-        (b"timed_event_p_proc".as_slice(), 0x10_i32, 20_i32),
+        (b"timed_event_p_proc".as_slice(), if critical { 0x10_i32 } else { 0 }, 20_i32),
     ] {
         let offset = 4 + names.len() as i32;
         for field in [offset, flags, 0, 0, body, 0] {
@@ -218,6 +226,54 @@ fn critical_due_callback_removal_rolls_back_if_later_opcode_fails() {
     assert!(queue.find(Some(OWNER), EventType::Drug));
     assert!(env.invocations.is_empty());
     assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+}
+
+#[test]
+fn noncritical_timed_callback_requeues_only_when_later_interpreter_burst_runs() {
+    let mut env = environment(timed_timer_opcode(5, 73, 0x8021, false));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    let prepared = env
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 0)
+        .unwrap();
+    assert_eq!(prepared.len(), 1);
+    assert_eq!(prepared[0].1, None);
+    assert!(queue.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    let executed = env
+        .advance_script_state_with_timer_queue_bounded(&mut queue, clock(105), 1006, 6, 0)
+        .unwrap();
+    assert_eq!(executed.executed_steps, [(1, 6)]);
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 110);
+    let event = queue.pop_due(110).unwrap();
+    let timer = rust_age::script_timer::ScriptTimerEvent::decode(&event).unwrap();
+    assert_eq!(timer.sid, SID);
+    assert_eq!(timer.owner, Some(OWNER));
+    assert_eq!(timer.fixed_parameter, 73);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 11);
+}
+
+#[test]
+fn noncritical_timed_callback_late_error_reverts_requeued_event_and_vm() {
+    let mut env = environment(timed_timer_opcode(5, 73, 0x80FF, false));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    env.process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 0)
+        .unwrap();
+    assert!(queue.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    assert!(env
+        .advance_script_state_with_timer_queue_bounded(&mut queue, clock(105), 1006, 6, 0)
+        .is_err());
+    assert!(queue.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 11);
 }
 
 fn main_add(handle: Option<i32>, terminal: u16) -> ScriptVm {
