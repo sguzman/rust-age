@@ -316,8 +316,7 @@ impl RuntimeScene {
     pub fn dispatch_object_action_transactional_bounded(
         &self,
         environment: &mut PreparedScriptEnvironment,
-        source: ObjectKey,
-        target: ObjectKey,
+        participants: (ObjectKey, ObjectKey),
         action: usize,
         clock: ScriptClockContext,
         now_millis: u32,
@@ -326,6 +325,7 @@ impl RuntimeScene {
         if action != 6 {
             return Err(invalid("CE object event requires USE procedure"));
         }
+        let (source, target) = participants;
         let mut candidate = self.refreshed_script_environment(environment)?;
         if candidate.object_queries.handle_for(source).is_none()
             || candidate.object_queries.handle_for(target).is_none()
@@ -1306,7 +1306,7 @@ mod tests {
         };
         let (action, executed) = world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, target, 6, clock, 25, 100,
+                &mut env, (source, target), 6, clock, 25, 100,
             )
             .unwrap()
             .unwrap();
@@ -1340,11 +1340,10 @@ mod tests {
         assert!(world
             .dispatch_object_action_transactional_bounded(
                 &mut env,
-                source,
-                ObjectKey {
+                (source, ObjectKey {
                     elevation: 0,
                     ordinal: 99
-                },
+                }),
                 6,
                 clock,
                 25,
@@ -1354,19 +1353,19 @@ mod tests {
         assert!(env.spatial_sources.is_empty());
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, target, 23, clock, 25, 100,
+                &mut env, (source, target), 23, clock, 25, 100,
             )
             .is_err());
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, source, 6, clock, 25, 100,
+                &mut env, (source, source), 6, clock, 25, 100,
             )
             .unwrap()
             .is_none());
         assert!(env.spatial_sources.is_empty());
         let (_, executed) = world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, target, 6, clock, 25, 100,
+                &mut env, (source, target), 6, clock, 25, 100,
             )
             .unwrap()
             .unwrap();
@@ -1399,7 +1398,7 @@ mod tests {
         };
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, source, target, 6, clock, 25, 100,
+                &mut env, (source, target), 6, clock, 25, 100,
             )
             .is_err());
         assert!(env.spatial_sources.is_empty());
