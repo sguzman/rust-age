@@ -665,10 +665,60 @@ impl PreparedScriptEnvironment {
         now_millis: u32,
         max_critical_steps: usize,
     ) -> io::Result<Vec<(PlannedMapAction, Option<usize>)>> {
+        self.apply_map_lifecycle_phase_with_optional_timer_queue_transactional_bounded(
+            phase,
+            map_script_id,
+            map_flags,
+            clock,
+            now_millis,
+            max_critical_steps,
+            None,
+        )
+    }
+
+    /// Source-ordered CE lifecycle dispatch with a live, caller-owned
+    /// script timer queue. Critical START/MAP_ENTER/MAP_UPDATE/MAP_EXIT
+    /// procedures can invoke source-derived add_timer_event/rm_timer_event
+    /// opcodes immediately. Noncritical procedures still stage their local
+    /// call frames and may use timer natives in a later timer-aware tick.
+    /// Every selected VM, all MAP/quest banks and the queue commit together
+    /// only after the entire original-order lifecycle phase succeeds.
+    pub fn apply_map_lifecycle_phase_with_timer_queue_transactional_bounded(
+        &mut self,
+        queue: &mut EventQueue,
+        phase: MapLifecyclePhase,
+        map_script_id: i32,
+        map_flags: i32,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<Vec<(PlannedMapAction, Option<usize>)>> {
+        self.apply_map_lifecycle_phase_with_optional_timer_queue_transactional_bounded(
+            phase,
+            map_script_id,
+            map_flags,
+            clock,
+            now_millis,
+            max_critical_steps,
+            Some(queue),
+        )
+    }
+
+    fn apply_map_lifecycle_phase_with_optional_timer_queue_transactional_bounded(
+        &mut self,
+        phase: MapLifecyclePhase,
+        map_script_id: i32,
+        map_flags: i32,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+        event_queue: Option<&mut EventQueue>,
+    ) -> io::Result<Vec<(PlannedMapAction, Option<usize>)>> {
         let selected = self
             .scripts
             .plan_map_lifecycle(phase, map_script_id, map_flags)?;
         let mut next = self.clone();
+        let mut pending_queue = event_queue.as_ref().map(|queue| (**queue).clone());
         let mut seen = std::collections::BTreeSet::new();
         let mut applied = Vec::with_capacity(selected.len());
         for action in selected {
@@ -680,17 +730,23 @@ impl PreparedScriptEnvironment {
             }
             let critical = next.local_frame_for_planned(&action)?.critical;
             let immediately_executed = if critical {
-                Some(next.execute_critical_map_action_transactional_bounded(
-                    &action,
-                    clock,
-                    now_millis,
-                    max_critical_steps,
-                )?)
+                Some(
+                    next.execute_critical_map_action_with_timer_queue_transactional_bounded(
+                        &action,
+                        clock,
+                        now_millis,
+                        max_critical_steps,
+                        pending_queue.as_mut(),
+                    )?,
+                )
             } else {
                 next.prepare_noncritical_map_action_transactional(&action)?;
                 None
             };
             applied.push((action, immediately_executed));
+        }
+        if let (Some(original), Some(staged)) = (event_queue, pending_queue) {
+            *original = staged;
         }
         *self = next;
         Ok(applied)
