@@ -1016,7 +1016,9 @@ mod tests {
         runtime
             .register(1, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
             .unwrap();
-        assert!(runtime.advance_core_tick_transactional_bounded(1, 1).is_err());
+        assert!(runtime
+            .advance_core_tick_transactional_bounded(1, 1)
+            .is_err());
         assert_eq!(runtime.vm(1).unwrap().pc(), 0);
         assert!(!runtime.vm(1).unwrap().critical_section());
         let complete = runtime

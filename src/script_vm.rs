@@ -1987,7 +1987,10 @@ mod tests {
         let mut returned = local_return_fixture(0, 0x8021, 0, 0, 0, 36);
         assert_eq!(returned.run_bounded(6).unwrap(), 6);
         assert!(returned.halted());
-        assert_eq!(returned.halt_reason(), Some(super::ScriptHaltReason::ReturnFromCall));
+        assert_eq!(
+            returned.halt_reason(),
+            Some(super::ScriptHaltReason::ReturnFromCall)
+        );
         returned.finish_core_interpreter_burst();
         assert!(!returned.halted());
         assert_eq!(returned.halt_reason(), None);
@@ -1998,7 +2001,10 @@ mod tests {
         stopped.step().unwrap();
         stopped.finish_core_interpreter_burst();
         assert!(stopped.halted());
-        assert_eq!(stopped.halt_reason(), Some(super::ScriptHaltReason::StopProgram));
+        assert_eq!(
+            stopped.halt_reason(),
+            Some(super::ScriptHaltReason::StopProgram)
+        );
     }
 
     #[test]
