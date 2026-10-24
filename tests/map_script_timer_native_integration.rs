@@ -103,7 +103,11 @@ fn timed_custom_opcode(body: &[u8], critical: bool) -> ScriptVm {
     let mut names = Vec::new();
     for (name, flags, body) in [
         (b"main".as_slice(), 0_i32, 0_i32),
-        (b"timed_event_p_proc".as_slice(), if critical { 0x10_i32 } else { 0 }, 20_i32),
+        (
+            b"timed_event_p_proc".as_slice(),
+            if critical { 0x10_i32 } else { 0 },
+            20_i32,
+        ),
     ] {
         let offset = 4 + names.len() as i32;
         for field in [offset, flags, 0, 0, body, 0] {
