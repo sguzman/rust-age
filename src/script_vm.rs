@@ -879,6 +879,24 @@ impl ScriptVm {
         now_millis: u32,
         max_steps_per_condition: usize,
     ) -> io::Result<Vec<usize>> {
+        self.prepare_due_with_condition_host_transactional_bounded(
+            now_millis,
+            max_steps_per_condition,
+            &mut |_, _| Err(invalid("CE conditional native callback unavailable")),
+        )
+    }
+
+    /// Prepare source-ordered doEvents calls with an explicitly installed
+    /// condition-native adapter. Caller must provide a pure/read-only host:
+    /// the Rust-owned VM is cloned, but arbitrary host-side effects cannot
+    /// be undone. The runtime exposes a typed, immutable native-snapshot
+    /// adapter rather than accepting arbitrary engine writes.
+    pub(crate) fn prepare_due_with_condition_host_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Vec<usize>> {
         // A caller must not accidentally turn interpret(-1) into an
         // effectively unbounded busy loop on malformed INT conditions.
         if max_steps_per_condition > 4096 {
@@ -898,7 +916,7 @@ impl ScriptVm {
                 let condition = candidate.preview_condition_frame_with_host_bounded(
                     entry.condition_offset,
                     max_steps_per_condition,
-                    &mut |_, _| Err(invalid("CE conditional native callback unavailable")),
+                    native,
                 )?;
                 // Original CE doEvents restores PC/flags while preserving
                 // stack, frame and procedure-table effects of the condition.
