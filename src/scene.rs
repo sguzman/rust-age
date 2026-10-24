@@ -6,6 +6,7 @@
 //! gameplay world: no scripts, party, lighting, time, or actor movement.
 use crate::assets::{Bank, GameAssets};
 use crate::collision::{CollisionIndex, ObjectKey};
+use crate::event_queue::{EventQueue, EventType};
 use crate::game_globals::GameGlobalState;
 use crate::hex::HexViewport;
 use crate::map::{MapHeader, MapSquares, MapVariables};
@@ -17,8 +18,6 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
-use crate::event_queue::{EventQueue, EventType};
-use crate::script_timer::ScriptTimerEvent;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
@@ -36,6 +35,7 @@ use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
     ReadOnlyConditionEvent,
 };
+use crate::script_timer::ScriptTimerEvent;
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;

@@ -509,7 +509,11 @@ fn timed_event_vm(critical: bool, invalid_after_write: bool) -> ScriptVm {
     let mut names = Vec::new();
     for (name, flags, body) in [
         (b"main".as_slice(), 0_i32, 0_i32),
-        (b"timed_event_p_proc".as_slice(), if critical { 0x10 } else { 0 }, 20_i32),
+        (
+            b"timed_event_p_proc".as_slice(),
+            if critical { 0x10 } else { 0 },
+            20_i32,
+        ),
     ] {
         let offset = 4 + names.len() as i32;
         for field in [offset, flags, 0, 0, body, 0] {
@@ -549,16 +553,12 @@ fn due_script_timer_executes_critical_quest_event_immediately_and_preserves_futu
         last_visit_ticks: Some(0),
     };
     let none = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock, 99, 1000, 2, 8,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock, 99, 1000, 2, 8)
         .unwrap();
     assert!(none.is_empty());
     assert_eq!(queue.len(), 2);
     let fired = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock, 100, 1000, 2, 8,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock, 100, 1000, 2, 8)
         .unwrap();
     assert_eq!(fired.len(), 1);
     assert_eq!(fired[0].0.sid, 17);
@@ -584,15 +584,15 @@ fn deferred_timed_event_resumes_in_following_interpreter_burst() {
         last_visit_ticks: Some(0),
     };
     let due = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock, 10, 100, 1, 0,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock, 10, 100, 1, 0)
         .unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].1, None);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
     assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
-    let tick = env.advance_script_state_tick_bounded(clock, 101, 5, 0).unwrap();
+    let tick = env
+        .advance_script_state_tick_bounded(clock, 101, 5, 0)
+        .unwrap();
     assert_eq!(tick.executed_steps, [(1, 5)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [-7]);
     assert!(queue.is_empty());
@@ -609,9 +609,7 @@ fn due_script_timers_roll_back_queue_and_quest_state_on_unsupported_native_or_ki
         last_visit_ticks: Some(0),
     };
     assert!(env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock, 10, 100, 1, 8,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock, 10, 100, 1, 8,)
         .is_err());
     assert_eq!(queue.len(), 1);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [5]);
@@ -623,15 +621,11 @@ fn due_script_timers_roll_back_queue_and_quest_state_on_unsupported_native_or_ki
         .add(10, 0, EventType::Drug, None, vec![])
         .unwrap();
     assert!(env
-        .process_due_script_timers_transactional_bounded(
-            &mut wrong_kind, clock, 10, 100, 5, 8,
-        )
+        .process_due_script_timers_transactional_bounded(&mut wrong_kind, clock, 10, 100, 5, 8,)
         .is_err());
     assert_eq!(wrong_kind.len(), 1);
     assert!(env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock, 10, 100, 0, 8,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock, 10, 100, 0, 8,)
         .is_err());
     assert_eq!(queue.len(), 1);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [5]);
