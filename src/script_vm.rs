@@ -841,6 +841,60 @@ impl ScriptVm {
         Ok(())
     }
 
+    /// Source-faithful local critical executeProc: setupCall followed
+    /// immediately by op_critical_start and interpret(program, 0).
+    /// In the original interpreter, a zero ordinary CPU burst runs until
+    /// PROGRAM_FLAG_CRITICAL_SECTION clears. This safe Rust subset imposes
+    /// a finite limit and stages all VM changes on a clone. Caller-owned
+    /// host state MUST also be staged before invoking this method.
+    ///
+    /// Critical calls from an already critical or waiting VM and native
+    /// engine effects outside the allowlist remain unsupported. A WAIT that
+    /// would stall critical interpretation fails closed rather than spins.
+    pub(crate) fn execute_critical_local_action_with_host_bounded(
+        &mut self,
+        procedure_index: usize,
+        now_millis: u32,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<usize> {
+        if max_steps == 0 || max_steps > 4096 {
+            return Err(invalid("CE critical local action exceeds bounded instruction budget"));
+        }
+        if self.critical_section || self.core_wait.is_some() {
+            return Err(invalid("CE critical local action cannot nest into active critical/WAIT state"));
+        }
+        let mut candidate = self.clone();
+        let entry = candidate
+            .runtime_procedures
+            .get(procedure_index)
+            .copied()
+            .ok_or_else(|| invalid("CE critical local action procedure index outside table"))?;
+        if entry.flags & 0x10 == 0 {
+            return Err(invalid("CE noncritical local action must use deferred setupCall"));
+        }
+        candidate.stage_local_core_call_frame(procedure_index, true)?;
+        candidate.set_clock_millis(now_millis as i32);
+        candidate.prepare_core_interpreter_entry();
+        let mut steps = 0;
+        while candidate.critical_section() {
+            if steps >= max_steps {
+                return Err(invalid("CE immediate critical procedure exceeded safety bound"));
+            }
+            if candidate.halted() {
+                return Err(invalid("CE critical procedure halted without clearing critical section"));
+            }
+            if !candidate.poll_core_wait() {
+                return Err(invalid("CE critical procedure WAIT would stall immediate interpret"));
+            }
+            candidate.step_with_variable_host_clocked(native)?;
+            steps += 1;
+        }
+        candidate.finish_core_interpreter_burst();
+        *self = candidate;
+        Ok(steps)
+    }
+
     /// Persist only the CE doEvents **timed local call setup** in this VM.
     /// Due timers clear their flags before executeProc calls setupCall. In
     /// the pinned source, executeProc does not immediately interpret that

@@ -461,6 +461,40 @@ impl ScriptRuntime {
         Ok(Some(frame))
     }
 
+    /// Execute one source-verified CRITICAL built-in local procedure
+    /// synchronously, as CE executeProc does after op_critical_start.
+    /// A noncritical local call must instead be prepared for a subsequent
+    /// interpreter tick. Host mutations outside this cloned VM are the
+    /// caller's responsibility; the MAP environment clones its backing
+    /// variables before supplying an allowlisted mutable native host.
+    pub fn execute_critical_local_action_with_host_bounded(
+        &mut self,
+        program_id: u64,
+        action: usize,
+        now_millis: u32,
+        max_steps: usize,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Option<usize>> {
+        let Some(frame) = self.inspect_local_action_frame(program_id, action)? else {
+            return Ok(None);
+        };
+        if !frame.critical {
+            return Err(invalid("CE noncritical built-in action cannot execute synchronously"));
+        }
+        let mut next = self.clone();
+        let vm = next
+            .vm_mut(program_id)
+            .ok_or_else(|| invalid("CE critical local action VM disappeared"))?;
+        let executed = vm.execute_critical_local_action_with_host_bounded(
+            frame.procedure_index,
+            now_millis,
+            max_steps,
+            native,
+        )?;
+        *self = next;
+        Ok(Some(executed))
+    }
+
     /// Opt-in host dispatch of one resolved CE built-in action, independent
     /// of the timed/conditional event scheduler. A missing script action
     /// returns false; any callback is supplied explicitly by the caller.
