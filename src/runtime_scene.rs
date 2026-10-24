@@ -122,6 +122,47 @@ impl RuntimeScene {
         Ok(tick)
     }
 
+    /// Apply one CE actor-route step and run the installed bounded
+    /// script/native-state tick against the resulting CURRENT MAP object
+    /// properties, all inside one caller-owned Rust transaction.
+    ///
+    /// Unlike the separate advance_actor + script-tick entry points, a
+    /// failing native opcode, stale object owner binding or invalid route
+    /// rolls back the actor position, rotation, collision, route cursor,
+    /// script program frames, MAP variables and GAME_GLOBAL_VARS together.
+    /// Blocked/Finished steps still perform the explicitly requested
+    /// script tick, as this is an opt-in world-update operation.
+    ///
+    /// This is a safety boundary for Rust-owned scene state; it does not
+    /// claim CE's live obj_move_to_tile scripting, spatial trigger dispatch,
+    /// animation, combat side effects or original game save behavior.
+    pub fn advance_actor_and_script_state_transactional_bounded(
+        &mut self,
+        view: &HexViewport,
+        route: &mut ActorRoute,
+        environment: &mut PreparedScriptEnvironment,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<(ActorStep, PreparedCoreTick)> {
+        let mut candidate_world = self.clone();
+        let mut candidate_route = route.clone();
+        let mut candidate_environment = environment.clone();
+        let step = candidate_world.advance_actor(view, &mut candidate_route)?;
+        let tick = candidate_world.advance_script_state_with_current_scene_bounded(
+            &mut candidate_environment,
+            clock,
+            now_millis,
+            cpu_burst,
+            max_steps_per_condition,
+        )?;
+        *self = candidate_world;
+        *route = candidate_route;
+        *environment = candidate_environment;
+        Ok((step, tick))
+    }
+
     pub fn plan_actor(
         &self,
         view: &HexViewport,
@@ -403,16 +444,24 @@ mod tests {
             .plan_actor(&view, actor, 20098, true)
             .unwrap()
             .unwrap();
+        let (step, after) = world
+            .advance_actor_and_script_state_transactional_bounded(
+                &view,
+                &mut route,
+                &mut environment,
+                clock,
+                101,
+                0,
+                5,
+            )
+            .unwrap();
         assert_eq!(
-            world.advance_actor(&view, &mut route).unwrap(),
+            step,
             ActorStep::Moved {
                 tile: 20098,
                 rotation: 1,
             }
         );
-        let after = world
-            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 101, 0, 5)
-            .unwrap();
         assert_eq!(
             after.prepared_calls,
             [DueProcedure {
@@ -440,6 +489,88 @@ mod tests {
         assert_eq!(environment.object_queries.snapshots()[0].pid, 0x0100_0001);
         assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 20);
         assert_eq!(environment.game_globals.as_ref().unwrap().values(), [1]);
+    }
+
+    #[test]
+    fn actor_and_native_tick_failure_reverts_world_collision_route_and_vm() {
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let mut world = scene();
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
+        let bound = BoundScriptRuntime {
+            runtime: ScriptRuntime::new(),
+            entries: vec![],
+        };
+        let mut environment = PreparedScriptEnvironment {
+            scripts: bound,
+            map_locals: BoundScriptRuntime {
+                runtime: ScriptRuntime::new(),
+                entries: vec![],
+            }
+            .script_local_state(&world.snapshot().variables)
+            .unwrap(),
+            game_globals: None, // fail closed: no invented GAME_GLOBAL_VARS
+            object_queries: world.object_query_snapshot().unwrap(),
+            script_owners: MapScriptOwners::from_map(
+                &world.snapshot().scripts,
+                &world.snapshot().objects,
+                &world.object_query_snapshot().unwrap(),
+            )
+            .unwrap(),
+            map_last_visit_ticks: 0,
+            invocations: std::collections::BTreeMap::new(),
+        };
+        let before_queries = environment.object_queries.clone();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .advance_actor_and_script_state_transactional_bounded(
+                &view,
+                &mut route,
+                &mut environment,
+                clock,
+                100,
+                1,
+                0,
+            )
+            .is_err());
+        assert_eq!(route.current_tile(), 20099);
+        assert_eq!(route.remaining_steps(), 1);
+        assert_eq!(world.snapshot().collision.tile_of(actor), Some(20099));
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20099);
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.rotation, 0);
+        assert_eq!(environment.object_queries, before_queries);
+        assert!(environment.scripts.entries.is_empty());
+        assert!(environment.game_globals.is_none());
+
+        // Supplying the real caller-owned game-global bank permits a
+        // successful movement/tick commit; do not repeat failed route steps.
+        environment.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+        let (step, tick) = world
+            .advance_actor_and_script_state_transactional_bounded(
+                &view,
+                &mut route,
+                &mut environment,
+                clock,
+                101,
+                1,
+                0,
+            )
+            .unwrap();
+        assert!(matches!(step, ActorStep::Moved { tile: 20098, .. }));
+        assert!(tick.executed_steps.is_empty());
+        assert_eq!(route.current_tile(), 20098);
+        assert_eq!(route.remaining_steps(), 0);
+        assert_eq!(world.snapshot().collision.tile_of(actor), Some(20098));
+        assert_eq!(environment.object_queries.snapshots()[0].tile, 20098);
     }
 
     #[test]
