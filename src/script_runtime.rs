@@ -5,6 +5,8 @@
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
 use crate::event_queue::EventQueue;
+use crate::script_clock::ScriptGameClock;
+use crate::script_time_advance::{plan_game_time_advance_opcode, GAME_TIME_ADVANCE_OPCODE};
 use crate::game_globals::GameGlobalState;
 use crate::script_binding::BoundScriptRuntime;
 use crate::script_locals::MapScriptLocals;
@@ -923,6 +925,111 @@ impl ScriptRuntime {
         *context.map = next_map;
         *context.game = next_game;
         *context.queue = next_queue;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
+    /// Execute source opcode game_time_advance (0x80FC) directly inside an
+    /// installed core/native script tick, but ONLY when every original
+    /// queue_process poll is empty. Source order is preserved: later script
+    /// opcodes (GAME_TIME, ADD_TIMER_EVENT, conditionals) see the advanced
+    /// clock immediately. Events due at any whole-day or signed-remainder
+    /// boundary FAIL CLOSED, because reentrant callbacks into the running
+    /// interpreter are not yet source-verified. The final zero poll still
+    /// happens, and a single per-tick budget limits total queue polls.
+    ///
+    /// The runtime, MAP/local/global banks, script queue AND external game
+    /// clock are cloned, committing only on total success. This is one
+    /// acceptance-relevant subset, not queue_process callback integration
+    /// or the full world clock/actor simulation.
+    pub fn advance_tick_with_native_game_time_no_due_transactional_bounded(
+        &mut self,
+        clock: &mut ScriptGameClock,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        context: TimerNativeTickContext<'_>,
+        max_queue_polls: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        if context.now_game_ticks != clock.ticks {
+            return Err(invalid("CE native advance input clock disagrees with queue clock"));
+        }
+        let mut next = self.clone();
+        let mut next_map = (*context.map).clone();
+        let mut next_game = (*context.game).clone();
+        let mut next_queue = (*context.queue).clone();
+        let mut next_clock = *clock;
+        let mut remaining_polls = max_queue_polls;
+        let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
+            if opcode == GAME_TIME_ADVANCE_OPCODE {
+                let plan = plan_game_time_advance_opcode(opcode, stack, remaining_polls)?;
+                remaining_polls -= plan.queue_polls();
+                for increment in plan.increments_before_queue_process() {
+                    next_clock.ticks =
+                        next_clock.ticks.checked_add(*increment).ok_or_else(|| {
+                            invalid("CE native game_time_advance overflowed signed game ticks")
+                        })?;
+                    if next_queue.pop_due(next_clock.ticks).is_some() {
+                        return Err(invalid(
+                            "CE native game_time_advance due callback requires reentrant dispatch",
+                        ));
+                    }
+                }
+                Ok(())
+            } else if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
+                apply_timer_native_opcode(
+                    context.bound,
+                    &mut next_queue,
+                    next_clock.ticks,
+                    context.timer_bindings,
+                    opcode,
+                    stack,
+                )
+            } else {
+                let entry = context.events.get(&id).ok_or_else(|| {
+                    invalid("CE game-time native interpreter event context unavailable")
+                })?;
+                let mut event = entry.event;
+                event.owner.native.clock.clock = next_clock;
+                apply_mutable_condition_native_with_vars(
+                    event,
+                    &entry.invocation,
+                    &mut next_map,
+                    &mut next_game,
+                    id,
+                    opcode,
+                    stack,
+                )
+            }
+        };
+        let executed_steps =
+            next.interpret_native_bursts_bounded(now_millis, cpu_burst, &mut host)?;
+        let mut prepared_calls = Vec::new();
+        if !next.suspended {
+            for program in &mut next.programs {
+                let id = program.id;
+                let due = program
+                    .vm
+                    .prepare_due_with_condition_host_transactional_bounded(
+                        now_millis,
+                        max_steps_per_condition,
+                        &mut |opcode, stack| host(id, opcode, stack),
+                    )?;
+                for procedure_index in due {
+                    prepared_calls.push(DueProcedure {
+                        program_id: id,
+                        procedure_index,
+                    });
+                }
+            }
+        }
+        *self = next;
+        *context.map = next_map;
+        *context.game = next_game;
+        *context.queue = next_queue;
+        *clock = next_clock;
         Ok(PreparedCoreTick {
             executed_steps,
             prepared_calls,
