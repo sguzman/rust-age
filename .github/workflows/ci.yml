@@ -20,6 +20,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
+      - name: Compare CE C++ and Rust first interpret clock sentinel
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_first_entry_oracle.cc -o /tmp/rust-age-ce-first-entry
+          /tmp/rust-age-ce-first-entry tests/script_first_entry_cases.txt > /tmp/rust-age-ce-first-entry.txt
+          cargo run --quiet --bin script_first_entry_probe > /tmp/rust-age-rust-first-entry.txt
+          diff -u /tmp/rust-age-ce-first-entry.txt /tmp/rust-age-rust-first-entry.txt
       - name: Compare CE C++ and Rust opcode high-word lifecycle flags
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_opcode_flags_oracle.cc -o /tmp/rust-age-ce-opcode-flags
