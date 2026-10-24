@@ -805,7 +805,9 @@ impl ScriptVm {
             || frame.restored_low_flags & !0x80 != 0
             || frame.procedures.len() != self.runtime_procedures.len()
         {
-            return Err(invalid("CE local core transaction has invalid return frame"));
+            return Err(invalid(
+                "CE local core transaction has invalid return frame",
+            ));
         }
 
         // All preflight and execution occurs before modifying the installed
