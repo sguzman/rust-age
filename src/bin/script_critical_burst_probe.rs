@@ -9,10 +9,12 @@ fn program(mode: &str) -> Result<ScriptVm, Box<dyn Error>> {
     let bytes: &[u8] = match mode {
         "PLAIN" => &[0x80, 0x00, 0x80, 0x00, 0x80, 0x11],
         "PAIR" => &[0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x00, 0x80, 0x11],
-        "SPAN" => &[0x80, 0x02, 0x80, 0x00, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11],
+        "SPAN" => &[
+            0x80, 0x02, 0x80, 0x00, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
+        ],
         "DEEP" => &[
-            0x80, 0x02, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
-            0x80, 0x00, 0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
+            0x80, 0x02, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
+            0x80, 0x00, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
         ],
         "REENTER" => &[
             0x80, 0x02, 0x80, 0x03, 0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x11,
@@ -20,9 +22,7 @@ fn program(mode: &str) -> Result<ScriptVm, Box<dyn Error>> {
         "PRECRIT" => &[
             0x80, 0x02, 0x80, 0x03, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x11,
         ],
-        "INFINITE" | "PRECRIT_LOOP" => &[
-            0x80, 0x02, 0xC0, 0x01, 0, 0, 0, 2, 0x80, 0x04,
-        ],
+        "INFINITE" | "PRECRIT_LOOP" => &[0x80, 0x02, 0xC0, 0x01, 0, 0, 0, 2, 0x80, 0x04],
         "BAD_NATIVE" => &[0x80, 0x02, 0x80, 0xFC],
         "CRIT_STOP" => &[0x80, 0x02, 0x80, 0x11],
         "CRIT_EXIT" => &[0x80, 0x02, 0x80, 0x0E],
@@ -49,7 +49,8 @@ fn simulate(mode: &str, burst: usize) -> Result<String, Box<dyn Error>> {
     let installed = runtime.vm(1).ok_or("CE script VM missing")?;
     match result {
         Ok(tick) => {
-            if !tick.prepared_calls.is_empty() || tick.executed_steps.len() != 1
+            if !tick.prepared_calls.is_empty()
+                || tick.executed_steps.len() != 1
                 || tick.executed_steps[0].0 != 1
             {
                 return Err("unexpected CE script tick effect".into());
@@ -80,10 +81,12 @@ fn simulate(mode: &str, burst: usize) -> Result<String, Box<dyn Error>> {
 fn main() {
     for line in include_str!("../../tests/script_critical_burst_cases.txt").lines() {
         let fields: Vec<_> = line.split_whitespace().collect();
-        if fields.len() != 3 { continue; }
-        let result = (|| -> Result<String, Box<dyn Error>> {
-            simulate(fields[1], fields[2].parse()?)
-        })().unwrap_or_else(|_| "ERR".to_string());
+        if fields.len() != 3 {
+            continue;
+        }
+        let result =
+            (|| -> Result<String, Box<dyn Error>> { simulate(fields[1], fields[2].parse()?) })()
+                .unwrap_or_else(|_| "ERR".to_string());
         println!("{} {}", fields[0], result);
     }
 }
