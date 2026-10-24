@@ -17,6 +17,15 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
+/// Finite instruction budgets for one atomic actor movement and CE
+/// script-state tick. This is a Rust safety bound, not CE's CPU default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScriptTickBudget {
+    pub now_millis: u32,
+    pub cpu_burst: usize,
+    pub max_steps_per_condition: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeScene {
     snapshot: StaticScene,
@@ -142,9 +151,7 @@ impl RuntimeScene {
         route: &mut ActorRoute,
         environment: &mut PreparedScriptEnvironment,
         clock: ScriptClockContext,
-        now_millis: u32,
-        cpu_burst: usize,
-        max_steps_per_condition: usize,
+        budget: ScriptTickBudget,
     ) -> io::Result<(ActorStep, PreparedCoreTick)> {
         let mut candidate_world = self.clone();
         let mut candidate_route = route.clone();
@@ -153,9 +160,9 @@ impl RuntimeScene {
         let tick = candidate_world.advance_script_state_with_current_scene_bounded(
             &mut candidate_environment,
             clock,
-            now_millis,
-            cpu_burst,
-            max_steps_per_condition,
+            budget.now_millis,
+            budget.cpu_burst,
+            budget.max_steps_per_condition,
         )?;
         *self = candidate_world;
         *route = candidate_route;
@@ -219,7 +226,7 @@ impl RuntimeScene {
 
 #[cfg(test)]
 mod tests {
-    use super::RuntimeScene;
+    use super::{RuntimeScene, ScriptTickBudget};
     use crate::actor_route::ActorStep;
     use crate::collision::{CollisionIndex, ObjectKey};
     use crate::game_globals::GameGlobalState;
@@ -450,9 +457,11 @@ mod tests {
                 &mut route,
                 &mut environment,
                 clock,
-                101,
-                0,
-                5,
+                ScriptTickBudget {
+                    now_millis: 101,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 5,
+                },
             )
             .unwrap();
         assert_eq!(
@@ -537,9 +546,11 @@ mod tests {
                 &mut route,
                 &mut environment,
                 clock,
-                100,
-                1,
-                0,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 1,
+                    max_steps_per_condition: 0,
+                },
             )
             .is_err());
         assert_eq!(route.current_tile(), 20099);
@@ -569,9 +580,11 @@ mod tests {
                 &mut route,
                 &mut environment,
                 clock,
-                101,
-                1,
-                0,
+                ScriptTickBudget {
+                    now_millis: 101,
+                    cpu_burst: 1,
+                    max_steps_per_condition: 0,
+                },
             )
             .unwrap();
         assert!(matches!(step, ActorStep::Moved { tile: 20098, .. }));
