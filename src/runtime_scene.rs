@@ -318,12 +318,20 @@ mod tests {
         bytes[6..10].copy_from_slice(&20098_i32.to_be_bytes());
         bytes[10..12].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
         bytes[12..14].copy_from_slice(&0x8011_u16.to_be_bytes()); // STOP
-        bytes[28..32].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        // After the movement condition becomes true, the scheduled local
+        // procedure writes a quest-global value in a later interpreter burst.
+        bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP arg
+        bytes[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[24..28].copy_from_slice(&0_i32.to_be_bytes()); // game-global index
+        bytes[28..30].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[30..34].copy_from_slice(&1_i32.to_be_bytes()); // quest state
+        bytes[34..36].copy_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+        bytes[36..38].copy_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
         bytes.extend_from_slice(&2_i32.to_be_bytes());
         let mut names = Vec::new();
         for (name, flags, condition_offset, body_offset) in [
             (b"main".as_slice(), 0_i32, 0_i32, 0_i32),
-            (b"map_enter_p_proc".as_slice(), 0x02_i32, 0_i32, 28_i32),
+            (b"map_enter_p_proc".as_slice(), 0x02_i32, 0_i32, 20_i32),
         ] {
             let offset = 4 + names.len() as i32;
             for field in [offset, flags, 0, condition_offset, body_offset, 0] {
@@ -414,17 +422,31 @@ mod tests {
             }]
         );
         assert_eq!(environment.object_queries.snapshots()[0].tile, 20098);
-        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 28);
+        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 20);
         assert_eq!(environment.game_globals.as_ref().unwrap().values(), [0]);
+
+        let executed = world
+            .advance_script_state_with_current_scene_bounded(
+                &mut environment,
+                clock,
+                102,
+                5,
+                5,
+            )
+            .unwrap();
+        assert_eq!(executed.executed_steps, [(1, 5)]);
+        assert_eq!(environment.game_globals.as_ref().unwrap().values(), [1]);
+        assert_eq!(environment.object_queries.snapshots()[0].tile, 20098);
 
         // Object identity recycling cannot silently rebind the installed
         // script's self_obj handle to another PID after a live MAP change.
         world.snapshot.objects.elevations[0][0].record.header.pid = 0x0100_0002;
         assert!(world
-            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 102, 0, 5,)
+            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 103, 0, 5,)
             .is_err());
         assert_eq!(environment.object_queries.snapshots()[0].pid, 0x0100_0001);
-        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 28);
+        assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 20);
+        assert_eq!(environment.game_globals.as_ref().unwrap().values(), [1]);
     }
 
     #[test]
