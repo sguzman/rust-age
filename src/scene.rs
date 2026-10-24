@@ -757,7 +757,7 @@ impl PreparedScriptEnvironment {
                 resolution: Some(owner),
             },
             source,
-            target: target_for_explicit_source(owner, source),
+            target: target_for_explicit_source(Some(owner), source),
         };
         // A clone of the immutable MAP instance registry is needed for
         // timer SID resolution while the interpreter is mutably borrowed.
