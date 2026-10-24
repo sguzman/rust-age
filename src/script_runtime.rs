@@ -587,24 +587,26 @@ impl ScriptRuntime {
         for program in &mut next.programs {
             let id = program.id;
             let event = events.get(&id).copied();
-            let ready = program.vm.prepare_due_with_condition_host_transactional_bounded(
-                now_millis,
-                max_steps_per_condition,
-                &mut |opcode, stack| {
-                    let snapshot = event.ok_or_else(|| {
-                        invalid("CE condition native event context not provided")
-                    })?;
-                    apply_readonly_event_native_with_vars(
-                        snapshot.event,
-                        &snapshot.invocation,
-                        map,
-                        game,
-                        id,
-                        opcode,
-                        stack,
-                    )
-                },
-            )?;
+            let ready = program
+                .vm
+                .prepare_due_with_condition_host_transactional_bounded(
+                    now_millis,
+                    max_steps_per_condition,
+                    &mut |opcode, stack| {
+                        let snapshot = event.ok_or_else(|| {
+                            invalid("CE condition native event context not provided")
+                        })?;
+                        apply_readonly_event_native_with_vars(
+                            snapshot.event,
+                            &snapshot.invocation,
+                            map,
+                            game,
+                            id,
+                            opcode,
+                            stack,
+                        )
+                    },
+                )?;
             for procedure_index in ready {
                 prepared.push(DueProcedure {
                     program_id: id,
@@ -808,14 +810,10 @@ impl ScriptRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        DueProcedure, PlannedLocalActionFrame, ReadOnlyConditionEvent, ScriptRuntime,
-    };
+    use super::{DueProcedure, PlannedLocalActionFrame, ReadOnlyConditionEvent, ScriptRuntime};
     use crate::game_globals::GameGlobalState;
     use crate::map::MapVariables;
-    use crate::script_binding::{
-        BoundScriptRuntime, InstalledScriptBinding, ScriptBinding,
-    };
+    use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_clock::ScriptGameClock;
     use crate::script_native_vars::{
         ScriptClockContext, ScriptInvocationState, ScriptNativeEventSnapshot,
@@ -1459,8 +1457,10 @@ mod tests {
         runtime: &ScriptRuntime,
         global_value: i32,
     ) -> crate::script_locals::MapScriptLocals {
-        let entries = [1_u64, 2].into_iter().filter(|id| runtime.vm(*id).is_some()).map(
-            |id| InstalledScriptBinding {
+        let entries = [1_u64, 2]
+            .into_iter()
+            .filter(|id| runtime.vm(*id).is_some())
+            .map(|id| InstalledScriptBinding {
                 binding: ScriptBinding {
                     category: 1,
                     ordinal: (id - 1) as usize,
@@ -1473,8 +1473,8 @@ mod tests {
                     local_variable_count: 0,
                 },
                 instance_id: Some(id),
-            },
-        ).collect();
+            })
+            .collect();
         BoundScriptRuntime {
             runtime: runtime.clone(),
             entries,
@@ -1494,19 +1494,24 @@ mod tests {
             },
             objects: None,
         };
-        ids.iter().map(|id| {
-            (*id, ReadOnlyConditionEvent {
-                event: ScriptNativeEventSnapshot {
-                    owner: ScriptNativeOwnerSnapshot {
-                        native,
-                        resolution: None,
+        ids.iter()
+            .map(|id| {
+                (
+                    *id,
+                    ReadOnlyConditionEvent {
+                        event: ScriptNativeEventSnapshot {
+                            owner: ScriptNativeOwnerSnapshot {
+                                native,
+                                resolution: None,
+                            },
+                            source: None,
+                            target: None,
+                        },
+                        invocation: ScriptInvocationState::installed(),
                     },
-                    source: None,
-                    target: None,
-                },
-                invocation: ScriptInvocationState::installed(),
+                )
             })
-        }).collect()
+            .collect()
     }
 
     #[test]
@@ -1525,20 +1530,28 @@ mod tests {
             let events = readonly_condition_events(&[1, 2]);
             let tick = runtime
                 .advance_core_tick_with_readonly_conditions_transactional_bounded(
-                    100, 1, 3, &map, Some(&game), &events,
+                    100,
+                    1,
+                    3,
+                    &map,
+                    Some(&game),
+                    &events,
                 )
                 .unwrap();
             assert_eq!(tick.executed_steps, [(2, 1), (1, 1)]);
             assert_eq!(
-                tick.prepared_calls.iter().map(|c| c.program_id).collect::<Vec<_>>(),
+                tick.prepared_calls
+                    .iter()
+                    .map(|c| c.program_id)
+                    .collect::<Vec<_>>(),
                 expected_ready
             );
-            for (id, was_ready) in [
-                (1, map_value != 0),
-                (2, game_value != 0),
-            ] {
+            for (id, was_ready) in [(1, map_value != 0), (2, game_value != 0)] {
                 let vm = runtime.vm(id).unwrap();
-                assert_eq!(vm.runtime_procedures()[1].flags, if was_ready { 0 } else { 2 });
+                assert_eq!(
+                    vm.runtime_procedures()[1].flags,
+                    if was_ready { 0 } else { 2 }
+                );
                 assert_eq!(vm.pc(), if was_ready { 36 } else { 2 });
                 assert_eq!(vm.first_interpret_clock_millis(), 100);
             }
@@ -1557,7 +1570,12 @@ mod tests {
         let events = readonly_condition_events(&[1, 2]);
         assert!(runtime
             .advance_core_tick_with_readonly_conditions_transactional_bounded(
-                100, 1, 3, &map, Some(&game), &events,
+                100,
+                1,
+                3,
+                &map,
+                Some(&game),
+                &events,
             )
             .is_err());
         for id in [1_u64, 2] {
@@ -1576,7 +1594,11 @@ mod tests {
         let missing = BTreeMap::new();
         assert!(runtime
             .prepare_due_with_readonly_conditions_transactional_bounded(
-                100, 3, &map, Some(&game), &missing,
+                100,
+                3,
+                &map,
+                Some(&game),
+                &missing,
             )
             .is_err());
         assert_eq!(runtime.vm(2).unwrap().pc(), 0);
