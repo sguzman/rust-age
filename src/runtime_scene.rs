@@ -91,7 +91,9 @@ impl RuntimeScene {
                     || old.table_elevation != new.table_elevation
             })
         {
-            return Err(invalid("CE live scene object handle or PID identity changed"));
+            return Err(invalid(
+                "CE live scene object handle or PID identity changed",
+            ));
         }
         let owners =
             MapScriptOwners::from_map(&self.snapshot.scripts, &self.snapshot.objects, &queries)?;
@@ -179,11 +181,11 @@ mod tests {
     use super::RuntimeScene;
     use crate::actor_route::ActorStep;
     use crate::collision::{CollisionIndex, ObjectKey};
+    use crate::game_globals::GameGlobalState;
     use crate::hex::HexViewport;
     use crate::map::{MapHeader, MapSquares, MapVariables};
     use crate::object_data::{ObjectHeader, ObjectRecord, ObjectUpdate};
     use crate::object_tables::{MapObject, ObjectTables};
-    use crate::game_globals::GameGlobalState;
     use crate::scene::{PreparedScriptEnvironment, StaticScene};
     use crate::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
     use crate::script_clock::ScriptGameClock;
@@ -354,14 +356,13 @@ mod tests {
                 instance_id: Some(1),
             }],
         };
-        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let map_locals = scripts
+            .script_local_state(&world.snapshot.variables)
+            .unwrap();
         let queries = MapObjectReadBindings::from_tables(&world.snapshot.objects).unwrap();
-        let owners = MapScriptOwners::from_map(
-            &world.snapshot.scripts,
-            &world.snapshot.objects,
-            &queries,
-        )
-        .unwrap();
+        let owners =
+            MapScriptOwners::from_map(&world.snapshot.scripts, &world.snapshot.objects, &queries)
+                .unwrap();
         let mut environment = PreparedScriptEnvironment {
             scripts,
             map_locals,
@@ -376,22 +377,25 @@ mod tests {
             last_visit_ticks: Some(0),
         };
         let before = world
-            .advance_script_state_with_current_scene_bounded(
-                &mut environment,
-                clock,
-                100,
-                0,
-                5,
-            )
+            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 100, 0, 5)
             .unwrap();
         assert!(before.prepared_calls.is_empty());
         assert_eq!(
-            environment.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags,
+            environment
+                .scripts
+                .runtime
+                .vm(1)
+                .unwrap()
+                .runtime_procedures()[1]
+                .flags,
             0x02
         );
 
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
-        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let mut route = world
+            .plan_actor(&view, actor, 20098, true)
+            .unwrap()
+            .unwrap();
         assert_eq!(
             world.advance_actor(&view, &mut route).unwrap(),
             ActorStep::Moved {
@@ -400,13 +404,7 @@ mod tests {
             }
         );
         let after = world
-            .advance_script_state_with_current_scene_bounded(
-                &mut environment,
-                clock,
-                101,
-                0,
-                5,
-            )
+            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 101, 0, 5)
             .unwrap();
         assert_eq!(
             after.prepared_calls,
@@ -423,13 +421,7 @@ mod tests {
         // script's self_obj handle to another PID after a live MAP change.
         world.snapshot.objects.elevations[0][0].record.header.pid = 0x0100_0002;
         assert!(world
-            .advance_script_state_with_current_scene_bounded(
-                &mut environment,
-                clock,
-                102,
-                0,
-                5,
-            )
+            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 102, 0, 5,)
             .is_err());
         assert_eq!(environment.object_queries.snapshots()[0].pid, 0x0100_0001);
         assert_eq!(environment.scripts.runtime.vm(1).unwrap().pc(), 28);
