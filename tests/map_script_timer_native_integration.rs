@@ -201,15 +201,11 @@ fn installed_ce_self_obj_schedules_queue_and_due_timer_writes_quest_flag() {
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
 
     let before = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock(104), 104, 1004, 1, 0,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(104), 104, 1004, 1, 0)
         .unwrap();
     assert!(before.is_empty());
     let due = env
-        .process_due_script_timers_transactional_bounded(
-            &mut queue, clock(105), 105, 1005, 1, 0,
-        )
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 0)
         .unwrap();
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].0.sid, SID);
@@ -219,7 +215,9 @@ fn installed_ce_self_obj_schedules_queue_and_due_timer_writes_quest_flag() {
     assert!(queue.is_empty());
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
 
-    let tick = env.advance_script_state_tick_bounded(clock(105), 1006, 5, 0).unwrap();
+    let tick = env
+        .advance_script_state_tick_bounded(clock(105), 1006, 5, 0)
+        .unwrap();
     assert_eq!(tick.executed_steps, [(1, 5)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [42]);
     assert_eq!(env.invocations.get(&1).unwrap().action(), 22);
@@ -230,9 +228,15 @@ fn installed_ce_self_obj_schedules_queue_and_due_timer_writes_quest_flag() {
 fn timer_remove_native_clears_all_event_types_owned_by_same_ce_object() {
     let mut env = environment(main_remove());
     let mut queue = EventQueue::new();
-    queue.add(100, 5, EventType::Script, Some(OWNER), vec![0; 8]).unwrap();
-    queue.add(100, 8, EventType::Drug, Some(OWNER), vec![]).unwrap();
-    queue.add(100, 9, EventType::Script, None, vec![0; 8]).unwrap();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), vec![0; 8])
+        .unwrap();
+    queue
+        .add(100, 8, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    queue
+        .add(100, 9, EventType::Script, None, vec![0; 8])
+        .unwrap();
     let result = env
         .advance_script_state_with_timer_queue_bounded(&mut queue, clock(100), 1000, 3, 0)
         .unwrap();
@@ -248,13 +252,8 @@ fn invalid_pointer_or_late_opcode_rolls_back_vm_and_queued_timer_writes() {
     for vm in [main_add(Some(900), 0x8011), main_add(None, 0x80FF)] {
         let mut env = environment(vm);
         let mut queue = EventQueue::new();
-        let failed = env.advance_script_state_with_timer_queue_bounded(
-            &mut queue,
-            clock(100),
-            1000,
-            5,
-            0,
-        );
+        let failed =
+            env.advance_script_state_with_timer_queue_bounded(&mut queue, clock(100), 1000, 5, 0);
         assert!(failed.is_err());
         assert!(queue.is_empty());
         assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);

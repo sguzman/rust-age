@@ -878,9 +878,9 @@ impl ScriptRuntime {
                     stack,
                 )
             } else {
-                let snapshot = events
-                    .get(&id)
-                    .ok_or_else(|| invalid("CE timer-aware interpreter event context unavailable"))?;
+                let snapshot = events.get(&id).ok_or_else(|| {
+                    invalid("CE timer-aware interpreter event context unavailable")
+                })?;
                 apply_mutable_condition_native_with_vars(
                     snapshot.event,
                     &snapshot.invocation,
@@ -892,11 +892,8 @@ impl ScriptRuntime {
                 )
             }
         };
-        let executed_steps = next.interpret_native_bursts_bounded(
-            now_millis,
-            cpu_burst,
-            &mut host,
-        )?;
+        let executed_steps =
+            next.interpret_native_bursts_bounded(now_millis, cpu_burst, &mut host)?;
         let mut prepared_calls = Vec::new();
         if !next.suspended {
             for program in &mut next.programs {
