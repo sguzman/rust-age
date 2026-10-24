@@ -439,6 +439,33 @@ fn missing_sid_timer_before_due_foreign_event_rolls_back_both_records() {
 }
 
 #[test]
+fn installed_sid_without_timed_procedure_is_not_silently_discarded() {
+    // Pinned CE script_q_process changes fixedParam even when its matching
+    // script has no timed_event_p_proc; the bounded native host must not
+    // consume this installed callback as an absent-SID no-op.
+    let mut env = environment(critical_map_enter_advance_then_add_timer_vm());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_100, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    let original = queue.clone();
+    assert!(env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action, &mut clock, &mut queue, 1000, 9, 2,
+        )
+        .is_err());
+    assert_eq!(queue, original);
+    assert_eq!(clock.ticks, 100);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert!(env.invocations.is_empty());
+}
+
+#[test]
 fn running_ce_game_time_advance_still_rejects_executable_script_due_callback() {
     let mut script = Vec::new();
     script.extend_from_slice(&0xC001_u16.to_be_bytes());
