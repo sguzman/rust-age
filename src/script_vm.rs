@@ -166,10 +166,10 @@ impl ScriptHaltReason {
 /// zeros flags and enters the condition, then restores saved flags/PC after
 /// popping the condition result (unless PROGRAM_FLAG_0x04 interrupted it).
 ///
-/// Only EXITED, STOPPED and CRITICAL_SECTION are currently represented.
-/// Waiting, parent/child, interpreter error and upper opcode bits remain
-/// outside this bounded model. A failed condition returns an error rather
-/// than a misleading restoration trace.
+/// Only the modeled EXITED, STOPPED, CRITICAL_SECTION and WAITING low
+/// bits and last-opcode upper word are represented. Arbitrary wait callbacks,
+/// parent/child state and error flags remain outside this bounded model.
+/// A failed condition returns an error, not a restoration trace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreviewedConditionFlagRestore {
     pub saved_pc: usize,
@@ -178,6 +178,11 @@ pub struct PreviewedConditionFlagRestore {
     pub saved_low_flags: u16,
     pub evaluated_low_flags: u16,
     pub restored_low_flags: u16,
+    /// Source-shaped diagnostic including last-opcode high word; remaining
+    /// CE host/parent/error bits outside the modeled subset stay unknown.
+    pub saved_flags: u32,
+    pub evaluated_flags: u32,
+    pub restored_flags: u32,
 }
 
 /// A discarded, candidate-only result of one bounded CE doEvents-style
@@ -575,10 +580,15 @@ impl ScriptVm {
         // inside a CLONE instead of inventing a fresh condition stack.
         let saved_pc = self.pc;
         let saved_low_flags = self.modeled_program_low_flags();
+        let saved_flags = self.modeled_program_flags();
         let mut probe = self.clone();
         probe.pc = offset;
         probe.critical_section = false;
-        probe.last_opcode = None; // CE doEvents zeroes condition flags.
+        // doEvents temporarily clears all flags, including WAITING and
+        // the last opcode high word. Its built-in wait callback remains
+        // installed on the ORIGINAL and is restored by the source caller.
+        probe.core_wait = None;
+        probe.last_opcode = None;
         probe.halted = false;
         probe.halt_reason = None;
         probe.run_variable_subset_bounded(max_steps, native)?;
@@ -593,6 +603,9 @@ impl ScriptVm {
             saved_low_flags,
             evaluated_low_flags: probe.modeled_program_low_flags(),
             restored_low_flags: saved_low_flags,
+            saved_flags,
+            evaluated_flags: probe.modeled_program_flags(),
+            restored_flags: saved_flags,
         };
         Ok(PreviewedConditionFrame {
             satisfied,

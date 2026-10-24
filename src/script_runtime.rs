@@ -1101,6 +1101,49 @@ mod tests {
         }
     }
 
+    #[test]
+    fn detached_ce_condition_clears_wait_flag_but_restores_full_source_trace() {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&5_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0x8047_u16.to_be_bytes());
+        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[22..26].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes.extend_from_slice(&[0_u8; 12]);
+
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(5, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        runtime
+            .advance_core_tick_transactional_bounded(100, 2)
+            .unwrap();
+        let vm = runtime.vm(5).unwrap();
+        assert_eq!(vm.core_wait_state(), Some((100, 105)));
+        assert_eq!(vm.modeled_program_flags(), 0x80470010);
+
+        // Original doEvents sets flags=0 for condition evaluation, so the
+        // installed WAIT must not block the condition's cloned bytecode.
+        let frame = vm
+            .preview_condition_frame_with_host_bounded(20, 2, &mut |_, _| {
+                Err(super::invalid("native host unavailable"))
+            })
+            .unwrap();
+        assert!(frame.satisfied);
+        assert_eq!(frame.flag_restore.saved_pc, 8);
+        assert_eq!(frame.flag_restore.restored_pc, 8);
+        assert_eq!(frame.flag_restore.saved_low_flags, 0x10);
+        assert_eq!(frame.flag_restore.evaluated_low_flags, 0x08);
+        assert_eq!(frame.flag_restore.restored_low_flags, 0x10);
+        assert_eq!(frame.flag_restore.saved_flags, 0x80470010);
+        assert_eq!(frame.flag_restore.evaluated_flags, 0x80110008);
+        assert_eq!(frame.flag_restore.restored_flags, 0x80470010);
+        assert_eq!(vm.pc(), 8);
+        assert_eq!(vm.modeled_program_flags(), 0x80470010);
+        assert_eq!(vm.core_wait_state(), Some((100, 105)));
+    }
+
     fn core_wait_after_call_at_vm(delay_seconds: i32) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());

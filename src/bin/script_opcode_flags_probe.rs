@@ -35,10 +35,8 @@ fn observe(
 ) -> Result<String, Box<dyn Error>> {
     let mut runtime = ScriptRuntime::new();
     runtime.register(7, program(mode, delay)?)?;
-    let first = runtime.advance_core_tick_transactional_bounded(
-        start,
-        if mode == "WAIT" { 2 } else { 1 },
-    )?;
+    let first = runtime
+        .advance_core_tick_transactional_bounded(start, if mode == "WAIT" { 2 } else { 1 })?;
     if first.executed_steps.len() != 1
         || first.executed_steps[0].0 != 7
         || !first.prepared_calls.is_empty()
