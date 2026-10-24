@@ -1432,6 +1432,13 @@ mod tests {
             .is_err());
         assert_eq!(too_short.vm(3).unwrap().pc(), 0);
         assert_eq!(too_short.vm(3).unwrap().runtime_procedures()[1].flags, 0x02);
+        // Independently cap untrusted caller condition budgets even if
+        // interpreter bytecode would otherwise loop without a terminal.
+        assert!(too_short
+            .advance_core_tick_with_conditions_transactional_bounded(10, 0, usize::MAX)
+            .is_err());
+        assert_eq!(too_short.vm(3).unwrap().pc(), 0);
+        assert_eq!(too_short.vm(3).unwrap().runtime_procedures()[1].flags, 0x02);
     }
 
     #[test]
