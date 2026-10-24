@@ -798,7 +798,12 @@ impl ScriptVm {
         let original_pc =
             i32::try_from(self.pc).map_err(|_| invalid("CE saved action PC exceeds i32"))?;
         let saved_flags = self.modeled_program_low_flags();
-        if saved_flags & !0x80 != 0 {
+        // CE setupCall stores the original low flag word, including
+        // STOPPED or EXITED, then clears it while the local action runs.
+        // A stopped main script may therefore receive a later timer event.
+        // Preserve only flags with modeled Rust semantics; WAIT has a
+        // non-null callback and remains gated by the null-host frame.
+        if saved_flags & !0x89 != 0 || saved_flags & 0x09 == 0x09 {
             return Err(invalid(
                 "CE local action has unsupported saved program flags",
             ));
@@ -1338,7 +1343,7 @@ impl ScriptVm {
         let ScriptValue::Int(flags) = flags else {
             return Err(invalid("CE local POP_FLAGS requires integer flags"));
         };
-        if flags & !0x80 != 0 {
+        if flags & !0x89 != 0 || flags & 0x09 == 0x09 {
             return Err(invalid(
                 "CE local POP_FLAGS contains unsupported program flags",
             ));
@@ -1365,11 +1370,22 @@ impl ScriptVm {
         };
         self.stack.truncate(self.stack.len() - 3);
         self.critical_section = flags & 0x80 != 0;
-        self.halt_reason = None;
+        // Pinned op_pop_flags restores the saved low word *before*
+        // op_pop_exit sets its transient 0x40 bit. interpret then clears
+        // 0x40, but the saved STOPPED or EXITED state must survive.
+        let terminal = if flags & 0x08 != 0 {
+            Some(ScriptHaltReason::StopProgram)
+        } else if flags & 0x01 != 0 {
+            Some(ScriptHaltReason::ExitProgram)
+        } else {
+            None
+        };
+        self.halt_reason = terminal;
+        self.halted = terminal.is_some();
         if let Some(target) = target {
             self.return_stack.pop();
             self.pc = target;
-            if exit_interpreter {
+            if exit_interpreter && terminal.is_none() {
                 // CE POP_EXIT sets transient 0x40; interpret clears it
                 // before returning to the enclosing caller.
                 self.halt_reason = Some(ScriptHaltReason::ReturnFromCall);
