@@ -1027,6 +1027,129 @@ mod tests {
         assert_eq!(runtime.vm(1).unwrap().halt_reason(), None);
     }
 
+    fn call_at_during_tick_vm(seconds: i32) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&seconds.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[12..16].copy_from_slice(&[0x80, 0x06, 0x80, 0x11]);
+        bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0, 0, 0, 20, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn source_tick_observes_call_at_from_same_burst_only_when_strictly_due() {
+        for (now, seconds, due) in [
+            (0_u32, -1_i32, false),
+            (1_000, -1, true),
+            (1_000, -2, false),
+            (3_000, -2, true),
+            (1_000, 0, false),
+            (1_000, 1, false),
+            (1_000, i32::MIN, false),
+            (u32::MAX, -1, true),
+            (u32::MAX, 0, false),
+        ] {
+            let mut runtime = ScriptRuntime::new();
+            runtime.register(7, call_at_during_tick_vm(seconds)).unwrap();
+            let result = runtime
+                .advance_core_tick_transactional_bounded(now, 3)
+                .unwrap();
+            assert_eq!(result.executed_steps, [(7, 3)]);
+            assert_eq!(result.prepared_calls.len(), usize::from(due));
+            let vm = runtime.vm(7).unwrap();
+            let scheduled = (now as i32).wrapping_add(seconds.wrapping_mul(1_000));
+            assert_eq!(vm.runtime_procedures()[1].event_time, scheduled);
+            assert_eq!(vm.runtime_procedures()[1].flags, if due { 0 } else { 1 });
+            if due {
+                assert_eq!(
+                    result.prepared_calls,
+                    [DueProcedure {
+                        program_id: 7,
+                        procedure_index: 1
+                    }]
+                );
+                // Timed call is installed at PC 20 AFTER interpreter
+                // executed its three instructions, never eagerly run.
+                assert_eq!(vm.pc(), 20);
+                assert_eq!(
+                    vm.return_stack(),
+                    [ScriptValue::Int(14), ScriptValue::Int(20)]
+                );
+                assert_eq!(vm.stack().len(), 4);
+                assert!(!vm.halted());
+            } else {
+                assert_eq!(vm.pc(), 14);
+                assert!(vm.return_stack().is_empty());
+                assert!(vm.stack().is_empty());
+                assert!(!vm.halted());
+            }
+        }
+    }
+
+    #[test]
+    fn same_tick_due_call_executes_only_on_later_core_interpreter_burst() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(7, call_at_during_tick_vm(-1)).unwrap();
+        let first = runtime
+            .advance_core_tick_transactional_bounded(2_000, 3)
+            .unwrap();
+        assert_eq!(first.prepared_calls.len(), 1);
+        assert_eq!(runtime.vm(7).unwrap().pc(), 20);
+        let second = runtime
+            .advance_core_tick_transactional_bounded(2_001, 2)
+            .unwrap();
+        assert!(second.prepared_calls.is_empty());
+        assert_eq!(second.executed_steps, [(7, 2)]);
+        assert_eq!(runtime.vm(7).unwrap().pc(), 20);
+        assert_eq!(runtime.vm(7).unwrap().return_stack(), [ScriptValue::Int(14)]);
+        assert!(runtime.vm(7).unwrap().stack().is_empty());
+        assert!(!runtime.vm(7).unwrap().halted());
+        assert_eq!(runtime.vm(7).unwrap().halt_reason(), None);
+    }
+
+    #[test]
+    fn same_tick_conditional_scheduling_fails_closed_without_committing() {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&20_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[12..14].copy_from_slice(&0x8007_u16.to_be_bytes()); // CALL_WHEN
+        bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0, 0, 0, 20, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(7, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        assert!(runtime
+            .advance_core_tick_transactional_bounded(2_000, 3)
+            .is_err());
+        let vm = runtime.vm(7).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.stack().is_empty());
+        assert_eq!(vm.runtime_procedures()[1].flags, 0);
+        assert!(vm.return_stack().is_empty());
+    }
+
     #[test]
     fn ce_core_tick_drains_critical_without_charging_ordinary_budget() {
         let mut bytes = vec![0_u8; 42];
