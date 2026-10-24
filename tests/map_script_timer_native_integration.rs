@@ -337,10 +337,8 @@ fn critical_map_enter_timer_uses_game_clock_advanced_earlier_in_same_procedure()
     assert_eq!(clock.ticks, 864_100);
     assert_eq!(queue.len(), 2);
     assert_eq!(queue.next_time(), 864_105);
-    let timer = rust_age::script_timer::ScriptTimerEvent::decode(
-        &queue.pop_due(864_105).unwrap(),
-    )
-    .unwrap();
+    let timer =
+        rust_age::script_timer::ScriptTimerEvent::decode(&queue.pop_due(864_105).unwrap()).unwrap();
     assert_eq!(timer.sid, SID);
     assert_eq!(timer.owner, Some(OWNER));
     assert_eq!(timer.fixed_parameter, 42);
