@@ -1439,6 +1439,7 @@ mod tests {
             .is_err());
         assert_eq!(too_short.vm(3).unwrap().pc(), 0);
         assert_eq!(too_short.vm(3).unwrap().runtime_procedures()[1].flags, 0x02);
+        assert_eq!(too_short.vm(3).unwrap().first_interpret_clock_millis(), -1);
     }
 
     #[test]
@@ -1472,6 +1473,7 @@ mod tests {
         for id in [1, 2] {
             assert_eq!(rt.vm(id).unwrap().pc(), 36);
             assert_eq!(rt.vm(id).unwrap().runtime_procedures()[1].flags, 0);
+            assert_eq!(rt.vm(id).unwrap().first_interpret_clock_millis(), 100);
         }
     }
 

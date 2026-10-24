@@ -892,6 +892,9 @@ impl ScriptVm {
         for index in 0..candidate.runtime_procedures.len() {
             let entry = candidate.runtime_procedures[index];
             if entry.flags & 0x02 != 0 {
+                // CE doEvents enters interpret for a conditional even when
+                // no preceding updatePrograms burst initialized field_78.
+                candidate.prepare_core_interpreter_entry();
                 let condition = candidate.preview_condition_frame_with_host_bounded(
                     entry.condition_offset,
                     max_steps_per_condition,
