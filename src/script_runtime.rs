@@ -64,6 +64,16 @@ pub struct PreviewedProgramDuePoll {
     pub candidate: PreviewedDueProcedurePoll,
 }
 
+/// Bounded, core-only source-order interpreter tick result.
+/// CE updatePrograms first interprets each program (newest first), then
+/// doEvents prepares due procedure calls. Original engine-native libraries,
+/// program cleanup, wait callbacks and game-world effects are unavailable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedCoreTick {
+    pub executed_steps: Vec<(u64, usize)>,
+    pub prepared_calls: Vec<DueProcedure>,
+}
+
 #[derive(Debug, Clone)]
 struct ProgramInstance {
     id: u64,
@@ -501,6 +511,51 @@ impl ScriptRuntime {
         Ok(prepared)
     }
 
+    /// One explicit, transactional core-only subset of pinned CE
+    /// updatePrograms: interpret each installed program in newest-first
+    /// order for at most cpu_burst instructions, THEN call doEvents'
+    /// strict timed local call preparation. This ordering matters: a
+    /// CALL_AT executed in the interpreter burst can be considered by the
+    /// subsequent timed scan, but a newly prepared procedure's body must
+    /// not run until a later interpreter burst.
+    ///
+    /// Conditional events, native engine opcodes, window callbacks,
+    /// imported procedures, CE wait handling and program removal are
+    /// unsupported. The entire tick is staged on a clone and committed
+    /// only after every supported program and timed call succeeds. The
+    /// atomic error policy differs deliberately from original CE.
+    pub fn advance_core_tick_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        if cpu_burst > 4096 {
+            return Err(invalid("CE core tick CPU burst exceeds safety bound"));
+        }
+        let mut next = self.clone();
+        let mut executed_steps = Vec::with_capacity(next.programs.len());
+        for program in &mut next.programs {
+            if program.vm.critical_section() {
+                return Err(invalid(
+                    "CE unbounded critical-section execution requires full interpreter",
+                ));
+            }
+            program.vm.set_clock_millis(now_millis as i32);
+            let mut steps = 0;
+            while steps < cpu_burst && !program.vm.halted() {
+                program.vm.step()?;
+                steps += 1;
+            }
+            executed_steps.push((program.id, steps));
+        }
+        let prepared_calls = next.prepare_due_timed_local_core_transactional(now_millis)?;
+        *self = next;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
     /// Synthetic-only bounded local interrupt procedure previews for due
     /// programs. Unlike CE's live scheduler, this diagnostic commits the
     /// consumed event flags only when every preview succeeds; engine native
@@ -881,6 +936,90 @@ mod tests {
             unsupported.vm(3).unwrap().runtime_procedures()[1].flags,
             0x03
         );
+    }
+
+    fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
+        bytes[..6].copy_from_slice(&[0x80, 0x00, 0x80, 0x00, 0x80, 0x11]);
+        if invalid_start {
+            bytes[..2].copy_from_slice(&0x80FC_u16.to_be_bytes());
+        }
+        bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, flags, time, 0, 20, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn ce_core_tick_interprets_programs_before_preparing_due_timed_calls() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, tick_local_vm(0x01, 9, false)).unwrap();
+        runtime.register(2, tick_local_vm(0, 9, false)).unwrap();
+        let tick = runtime
+            .advance_core_tick_transactional_bounded(10, 1)
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(2, 1), (1, 1)]);
+        assert_eq!(
+            tick.prepared_calls,
+            [DueProcedure {
+                program_id: 1,
+                procedure_index: 1
+            }]
+        );
+        // Both source programs ran their NOP at PC 0 before doEvents.
+        assert_eq!(runtime.vm(2).unwrap().pc(), 2);
+        // The due local call then saved PC=2 and installed its body at 20.
+        assert_eq!(runtime.vm(1).unwrap().pc(), 20);
+        assert_eq!(
+            runtime.vm(1).unwrap().return_stack(),
+            [ScriptValue::Int(2), ScriptValue::Int(20)]
+        );
+        assert_eq!(runtime.vm(1).unwrap().stack().len(), 4);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[1].flags, 0);
+        // On a later explicit tick, prepared bytecode may finally run.
+        let later = runtime
+            .advance_core_tick_transactional_bounded(11, 2)
+            .unwrap();
+        assert_eq!(later.prepared_calls, []);
+        assert_eq!(later.executed_steps, [(2, 2), (1, 2)]);
+        assert_eq!(runtime.vm(1).unwrap().pc(), 20);
+        assert_eq!(runtime.vm(1).unwrap().return_stack(), [ScriptValue::Int(2)]);
+        assert!(runtime.vm(1).unwrap().halted());
+    }
+
+    #[test]
+    fn ce_core_tick_fails_atomically_if_later_program_requires_gameplay_native() {
+        let mut runtime = ScriptRuntime::new();
+        // Most recent script (ID 2) runs its NOP first, then older script
+        // (ID 1) fails; no program step or schedule is committed.
+        runtime.register(1, tick_local_vm(0x01, 9, true)).unwrap();
+        runtime.register(2, tick_local_vm(0x01, 9, false)).unwrap();
+        assert!(runtime
+            .advance_core_tick_transactional_bounded(10, 1)
+            .is_err());
+        for id in [1, 2] {
+            assert_eq!(runtime.vm(id).unwrap().pc(), 0);
+            assert!(runtime.vm(id).unwrap().stack().is_empty());
+            assert_eq!(runtime.vm(id).unwrap().runtime_procedures()[1].flags, 1);
+        }
+        assert!(runtime
+            .advance_core_tick_transactional_bounded(10, 4097)
+            .is_err());
+        runtime.set_suspended(true);
+        let tick = runtime
+            .advance_core_tick_transactional_bounded(10, 0)
+            .unwrap();
+        assert!(tick.prepared_calls.is_empty());
+        assert_eq!(tick.executed_steps, [(2, 0), (1, 0)]);
+        assert_eq!(runtime.vm(1).unwrap().runtime_procedures()[1].flags, 1);
     }
 
     #[test]
