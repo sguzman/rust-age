@@ -771,10 +771,7 @@ mod tests {
             bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
         }
         bytes.extend_from_slice(&2_i32.to_be_bytes());
-        for fields in [
-            [4_i32, 0, 0, 0, 0, 0],
-            [9_i32, flags, event_time, 0, 20, 0],
-        ] {
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, flags, event_time, 0, 20, 0]] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }
@@ -788,8 +785,12 @@ mod tests {
     #[test]
     fn timed_event_preparation_persists_ce_call_frames_in_program_list_order() {
         let mut runtime = ScriptRuntime::new();
-        runtime.register(1, due_timed_preparation_vm(0x01, 9, true)).unwrap();
-        runtime.register(2, due_timed_preparation_vm(0x11, 9, true)).unwrap();
+        runtime
+            .register(1, due_timed_preparation_vm(0x01, 9, true))
+            .unwrap();
+        runtime
+            .register(2, due_timed_preparation_vm(0x11, 9, true))
+            .unwrap();
         assert!(runtime
             .prepare_due_timed_local_core_transactional(9)
             .unwrap()
@@ -798,7 +799,9 @@ mod tests {
             assert_eq!(runtime.vm(id).unwrap().pc(), 0);
             assert!(runtime.vm(id).unwrap().stack().is_empty());
         }
-        let prepared = runtime.prepare_due_timed_local_core_transactional(10).unwrap();
+        let prepared = runtime
+            .prepare_due_timed_local_core_transactional(10)
+            .unwrap();
         assert_eq!(
             prepared,
             [
@@ -824,7 +827,10 @@ mod tests {
                     ScriptValue::Int(0)
                 ]
             );
-            assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+            assert_eq!(
+                vm.return_stack(),
+                [ScriptValue::Int(0), ScriptValue::Int(20)]
+            );
             assert_eq!(vm.runtime_procedures()[1].flags, 0);
             assert_eq!(vm.runtime_procedures()[1].event_time, 9);
             assert!(!vm.halted());
@@ -841,9 +847,15 @@ mod tests {
     fn timed_event_preparation_rejects_later_invalid_call_atomically() {
         let mut runtime = ScriptRuntime::new();
         // Newest (ID 2) prepares successfully; old (ID 1) then fails.
-        runtime.register(1, due_timed_preparation_vm(0x01, 4, false)).unwrap();
-        runtime.register(2, due_timed_preparation_vm(0x01, 4, true)).unwrap();
-        assert!(runtime.prepare_due_timed_local_core_transactional(5).is_err());
+        runtime
+            .register(1, due_timed_preparation_vm(0x01, 4, false))
+            .unwrap();
+        runtime
+            .register(2, due_timed_preparation_vm(0x01, 4, true))
+            .unwrap();
+        assert!(runtime
+            .prepare_due_timed_local_core_transactional(5)
+            .is_err());
         for id in [1, 2] {
             let vm = runtime.vm(id).unwrap();
             assert_eq!(vm.pc(), 0);
@@ -859,9 +871,16 @@ mod tests {
         assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[1].flags, 0x01);
         runtime.set_suspended(false);
         let mut unsupported = ScriptRuntime::new();
-        unsupported.register(3, due_timed_preparation_vm(0x03, 4, true)).unwrap();
-        assert!(unsupported.prepare_due_timed_local_core_transactional(5).is_err());
-        assert_eq!(unsupported.vm(3).unwrap().runtime_procedures()[1].flags, 0x03);
+        unsupported
+            .register(3, due_timed_preparation_vm(0x03, 4, true))
+            .unwrap();
+        assert!(unsupported
+            .prepare_due_timed_local_core_transactional(5)
+            .is_err());
+        assert_eq!(
+            unsupported.vm(3).unwrap().runtime_procedures()[1].flags,
+            0x03
+        );
     }
 
     #[test]
