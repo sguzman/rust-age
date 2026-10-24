@@ -424,6 +424,60 @@ impl PreparedScriptEnvironment {
         Ok(staged)
     }
 
+    /// Commit a complete source-ordered MAP lifecycle phase including
+    /// original CE executeProc's two distinct paths: noncritical local
+    /// procedures stage a frame for the next interpreter burst, while
+    /// CRITICAL local procedures execute synchronously with interpret(0).
+    /// Each returned pair carries the source plan and either the number
+    /// of immediately interpreted critical opcodes or None for a deferred
+    /// noncritical call.
+    ///
+    /// The whole phase runs on a cloned MAP environment. Earlier critical
+    /// quest-variable writes are visible to later actions; any unsupported
+    /// native opcode, ambiguous owner, repeated instance, or exhausted
+    /// critical budget rolls back the entire phase (unlike CE longjmp
+    /// side effects). Real gameplay callbacks and automated MAP loading
+    /// remain separate acceptance gates.
+    pub fn apply_map_lifecycle_phase_transactional_bounded(
+        &mut self,
+        phase: MapLifecyclePhase,
+        map_script_id: i32,
+        map_flags: i32,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<Vec<(PlannedMapAction, Option<usize>)>> {
+        let selected = self
+            .scripts
+            .plan_map_lifecycle(phase, map_script_id, map_flags)?;
+        let mut next = self.clone();
+        let mut seen = std::collections::BTreeSet::new();
+        let mut applied = Vec::with_capacity(selected.len());
+        for action in selected {
+            if !seen.insert(action.instance_id) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE MAP phase repeated an installed script instance",
+                ));
+            }
+            let critical = next.local_frame_for_planned(&action)?.critical;
+            let immediately_executed = if critical {
+                Some(next.execute_critical_map_action_transactional_bounded(
+                    &action,
+                    clock,
+                    now_millis,
+                    max_critical_steps,
+                )?)
+            } else {
+                next.prepare_noncritical_map_action_transactional(&action)?;
+                None
+            };
+            applied.push((action, immediately_executed));
+        }
+        *self = next;
+        Ok(applied)
+    }
+
     /// Find the source-derived CE owner of an installed, unstarted Rust VM.
     /// Returns None when no verified instance/record mapping is available.
     pub fn owner_for_instance(&self, instance_id: u64) -> Option<ScriptOwnerResolution> {
