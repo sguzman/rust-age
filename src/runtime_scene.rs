@@ -1216,12 +1216,15 @@ mod tests {
             })
             .to_be_bytes(),
         );
-        let mut bytes = vec![0_u8; 20 + body.len()];
-        bytes[20..20 + body.len()].copy_from_slice(&body);
+        // INT's procedure section is fixed at byte 42; longer bodies
+        // occupy the preceding opcode space instead of moving the footer.
+        let body_offset = 42 - body.len();
+        let mut bytes = vec![0_u8; 42];
+        bytes[body_offset..body_offset + body.len()].copy_from_slice(&body);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
         for fields in [
             [4_i32, 0, 0, 0, 0, 0],
-            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, 20, 0],
+            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, body_offset as i32, 0],
         ] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
