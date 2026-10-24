@@ -14,7 +14,9 @@ use crate::script_native_vars::{
     ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_time_advance::{plan_game_time_advance_opcode, GAME_TIME_ADVANCE_OPCODE};
+use crate::script_time_advance::{
+    apply_game_time_advance_no_due_opcode, GAME_TIME_ADVANCE_OPCODE,
+};
 use crate::script_timer::{
     apply_timer_native_opcode, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,
@@ -966,20 +968,13 @@ impl ScriptRuntime {
         let mut remaining_polls = max_queue_polls;
         let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
             if opcode == GAME_TIME_ADVANCE_OPCODE {
-                let plan = plan_game_time_advance_opcode(opcode, stack, remaining_polls)?;
-                remaining_polls -= plan.queue_polls();
-                for increment in plan.increments_before_queue_process() {
-                    next_clock.ticks =
-                        next_clock.ticks.checked_add(*increment).ok_or_else(|| {
-                            invalid("CE native game_time_advance overflowed signed game ticks")
-                        })?;
-                    if next_queue.pop_due(next_clock.ticks).is_some() {
-                        return Err(invalid(
-                            "CE native game_time_advance due callback requires reentrant dispatch",
-                        ));
-                    }
-                }
-                Ok(())
+                apply_game_time_advance_no_due_opcode(
+                    opcode,
+                    stack,
+                    &mut next_clock,
+                    &next_queue,
+                    &mut remaining_polls,
+                )
             } else if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
                 apply_timer_native_opcode(
                     context.bound,

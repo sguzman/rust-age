@@ -37,7 +37,7 @@ use crate::script_runtime::{
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
 use crate::script_time_advance::{
-    plan_game_time_advance_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
+    apply_game_time_advance_no_due_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
 };
 use crate::script_timer::{
     apply_timer_native_opcode, ScriptTimerEvent, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
@@ -751,34 +751,19 @@ impl PreparedScriptEnvironment {
                                 "CE critical native game-time mutation requires writable clock",
                             ));
                         }
-                        let queue = queued.as_mut().ok_or_else(|| {
+                        let queue = queued.as_ref().ok_or_else(|| {
                             io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 "CE critical game_time_advance requires an owned event queue",
                             )
                         })?;
-                        let plan = plan_game_time_advance_opcode(
+                        apply_game_time_advance_no_due_opcode(
                             opcode,
                             stack,
-                            remaining_queue_polls,
-                        )?;
-                        remaining_queue_polls -= plan.queue_polls();
-                        for &increment in plan.increments_before_queue_process() {
-                            updated_clock.ticks =
-                                updated_clock.ticks.checked_add(increment).ok_or_else(|| {
-                                    io::Error::new(
-                                        io::ErrorKind::InvalidData,
-                                        "CE critical game_time_advance signed clock overflow",
-                                    )
-                                })?;
-                            if queue.pop_due(updated_clock.ticks).is_some() {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "CE critical game_time_advance due event needs reentrant dispatch",
-                                ));
-                            }
-                        }
-                        Ok(())
+                            &mut updated_clock,
+                            queue,
+                            &mut remaining_queue_polls,
+                        )
                     } else if opcode == ADD_TIMER_EVENT_OPCODE
                         || opcode == REMOVE_TIMER_EVENT_OPCODE
                     {

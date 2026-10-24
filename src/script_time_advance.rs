@@ -5,6 +5,8 @@
 //! queue_process() again, including when the remainder is zero.
 //! This module only describes that order. It never advances a live clock,
 //! processes an event, or invokes a game script.
+use crate::event_queue::EventQueue;
+use crate::script_clock::ScriptGameClock;
 use crate::script_vm::ScriptValue;
 use std::io;
 
@@ -71,13 +73,98 @@ pub fn plan_game_time_advance_opcode(
     Ok(plan)
 }
 
+/// Execute a bounded CE 0x80FC when no source queue_process callback
+/// would fire. Both ordinary interpreter and synchronous critical actions
+/// use the same source-order whole-day/final-remainder implementation.
+///
+/// A due event at ANY poll, even the final zero remainder, is an error.
+/// Rejecting a due callback is deliberate until reentrant CE dispatch is
+/// implemented. Operand stack, clock and cumulative poll budget remain
+/// unchanged if the operation is rejected; the enclosing script transaction
+/// handles complete MAP/quest/queue rollback.
+pub fn apply_game_time_advance_no_due_opcode(
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+    clock: &mut ScriptGameClock,
+    queue: &EventQueue,
+    remaining_queue_polls: &mut usize,
+) -> io::Result<()> {
+    let mut pending_stack = stack.clone();
+    let plan = plan_game_time_advance_opcode(
+        opcode,
+        &mut pending_stack,
+        *remaining_queue_polls,
+    )?;
+    let mut pending_clock = *clock;
+    for &increment in plan.increments_before_queue_process() {
+        pending_clock.ticks = pending_clock
+            .ticks
+            .checked_add(increment)
+            .ok_or_else(|| invalid("CE game_time_advance signed clock overflow"))?;
+        if !queue.is_empty() && queue.next_time() <= pending_clock.ticks {
+            return Err(invalid(
+                "CE game_time_advance due queue event needs reentrant dispatch",
+            ));
+        }
+    }
+    *remaining_queue_polls -= plan.queue_polls();
+    *stack = pending_stack;
+    *clock = pending_clock;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        plan_game_time_advance_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
-        GAME_TIME_TICKS_PER_DAY,
+        apply_game_time_advance_no_due_opcode, plan_game_time_advance_opcode, TimeAdvancePlan,
+        GAME_TIME_ADVANCE_OPCODE, GAME_TIME_TICKS_PER_DAY,
     };
+    use crate::event_queue::{EventQueue, EventType};
+    use crate::script_clock::ScriptGameClock;
     use crate::script_vm::ScriptValue;
+
+    #[test]
+    fn all_no_due_native_polls_share_an_atomic_clock_operand_and_budget() {
+        let mut clock = ScriptGameClock { ticks: 100 };
+        let mut stack = vec![ScriptValue::Int(864_000)];
+        let queue = EventQueue::new();
+        let mut limit = 2;
+        apply_game_time_advance_no_due_opcode(
+            GAME_TIME_ADVANCE_OPCODE,
+            &mut stack,
+            &mut clock,
+            &queue,
+            &mut limit,
+        )
+        .unwrap();
+        assert_eq!(clock.ticks, 864_100);
+        assert!(stack.is_empty());
+        assert_eq!(limit, 0);
+
+        let mut due = EventQueue::new();
+        due.add(0, 864_100, EventType::Script, None, vec![])
+            .unwrap();
+        for (start, increment, polls, expected_queue) in [
+            (100_i32, 864_000_i32, 2_usize, &due),
+            (100, 864_000, 1, &queue),
+            (i32::MAX, 1, 1, &queue),
+        ] {
+            let mut pending = ScriptGameClock { ticks: start };
+            let mut stack = vec![ScriptValue::Int(increment)];
+            let mut remaining = polls;
+            assert!(apply_game_time_advance_no_due_opcode(
+                GAME_TIME_ADVANCE_OPCODE,
+                &mut stack,
+                &mut pending,
+                expected_queue,
+                &mut remaining,
+            )
+            .is_err());
+            assert_eq!(pending.ticks, start);
+            assert_eq!(stack, [ScriptValue::Int(increment)]);
+            assert_eq!(remaining, polls);
+        }
+    }
 
     #[test]
     fn ce_daily_chunks_and_final_zero_poll_are_preserved() {
