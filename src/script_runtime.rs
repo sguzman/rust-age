@@ -377,6 +377,34 @@ impl ScriptRuntime {
         )
     }
 
+    /// Execute a single, source-verified CE built-in action against its
+    /// installed Rust-owned VM with an ATOMIC, core-only transaction.
+    /// The candidate is fully checked and run before replacing that one
+    /// VM; failures leave all program instances untouched. This does not
+    /// call engine natives, mutate MAP/quest state, invoke real game events,
+    /// or represent original CE's longjmp error side effects.
+    ///
+    /// Unlike the speculative preview APIs, successful source-core stack,
+    /// PC and procedure schedule effects persist in this ScriptRuntime.
+    /// The return marker remains at CE offset 20 until a separately
+    /// implemented caller continuation restores the interrupted program.
+    pub fn execute_local_action_core_transactional_bounded(
+        &mut self,
+        program_id: u64,
+        action: usize,
+        max_steps: usize,
+    ) -> io::Result<Option<PreviewedLocalAction>> {
+        let Some(frame) = self.inspect_local_action_frame(program_id, action)? else {
+            return Ok(None);
+        };
+        let vm = self
+            .vm_mut(program_id)
+            .ok_or_else(|| invalid("CE local action VM missing after preflight"))?;
+        let returned =
+            vm.execute_local_action_core_transactional_bounded(frame.procedure_index, max_steps)?;
+        Ok(Some(PreviewedLocalAction { frame, returned }))
+    }
+
     /// Opt-in host dispatch of one resolved CE built-in action, independent
     /// of the timed/conditional event scheduler. A missing script action
     /// returns false; any callback is supplied explicitly by the caller.
@@ -595,6 +623,94 @@ mod tests {
         assert!(runtime.preview_local_action_core_bounded(3, 1, 1).is_err());
         assert!(runtime
             .preview_local_action_core_bounded(3, 23, 3)
+            .unwrap()
+            .is_none());
+    }
+
+    fn core_transaction_action_vm(body: &[u8]) -> ScriptVm {
+        assert!(body.len() <= 22);
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..20 + body.len()].copy_from_slice(body);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 20, 0], [9_i32, 0, 0, 0, 20, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn persistent_core_action_schedules_timed_event_on_exact_registered_vm() {
+        let mut body = vec![0x80, 0x1A]; // discard setupCall argument marker
+        body.extend_from_slice(&0xC001_u16.to_be_bytes());
+        body.extend_from_slice(&2_i32.to_be_bytes());
+        body.extend_from_slice(&0xC001_u16.to_be_bytes());
+        body.extend_from_slice(&1_i32.to_be_bytes());
+        body.extend_from_slice(&[0x80, 0x06, 0x80, 0x21]); // CALL_AT, POP_FLAGS_EXIT
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(10, core_transaction_action_vm(&body)).unwrap();
+        runtime.register(20, core_transaction_action_vm(&body)).unwrap();
+        let expected = runtime
+            .preview_local_action_frame_core_bounded(10, 1, 5)
+            .unwrap()
+            .unwrap();
+        assert_eq!(expected.candidate.procedures[1].event_time, 2000);
+        assert_eq!(runtime.vm(10).unwrap().runtime_procedures()[1].flags, 0);
+        let executed = runtime
+            .execute_local_action_core_transactional_bounded(10, 1, 5)
+            .unwrap()
+            .unwrap();
+        assert_eq!(executed.frame, expected.binding);
+        assert_eq!(executed.returned, None);
+        assert_eq!(runtime.vm(10).unwrap().pc(), 20);
+        assert_eq!(runtime.vm(10).unwrap().return_stack(), [ScriptValue::Int(0)]);
+        assert_eq!(runtime.vm(10).unwrap().runtime_procedures(), expected.candidate.procedures);
+        assert_eq!(runtime.vm(20).unwrap().pc(), 0);
+        assert_eq!(runtime.vm(20).unwrap().runtime_procedures()[1].flags, 0);
+        assert!(runtime.take_due_timed(2000).is_empty());
+        assert_eq!(
+            runtime.take_due_timed(2001),
+            [DueProcedure {
+                program_id: 10,
+                procedure_index: 1
+            }]
+        );
+        assert!(runtime.take_due_timed(3000).is_empty());
+        assert_eq!(runtime.vm(20).unwrap().runtime_procedures()[1].flags, 0);
+    }
+
+    #[test]
+    fn persistent_core_action_error_is_atomic_and_does_not_dispatch_natives() {
+        let mut runtime = ScriptRuntime::new();
+        // It first mutates a staged schedule, then tries forbidden opcode.
+        let mut body = vec![0x80, 0x1A];
+        body.extend_from_slice(&0xC001_u16.to_be_bytes());
+        body.extend_from_slice(&1_i32.to_be_bytes());
+        body.extend_from_slice(&0xC001_u16.to_be_bytes());
+        body.extend_from_slice(&1_i32.to_be_bytes());
+        body.extend_from_slice(&[0x80, 0x06, 0x80, 0xFC, 0x80, 0x21]);
+        runtime.register(1, core_transaction_action_vm(&body)).unwrap();
+        let original_vm = runtime.vm(1).unwrap();
+        let original_stack = original_vm.stack().to_vec();
+        let original_pc = original_vm.pc();
+        let original_procedures = original_vm.runtime_procedures().to_vec();
+        for budget in [4, 7] {
+            assert!(runtime
+                .execute_local_action_core_transactional_bounded(1, 1, budget)
+                .is_err());
+            let installed = runtime.vm(1).unwrap();
+            assert_eq!(installed.pc(), original_pc);
+            assert_eq!(installed.stack(), original_stack);
+            assert!(installed.return_stack().is_empty());
+            assert_eq!(installed.runtime_procedures(), original_procedures);
+        }
+        assert!(runtime.take_due_timed(9000).is_empty());
+        assert!(runtime
+            .execute_local_action_core_transactional_bounded(1, 23, 3)
             .unwrap()
             .is_none());
     }
