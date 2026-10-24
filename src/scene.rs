@@ -35,7 +35,7 @@ use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
     ReadOnlyConditionEvent,
 };
-use crate::script_timer::ScriptTimerEvent;
+use crate::script_timer::{ScriptTimerEvent, TimerObjectBinding};
 use crate::script_vm::{PreviewedConditionFrame, PreviewedDueProcedurePoll, ScriptValue};
 use std::collections::BTreeMap;
 use std::io;
@@ -237,6 +237,104 @@ impl PreparedScriptEnvironment {
                 game,
                 &events,
             )
+    }
+
+    /// Run one installed MAP script tick with CE script queue add/remove
+    /// natives connected to a caller-owned, timestamped EventQueue.
+    /// Timer object pointers are resolved only from source-verified MAP
+    /// object-owner bindings; unknown, ambiguous or synthetic pointers are
+    /// rejected. The queue is cloned together with the VMs and quest/MAP
+    /// banks, then committed only after successful interpreter bursts and
+    /// conditional event dispatch. Actual queue_process is a separate,
+    /// explicit game-time phase handled by process_due_script_timers.
+    pub fn advance_script_state_with_timer_queue_bounded(
+        &mut self,
+        queue: &mut EventQueue,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let mut queued = queue.clone();
+        let mut events = BTreeMap::new();
+        let mut timer_bindings = Vec::new();
+        for entry in &next.scripts.entries {
+            let Some(id) = entry.instance_id else {
+                continue;
+            };
+            let owner = next
+                .script_owners
+                .resolution_for_instance(&next.scripts, id);
+            if let Some(ScriptOwnerResolution::Bound { key, handle, .. }) = owner {
+                timer_bindings.push(TimerObjectBinding {
+                    handle,
+                    owner: key,
+                    sid: entry.binding.script_id,
+                });
+            }
+            let source = next
+                .spatial_sources
+                .get(&id)
+                .map(|key| {
+                    next.object_queries.handle_for(*key).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "CE timer tick spatial source handle unavailable",
+                        )
+                    })
+                })
+                .transpose()?;
+            let event = ReadOnlyConditionEvent {
+                event: ScriptNativeEventSnapshot {
+                    owner: ScriptNativeOwnerSnapshot {
+                        native: ScriptNativeSnapshot {
+                            clock,
+                            objects: Some(next.object_queries.snapshots()),
+                        },
+                        resolution: owner,
+                    },
+                    source,
+                    target: source.map(|_| 0),
+                },
+                invocation: next
+                    .invocations
+                    .get(&id)
+                    .copied()
+                    .unwrap_or_else(ScriptInvocationState::installed),
+            };
+            if events.insert(id, event).is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE timer tick repeated one installed script identity",
+                ));
+            }
+        }
+        let bound = next.scripts.clone();
+        let game = next.game_globals.as_mut().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE timer native tick requires loaded GAME_GLOBAL_VARS",
+            )
+        })?;
+        let executed = next
+            .scripts
+            .runtime
+            .advance_tick_with_mutable_native_timer_queue_transactional_bounded(
+                now_millis,
+                cpu_burst,
+                max_steps_per_condition,
+                &mut next.map_locals,
+                game,
+                &mut queued,
+                clock.clock.ticks,
+                &bound,
+                &timer_bindings,
+                &events,
+            )?;
+        *self = next;
+        *queue = queued;
+        Ok(executed)
     }
 
     /// Persist a source-verified, planned NONCRITICAL MAP lifecycle
