@@ -1687,9 +1687,9 @@ mod tests {
     #[test]
     fn modeled_ce_native_opcode_word_only_commits_after_accepted_callback() {
         let mut vm = ScriptVm::new(fixture(&[0x80, 0xEA, 0x80, 0x11]));
-        assert!(vm.step_with_variable_host(&mut |_, _| {
-            Err(super::invalid("synthetic failed native"))
-        }).is_err());
+        assert!(vm
+            .step_with_variable_host(&mut |_, _| { Err(super::invalid("synthetic failed native")) })
+            .is_err());
         assert_eq!(vm.modeled_program_flags(), 0);
         assert_eq!(vm.pc(), 0);
         let mut count = 0;
@@ -1697,7 +1697,8 @@ mod tests {
             assert_eq!(opcode, 0x80EA);
             count += 1;
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(count, 1);
         assert_eq!(vm.last_opcode(), Some(0x80EA));
         assert_eq!(vm.modeled_program_flags(), 0x80EA0000);
