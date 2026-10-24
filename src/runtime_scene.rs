@@ -1188,7 +1188,7 @@ mod tests {
             .is_err());
     }
 
-    fn object_use_vm(critical: bool, invalid_after_write: bool) -> ScriptVm {
+    fn object_use_vm(critical: bool, invalid_after_write: bool, with_overrides: bool) -> ScriptVm {
         // Real source-shaped CE local setupCall followed by SOURCE_OBJ,
         // TARGET_OBJ, object-property reads and a quest-global mutation.
         let mut body = Vec::new();
@@ -1202,10 +1202,15 @@ mod tests {
             0x8100,     // OBJ_PID
             0x8039,     // ADD
             0x80C6,     // SET_GLOBAL_VAR
-            if invalid_after_write { 0x80FF } else { 0x8021 },
         ] {
             body.extend_from_slice(&opcode.to_be_bytes());
         }
+        if with_overrides {
+            body.extend_from_slice(&0x80B9_u16.to_be_bytes()); // SCRIPT_OVERRIDES
+        }
+        body.extend_from_slice(
+            &(if invalid_after_write { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
+        );
         let mut bytes = vec![0_u8; 42];
         bytes[20..20 + body.len()].copy_from_slice(&body);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
@@ -1226,6 +1231,7 @@ mod tests {
     fn object_use_fixture(
         critical: bool,
         invalid_after_write: bool,
+        with_overrides: bool,
     ) -> (RuntimeScene, PreparedScriptEnvironment) {
         let mut world = scene();
         let sid = 0x0300_0001;
@@ -1247,7 +1253,7 @@ mod tests {
         });
         let mut runtime = ScriptRuntime::new();
         runtime
-            .register(7, object_use_vm(critical, invalid_after_write))
+            .register(7, object_use_vm(critical, invalid_after_write, with_overrides))
             .unwrap();
         let scripts = BoundScriptRuntime {
             runtime,
@@ -1291,7 +1297,7 @@ mod tests {
 
     #[test]
     fn object_use_dispatch_runs_critical_native_source_and_target_quest_mutation() {
-        let (world, mut env) = object_use_fixture(true, false);
+        let (world, mut env) = object_use_fixture(true, false, false);
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1329,7 +1335,7 @@ mod tests {
 
     #[test]
     fn object_use_noncritical_is_deferred_and_rejects_unbound_participants() {
-        let (world, mut env) = object_use_fixture(false, false);
+        let (world, mut env) = object_use_fixture(false, false, false);
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
@@ -1405,8 +1411,57 @@ mod tests {
     }
 
     #[test]
+    fn object_use_critical_script_overrides_commits_only_on_success() {
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        let (world, mut env) = object_use_fixture(true, false, true);
+        let (_, executed) = world
+            .dispatch_object_action_transactional_bounded(
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(executed, Some(10));
+        assert!(env.invocations.get(&7).unwrap().overrides());
+        assert_eq!(
+            env.game_globals.as_ref().unwrap().values(),
+            [20099 + 0x0300_0001]
+        );
+
+        let (world, mut rejected) = object_use_fixture(true, true, true);
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut rejected,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
+            )
+            .is_err());
+        assert!(rejected.invocations.is_empty());
+        assert!(rejected.spatial_sources.is_empty());
+        assert_eq!(rejected.game_globals.as_ref().unwrap().values(), [0]);
+    }
+
+    #[test]
     fn object_use_critical_native_failure_does_not_commit_event_or_quest() {
-        let (world, mut env) = object_use_fixture(true, true);
+        let (world, mut env) = object_use_fixture(true, true, false);
         let source = ObjectKey {
             elevation: 0,
             ordinal: 0,
