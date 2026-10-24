@@ -14,7 +14,9 @@ use crate::script_native_vars::{
     ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_time_advance::{apply_game_time_advance_no_due_opcode, GAME_TIME_ADVANCE_OPCODE};
+use crate::script_time_advance::{
+    apply_game_time_advance_with_inert_timers_opcode, GAME_TIME_ADVANCE_OPCODE,
+};
 use crate::script_timer::{
     apply_timer_native_opcode, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,
@@ -966,11 +968,12 @@ impl ScriptRuntime {
         let mut remaining_polls = max_queue_polls;
         let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
             if opcode == GAME_TIME_ADVANCE_OPCODE {
-                apply_game_time_advance_no_due_opcode(
+                apply_game_time_advance_with_inert_timers_opcode(
                     opcode,
                     stack,
                     &mut next_clock,
-                    &next_queue,
+                    &mut next_queue,
+                    context.bound,
                     &mut remaining_polls,
                 )
             } else if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {

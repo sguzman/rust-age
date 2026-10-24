@@ -37,7 +37,7 @@ use crate::script_runtime::{
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
 use crate::script_time_advance::{
-    apply_game_time_advance_no_due_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
+    apply_game_time_advance_with_inert_timers_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
 };
 use crate::script_timer::{
     apply_timer_native_opcode, ScriptTimerEvent, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
@@ -751,17 +751,18 @@ impl PreparedScriptEnvironment {
                                 "CE critical native game-time mutation requires writable clock",
                             ));
                         }
-                        let queue = queued.as_ref().ok_or_else(|| {
+                        let queue = queued.as_mut().ok_or_else(|| {
                             io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 "CE critical game_time_advance requires an owned event queue",
                             )
                         })?;
-                        apply_game_time_advance_no_due_opcode(
+                        apply_game_time_advance_with_inert_timers_opcode(
                             opcode,
                             stack,
                             &mut updated_clock,
                             queue,
+                            &bound,
                             &mut remaining_queue_polls,
                         )
                     } else if opcode == ADD_TIMER_EVENT_OPCODE

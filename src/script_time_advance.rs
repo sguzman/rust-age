@@ -5,7 +5,9 @@
 //! queue_process() again, including when the remainder is zero.
 //! This module only describes that order. It never advances a live clock,
 //! processes an event, or invokes a game script.
-use crate::event_queue::EventQueue;
+use crate::event_queue::{EventQueue, EventType};
+use crate::script_binding::BoundScriptRuntime;
+use crate::script_timer::ScriptTimerEvent;
 use crate::script_clock::ScriptGameClock;
 use crate::script_vm::ScriptValue;
 use std::io;
@@ -106,6 +108,58 @@ pub fn apply_game_time_advance_no_due_opcode(
     *remaining_queue_polls -= plan.queue_polls();
     *stack = pending_stack;
     *clock = pending_clock;
+    Ok(())
+}
+
+/// Original script_q_process is a no-op if the timer's script SID is
+/// absent (or no callable timed procedure is installed). Such due script
+/// records can be consumed during the pinned 0x80FC queue_process poll
+/// without executing a callback. Other due types and any executable script
+/// timer still require reentrant dispatch, which this boundary rejects.
+///
+/// Even when earlier inert timers are consumed, later unsupported events,
+/// integer overflow, or exhausted queue-poll budget revert the original
+/// queue, clock and operand stack. The installed MAP runtime owns the
+/// remaining VM/global/quest transaction.
+pub fn apply_game_time_advance_with_inert_timers_opcode(
+    opcode: u16,
+    stack: &mut Vec<ScriptValue>,
+    clock: &mut ScriptGameClock,
+    queue: &mut EventQueue,
+    bound: &BoundScriptRuntime,
+    remaining_queue_polls: &mut usize,
+) -> io::Result<()> {
+    let mut pending_stack = stack.clone();
+    let plan = plan_game_time_advance_opcode(
+        opcode,
+        &mut pending_stack,
+        *remaining_queue_polls,
+    )?;
+    let mut pending_clock = *clock;
+    let mut pending_queue = queue.clone();
+    for &increment in plan.increments_before_queue_process() {
+        pending_clock.ticks = pending_clock
+            .ticks
+            .checked_add(increment)
+            .ok_or_else(|| invalid("CE game_time_advance signed clock overflow"))?;
+        while let Some(event) = pending_queue.pop_due(pending_clock.ticks) {
+            if event.kind != EventType::Script {
+                return Err(invalid(
+                    "CE game_time_advance due non-script queue handler unavailable",
+                ));
+            }
+            let timer = ScriptTimerEvent::decode(&event)?;
+            if bound.plan_script_timer(&timer)?.is_some() {
+                return Err(invalid(
+                    "CE game_time_advance executable script timer needs reentrant dispatch",
+                ));
+            }
+        }
+    }
+    *remaining_queue_polls -= plan.queue_polls();
+    *stack = pending_stack;
+    *clock = pending_clock;
+    *queue = pending_queue;
     Ok(())
 }
 
