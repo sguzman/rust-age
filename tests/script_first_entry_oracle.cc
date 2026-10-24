@@ -19,6 +19,7 @@ int main(int argc, char** argv) {
         if ((mode != "NOOP" && mode != "BAD")
             || rawFirst > UINT32_MAX || rawNext > UINT32_MAX
             || firstBurst < 0 || nextBurst < 0) return 2;
+        std::cout << label << " ";
         int pc = 0;
         std::int32_t entry = -1;
         const std::uint32_t clocks[] = {
