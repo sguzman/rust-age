@@ -780,6 +780,63 @@ fn ce_running_game_time_advance_rolls_back_quest_clock_vm_and_queue_on_due_callb
     }
 }
 
+fn game_time_advance_due_condition_vm(expected_clock: i32) -> ScriptVm {
+    let mut bytes = vec![0_u8; 42];
+    bytes[..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[2..6].copy_from_slice(&864_000_i32.to_be_bytes());
+    bytes[6..8].copy_from_slice(&0x80FC_u16.to_be_bytes()); // GAME_TIME_ADVANCE
+    bytes[8..10].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[10..14].copy_from_slice(&0_i32.to_be_bytes()); // false first condition
+    bytes[14..16].copy_from_slice(&0x8011_u16.to_be_bytes()); // STOP_PROGRAM
+    bytes[16..18].copy_from_slice(&0x80EA_u16.to_be_bytes()); // GAME_TIME
+    bytes[18..20].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[20..24].copy_from_slice(&expected_clock.to_be_bytes());
+    bytes[24..26].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+    bytes[26..28].copy_from_slice(&0x8011_u16.to_be_bytes());
+    bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+    bytes.extend_from_slice(&3_i32.to_be_bytes());
+    let mut names = Vec::new();
+    for (name, flags, condition_offset) in [
+        (b"main".as_slice(), 0_i32, 0_i32),
+        (b"one".as_slice(), 0x02_i32, 0_i32),
+        (b"two".as_slice(), 0x02_i32, 16_i32),
+    ] {
+        let offset = 4 + names.len() as i32;
+        for field in [offset, flags, 0, condition_offset, 36, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        names.extend_from_slice(name);
+        names.push(0);
+    }
+    bytes.extend_from_slice(&(names.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&names);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+#[test]
+fn source_order_due_conditions_observe_native_game_time_advance_within_same_scan() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = game_time_advance_due_condition_vm(864_100);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let mut queue = EventQueue::new();
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let tick = env
+        .advance_script_state_with_game_time_no_due_bounded(
+            &mut queue, &mut clock, 100, 0, 6, 2,
+        )
+        .unwrap();
+    assert_eq!(tick.executed_steps, [(1, 0)]);
+    assert_eq!(tick.prepared_calls.len(), 1);
+    assert_eq!(tick.prepared_calls[0].program_id, 1);
+    assert_eq!(tick.prepared_calls[0].procedure_index, 2);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().runtime_procedures()[1].flags, 2);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().runtime_procedures()[2].flags, 0);
+    assert_eq!(clock.ticks, 864_100);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 36);
+    assert!(queue.is_empty());
+}
+
 #[test]
 fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     let env = environment();
