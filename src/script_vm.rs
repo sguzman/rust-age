@@ -1972,7 +1972,10 @@ mod tests {
     #[test]
     fn ce_timed_local_call_prepares_persistent_stack_without_interpreting_body() {
         let body = [0x80, 0x1A, 0x80, 0x21]; // POP arg; POP_FLAGS_EXIT
-        let mut vm = synthetic_due_vm(&[0x80, 0x11], &body, 0x11);
+        let mut prefix = vec![0_u8; 22];
+        prefix[..2].copy_from_slice(&0x8011_u16.to_be_bytes());
+        prefix[20..22].copy_from_slice(&0x8011_u16.to_be_bytes());
+        let mut vm = synthetic_due_vm(&prefix, &body, 0x11);
         vm.runtime_procedures[1].event_time = 100;
         assert!(!vm.prepare_due_timed_local_core_transactional(1, 100).unwrap());
         assert_eq!(vm.pc(), 0);
