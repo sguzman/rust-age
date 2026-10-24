@@ -1952,6 +1952,105 @@ impl StaticScene {
         })
     }
 
+    /// Source-verified CE map_load_file header script creation boundary.
+    /// The pinned engine tests map_data.scriptIndex > 0 and resolves the
+    /// installed program from scripts.lst at scriptIndex - 1. It then
+    /// creates one new category-0 system script and a hidden runtime owner
+    /// Object, before invoking that system script's MAP_ENTER.
+    ///
+    /// This Rust subset installs the actual decoded original .INT program
+    /// on a new, independent Rust VM and preserves all pre-existing mutable
+    /// MAP and quest state. Its rust_sid is a collision-free local stand-in
+    /// for CE's session-dependent scr_new_id; it is NOT guaranteed to be
+    /// the original live SID. The hidden Object is NOT synthesized: native
+    /// self_obj and inherited target queries fail closed through an explicit
+    /// GeneratedSystemOwnerRequiresEngine resolution until object lifecycle
+    /// is ported. No original game assets are copied into the repository.
+    ///
+    /// Call only after unstarted_script_environment, before initial MAP
+    /// lifecycle execution. The result is None for MAP header index <= 0.
+    /// Missing original scripts.lst rows/INT files fail closed; an absent
+    /// engine-created map owner must never be silently treated as NULL.
+    pub fn install_header_system_script(
+        &self,
+        assets: &mut GameAssets,
+        environment: &mut PreparedScriptEnvironment,
+    ) -> io::Result<Option<(u64, i32)>> {
+        if self.header.script_index <= 0 {
+            return Ok(None);
+        }
+        if environment
+            .script_owners
+            .entries()
+            .iter()
+            .any(|entry| matches!(
+                entry.resolution,
+                ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine
+            ))
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE MAP header system script already installed",
+            ));
+        }
+        let index = u32::try_from(self.header.script_index - 1).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE header script index invalid")
+        })?;
+        let path = assets.script_path_by_index(index)?.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "CE header script not in scripts.lst")
+        })?;
+        let program = assets.script_program_by_index(index)?.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "CE header INT script program missing")
+        })?;
+        let mut staged = environment.clone();
+        let ordinal = staged
+            .scripts
+            .entries
+            .iter()
+            .filter(|entry| entry.binding.category == 0)
+            .count();
+        let rust_sid = (0..32000)
+            .find(|sid| !staged.scripts.entries.iter().any(|entry| entry.binding.script_id == *sid))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "CE generated MAP system SID exhausted")
+            })?;
+        let instance_id = staged
+            .scripts
+            .entries
+            .iter()
+            .filter_map(|entry| entry.instance_id)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "MAP VM ID overflow"))?;
+        staged
+            .scripts
+            .runtime
+            .register(instance_id, crate::script_vm::ScriptVm::new(program))?;
+        staged.scripts.entries.push(crate::script_binding::InstalledScriptBinding {
+            binding: ScriptBinding {
+                category: 0,
+                ordinal,
+                script_id: rust_sid,
+                script_index: i32::try_from(index).map_err(|_| {
+                    io::Error::new(io::ErrorKind::InvalidData, "MAP script index exceeds i32")
+                })?,
+                owner_id: -1,
+                path: Some(path),
+                run_info: assets.script_run_info_by_index(index)?,
+                local_variable_offset: -1,
+                local_variable_count: 0,
+            },
+            instance_id: Some(instance_id),
+        });
+        staged
+            .script_owners
+            .append_generated_system_script(ordinal, rust_sid)?;
+        staged.map_locals.add_generated_system_instance(instance_id)?;
+        *environment = staged;
+        Ok(Some((instance_id, rust_sid)))
+    }
+
     /// CE-style numeric route through the initial static object collision.
     /// The caller supplies a viewport and the actor's current identity.
     /// Door scripts and moving blockers are not handled here.

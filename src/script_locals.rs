@@ -109,6 +109,25 @@ pub struct MapScriptChangeSummary {
 }
 
 impl MapScriptLocals {
+    /// Add the runtime-created MAP header system script without rebuilding
+    /// or overwriting the current mutable MAP quest/local state. Pinned CE
+    /// system scripts do not own script-local variable slots. This is a
+    /// Rust-only instance ID, not the original session-specific SID.
+    pub fn add_generated_system_instance(&mut self, instance_id: u64) -> io::Result<()> {
+        if self.instances.contains_key(&instance_id) {
+            return Err(invalid("generated CE system script repeats installed local ID"));
+        }
+        self.instances.insert(
+            instance_id,
+            ScriptLocalRange {
+                declared: 0,
+                offset: None,
+                is_system: true,
+            },
+        );
+        Ok(())
+    }
+
     /// Compare detached snapshots without reading or allocating any locals.
     /// Reject unrelated MAP instance layouts and shrinking storage.
     pub fn change_summary_since(&self, baseline: &Self) -> io::Result<MapScriptChangeSummary> {

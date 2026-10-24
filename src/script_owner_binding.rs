@@ -33,6 +33,11 @@ pub enum ScriptOwnerResolution {
     /// CE scr_find_obj_from_program can create a new spatial owner at runtime.
     /// This decoded-only bridge refuses to invent that object.
     SpatialOwnerRequiresEngine,
+    /// CE map_load_file creates a hidden runtime Object for the header's
+    /// system-script instance. No such Object exists in the serialized MAP
+    /// tables, so its self_obj/target pointer remains unavailable until
+    /// world object construction is implemented.
+    GeneratedSystemOwnerRequiresEngine,
     /// An inventory child can own the script in CE obj_load_obj, but it is
     /// not in the top-level object-query snapshot. Refuse guessed NULL.
     InventoryOwnerNotRepresented,
@@ -146,6 +151,32 @@ impl MapScriptOwners {
             }
         }
         Ok(Self { entries })
+    }
+
+    /// Register the one script manufactured by CE map_load_file when the
+    /// MAP header's scriptIndex is positive. This Rust-only binding does
+    /// NOT claim to reproduce the engine-created hidden Object pointer or
+    /// the allocator's exact session-dependent original SID.
+    pub fn append_generated_system_script(
+        &mut self,
+        ordinal: usize,
+        rust_sid: i32,
+    ) -> io::Result<()> {
+        if !(0..32000).contains(&rust_sid)
+            || self.entries.iter().any(|entry| entry.script_id == rust_sid)
+            || self.entries.iter().any(|entry| entry.category == 0 && entry.ordinal == ordinal)
+            || ordinal != self.entries.iter().filter(|entry| entry.category == 0).count()
+        {
+            return Err(invalid("generated CE MAP system-script binding is ambiguous"));
+        }
+        self.entries.push(ScriptOwnerEntry {
+            category: 0,
+            ordinal,
+            script_id: rust_sid,
+            saved_owner_id: -1,
+            resolution: ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine,
+        });
+        Ok(())
     }
 
     pub fn entries(&self) -> &[ScriptOwnerEntry] {
