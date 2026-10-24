@@ -1671,7 +1671,7 @@ mod tests {
 
     fn mutable_condition_vm(code: &[u8]) -> ScriptVm {
         // Conditional expression at PC 0, distinct local body at PC 36.
-        assert!(code.len() <= 34);
+        assert!(code.len() <= 36);
         let mut bytes = vec![0_u8; 42];
         bytes[..code.len()].copy_from_slice(code);
         bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
@@ -1791,10 +1791,9 @@ mod tests {
         native_condition_put(&mut write, 0);
         native_condition_put(&mut write, 5);
         write.extend_from_slice(&0x80C4_u16.to_be_bytes()); // SET_MAP_VAR
-        native_condition_put(&mut write, 0);
-        write.extend_from_slice(&0x80C1_u16.to_be_bytes()); // LOCAL_VAR
+        native_condition_put(&mut write, 1);
         write.extend_from_slice(&0x8011_u16.to_be_bytes());
-        assert_eq!(write.len(), 32);
+        assert_eq!(write.len(), 36);
         let mut runtime = ScriptRuntime::new();
         runtime.register(1, mutable_condition_vm(&write)).unwrap();
         let mut map = mutable_condition_state(&runtime, 1);
