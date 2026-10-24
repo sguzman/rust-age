@@ -652,8 +652,12 @@ mod tests {
         body.extend_from_slice(&1_i32.to_be_bytes());
         body.extend_from_slice(&[0x80, 0x06, 0x80, 0x21]); // CALL_AT, POP_FLAGS_EXIT
         let mut runtime = ScriptRuntime::new();
-        runtime.register(10, core_transaction_action_vm(&body)).unwrap();
-        runtime.register(20, core_transaction_action_vm(&body)).unwrap();
+        runtime
+            .register(10, core_transaction_action_vm(&body))
+            .unwrap();
+        runtime
+            .register(20, core_transaction_action_vm(&body))
+            .unwrap();
         let expected = runtime
             .preview_local_action_frame_core_bounded(10, 1, 5)
             .unwrap()
@@ -667,8 +671,14 @@ mod tests {
         assert_eq!(executed.frame, expected.binding);
         assert_eq!(executed.returned, None);
         assert_eq!(runtime.vm(10).unwrap().pc(), 20);
-        assert_eq!(runtime.vm(10).unwrap().return_stack(), [ScriptValue::Int(0)]);
-        assert_eq!(runtime.vm(10).unwrap().runtime_procedures(), expected.candidate.procedures);
+        assert_eq!(
+            runtime.vm(10).unwrap().return_stack(),
+            [ScriptValue::Int(0)]
+        );
+        assert_eq!(
+            runtime.vm(10).unwrap().runtime_procedures(),
+            expected.candidate.procedures
+        );
         assert_eq!(runtime.vm(20).unwrap().pc(), 0);
         assert_eq!(runtime.vm(20).unwrap().runtime_procedures()[1].flags, 0);
         assert!(runtime.take_due_timed(2000).is_empty());
@@ -693,7 +703,9 @@ mod tests {
         body.extend_from_slice(&0xC001_u16.to_be_bytes());
         body.extend_from_slice(&1_i32.to_be_bytes());
         body.extend_from_slice(&[0x80, 0x06, 0x80, 0xFC, 0x80, 0x21]);
-        runtime.register(1, core_transaction_action_vm(&body)).unwrap();
+        runtime
+            .register(1, core_transaction_action_vm(&body))
+            .unwrap();
         let original_vm = runtime.vm(1).unwrap();
         let original_stack = original_vm.stack().to_vec();
         let original_pc = original_vm.pc();
