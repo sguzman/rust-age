@@ -17,6 +17,8 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
+use crate::event_queue::{EventQueue, EventType};
+use crate::script_timer::ScriptTimerEvent;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
@@ -504,6 +506,76 @@ impl PreparedScriptEnvironment {
             applied.push((action, immediately_executed));
         }
         *self = next;
+        Ok(applied)
+    }
+
+    /// Process already-queued original CE EVENT_TYPE_SCRIPT records in
+    /// chronological FIFO order. Pinned script_q_process restores each
+    /// event's fixedParam, then calls SCRIPT_PROC_TIMED (22). Critical
+    /// procedure bodies run immediately and noncritical ones stage frames.
+    /// The caller provides an explicit game-time sample and trusted queue:
+    /// this method does not advance time or synthesize timer ownership.
+    ///
+    /// Queue entries for missing script IDs or timed procedures are consumed
+    /// without inventing a VM. Unsupported due event types, stale bindings,
+    /// invalid native effects, and exceeded event/instruction limits fail
+    /// the entire transaction, preserving both the queue and MAP/quest state.
+    /// Original CE can leave partial effects on native error; Rust Age
+    /// deliberately holds this safer fail-closed acceptance boundary.
+    pub fn process_due_script_timers_transactional_bounded(
+        &mut self,
+        queue: &mut EventQueue,
+        clock: ScriptClockContext,
+        now_ticks: i32,
+        now_millis: u32,
+        max_events: usize,
+        max_critical_steps: usize,
+    ) -> io::Result<Vec<(ScriptTimerEvent, Option<usize>)>> {
+        if max_events > 4096 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE script timer processing exceeds event safety bound",
+            ));
+        }
+        let mut candidate = self.clone();
+        let mut pending = queue.clone();
+        let mut applied = Vec::new();
+        while applied.len() < max_events {
+            let Some(event) = pending.pop_due(now_ticks) else {
+                break;
+            };
+            if event.kind != EventType::Script {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE game queue contains unsupported due event before script timer",
+                ));
+            }
+            let timer = ScriptTimerEvent::decode(&event)?;
+            let steps = if let Some(plan) = candidate.scripts.plan_script_timer(&timer)? {
+                if candidate.local_frame_for_planned(&plan)?.critical {
+                    Some(candidate.execute_critical_map_action_transactional_bounded(
+                        &plan,
+                        clock,
+                        now_millis,
+                        max_critical_steps,
+                    )?)
+                } else {
+                    candidate.prepare_noncritical_map_action_transactional(&plan)?;
+                    None
+                }
+            } else {
+                None
+            };
+            applied.push((timer, steps));
+        }
+        if !pending.is_empty() && pending.next_time() <= now_ticks {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE due script event queue exceeded bounded processing budget",
+            ));
+        }
+        *self = candidate;
+        *queue = pending;
         Ok(applied)
     }
 
