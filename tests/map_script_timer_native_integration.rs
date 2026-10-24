@@ -15,7 +15,7 @@ use rust_age::script_object_binding::MapObjectReadBindings;
 use rust_age::script_owner_binding::MapScriptOwners;
 use rust_age::script_program::ScriptProgram;
 use rust_age::script_runtime::ScriptRuntime;
-use rust_age::script_vm::ScriptVm;
+use rust_age::script_vm::{ScriptHaltReason, ScriptVm};
 use std::collections::BTreeMap;
 
 const SID: i32 = 0x0300_0001;
@@ -220,8 +220,51 @@ fn installed_ce_self_obj_schedules_queue_and_due_timer_writes_quest_flag() {
         .unwrap();
     assert_eq!(tick.executed_steps, [(1, 5)]);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [42]);
+    assert_eq!(
+        env.scripts.runtime.vm(1).unwrap().halt_reason(),
+        Some(ScriptHaltReason::StopProgram)
+    );
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().modeled_program_low_flags(), 8);
     assert_eq!(env.invocations.get(&1).unwrap().action(), 22);
     assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 42);
+}
+
+#[test]
+fn terminal_exit_program_still_receives_ce_timed_event_and_restores_exit_flags() {
+    let mut env = environment(main_add(None, 0x8010)); // EXIT_PROGRAM
+    let mut queue = EventQueue::new();
+    env.advance_script_state_with_timer_queue_bounded(
+        &mut queue,
+        clock(100),
+        1000,
+        5,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        env.scripts.runtime.vm(1).unwrap().halt_reason(),
+        Some(ScriptHaltReason::ExitProgram)
+    );
+    env.process_due_script_timers_transactional_bounded(
+        &mut queue,
+        clock(105),
+        105,
+        1005,
+        1,
+        0,
+    )
+    .unwrap();
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 24);
+    assert!(!env.scripts.runtime.vm(1).unwrap().halted());
+    env.advance_script_state_tick_bounded(clock(105), 1006, 5, 0)
+        .unwrap();
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [42]);
+    assert_eq!(
+        env.scripts.runtime.vm(1).unwrap().halt_reason(),
+        Some(ScriptHaltReason::ExitProgram)
+    );
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().modeled_program_low_flags(), 1);
+    assert!(queue.is_empty());
 }
 
 #[test]
