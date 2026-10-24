@@ -10,6 +10,7 @@ use rust_age::scene::{PreparedScriptEnvironment, ScriptTimeAdvanceBudget};
 use rust_age::script_binding::{BoundScriptRuntime, InstalledScriptBinding, ScriptBinding};
 use rust_age::script_clock::ScriptGameClock;
 use rust_age::script_data::{ScriptRecord, ScriptTables};
+use rust_age::script_lifecycle::MapLifecyclePhase;
 use rust_age::script_native_vars::ScriptClockContext;
 use rust_age::script_object_binding::MapObjectReadBindings;
 use rust_age::script_owner_binding::MapScriptOwners;
@@ -95,6 +96,10 @@ fn critical_timed_custom_opcode(body: &[u8]) -> ScriptVm {
 }
 
 fn timed_custom_opcode(body: &[u8], critical: bool) -> ScriptVm {
+    source_named_callback_opcode(body, critical, b"timed_event_p_proc")
+}
+
+fn source_named_callback_opcode(body: &[u8], critical: bool, name: &[u8]) -> ScriptVm {
     assert!(body.len() <= 22);
     let mut bytes = vec![0_u8; 42];
     bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
@@ -104,7 +109,7 @@ fn timed_custom_opcode(body: &[u8], critical: bool) -> ScriptVm {
     for (name, flags, body) in [
         (b"main".as_slice(), 0_i32, 0_i32),
         (
-            b"timed_event_p_proc".as_slice(),
+            name,
             if critical { 0x10_i32 } else { 0 },
             20_i32,
         ),
@@ -278,6 +283,79 @@ fn noncritical_timed_callback_late_error_reverts_requeued_event_and_vm() {
     assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
     assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
     assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 11);
+}
+
+fn critical_map_enter_timer_opcode(terminator: u16) -> ScriptVm {
+    let mut body = vec![0_u8; 20];
+    body[..2].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
+    body[2..4].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+    body[4..6].copy_from_slice(&0xC001_u16.to_be_bytes());
+    body[6..10].copy_from_slice(&5_i32.to_be_bytes()); // delay
+    body[10..12].copy_from_slice(&0xC001_u16.to_be_bytes());
+    body[12..16].copy_from_slice(&42_i32.to_be_bytes()); // fixedParam
+    body[16..18].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
+    body[18..20].copy_from_slice(&terminator.to_be_bytes());
+    source_named_callback_opcode(&body, true, b"map_enter_p_proc")
+}
+
+#[test]
+fn critical_map_enter_add_timer_event_mutates_the_same_owned_lifecycle_queue() {
+    let mut env = environment(critical_map_enter_timer_opcode(0x8021));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 40, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    let calls = env
+        .apply_map_lifecycle_phase_with_timer_queue_transactional_bounded(
+            &mut queue,
+            MapLifecyclePhase::Enter,
+            999,
+            0,
+            clock(100),
+            1000,
+            6,
+        )
+        .unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0.instance_id, 1);
+    assert_eq!(calls[0].1, Some(6));
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.next_time(), 105);
+    let event = queue.pop_due(105).unwrap();
+    let timer = rust_age::script_timer::ScriptTimerEvent::decode(&event).unwrap();
+    assert_eq!(timer.sid, SID);
+    assert_eq!(timer.owner, Some(OWNER));
+    assert_eq!(timer.fixed_parameter, 42);
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 140);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 15);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 1);
+}
+
+#[test]
+fn critical_map_enter_late_invalid_opcode_reverts_timer_and_lifecycle_state() {
+    let mut env = environment(critical_map_enter_timer_opcode(0x80FF));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 40, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    assert!(env
+        .apply_map_lifecycle_phase_with_timer_queue_transactional_bounded(
+            &mut queue,
+            MapLifecyclePhase::Enter,
+            999,
+            0,
+            clock(100),
+            1000,
+            6,
+        )
+        .is_err());
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 140);
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert!(env.scripts.runtime.vm(1).unwrap().return_stack().is_empty());
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
 }
 
 fn main_add(handle: Option<i32>, terminal: u16) -> ScriptVm {
