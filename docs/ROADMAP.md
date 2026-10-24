@@ -55,20 +55,20 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 🎬 T503 — Port video playback and audiovisual synchronization — `░░░░░░░░░░ 0%`
 - 🎞️ T504 — Verify menu, intro, ending and cinematic sequences — `░░░░░░░░░░ 0%`
 
-## 🧠 M3 — Fallout script VM and quest behaviors — `█████░░░░░ 46%`
+## 🧠 M3 — Fallout script VM and quest behaviors — `█████░░░░░ 47%`
 **Acceptance gate:** Original game scripts execute with CE-equivalent side effects and dialogue outcomes.
 
-### 🔣 P6 — Script interpreter and native opcodes — `███████░░░ 68%`
+### 🔣 P6 — Script interpreter and native opcodes — `███████░░░ 69%`
 
 - 📚 T601 — Inventory bytecode opcodes, stack layout and data — `█████░░░░░ 46%`
 - ⚙️ T602 — Port interpreter, procedures and interpreter state — `█████████░ 91%`
-- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `██████░░░░ 64%`
+- 🔌 T603 — Port engine opcodes, callbacks and event dispatch — `███████░░░ 66%`
 - 🧪 T604 — Golden-script differential tests versus CE — `███████░░░ 72%`
 
 ### 📜 P7 — Quests, dialogue and triggers — `███░░░░░░░ 25%`
 
 - 🗣️ T701 — Port dialogue branches and NPC reactions — `░░░░░░░░░░ 0%`
-- 🚩 T702 — Port map scripts, spatial triggers and timers — `██████░░░░ 64%`
+- 🚩 T702 — Port map scripts, spatial triggers and timers — `███████░░░ 66%`
 - 🧮 T703 — Port global/local state and quest flags — `███░░░░░░░ 34%`
 - 🤝 T704 — Port companion scripts and party interactions — `░░░░░░░░░░ 0%`
 
@@ -89,9 +89,9 @@ Fallout 2 (M7) is gated on the accepted Fallout 1 Linux release (M6).
 - 💥 T903 — Port criticals, deaths and animations — `░░░░░░░░░░ 0%`
 - 🔬 T904 — Differential fixed-seed combat scenarios — `░░░░░░░░░░ 0%`
 
-### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 3%`
+### 🌐 P10 — Simulation and progression — `░░░░░░░░░░ 4%`
 
-- ⏰ T1001 — Port time, rest and random encounters — `█░░░░░░░░░ 10%`
+- ⏰ T1001 — Port time, rest and random encounters — `██░░░░░░░░ 16%`
 - 🚶 T1002 — Port world travel and location state — `░░░░░░░░░░ 0%`
 - 🎭 T1003 — Port NPC schedule, hostility and reputation — `░░░░░░░░░░ 0%`
 - 🏁 T1004 — Port endings, fail states and victory conditions — `░░░░░░░░░░ 0%`
