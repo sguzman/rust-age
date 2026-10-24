@@ -2628,7 +2628,10 @@ mod tests {
         assert!(init.start.is_empty());
         assert!(init.enter.is_empty());
         assert!(init.update.is_empty());
-        assert_eq!(init.environment.game_globals.as_ref().unwrap().values(), [7, -13]);
+        assert_eq!(
+            init.environment.game_globals.as_ref().unwrap().values(),
+            [7, -13]
+        );
         assert_eq!(init.environment.scripts.runtime.vm(1).unwrap().pc(), 20);
         let mut ready = init.environment;
         let tick = ready
@@ -2646,7 +2649,10 @@ mod tests {
         assert!(without_header.start.is_empty());
         assert!(without_header.enter.is_empty());
         assert!(without_header.update.is_empty());
-        assert_eq!(without_header.environment.game_globals.unwrap().values(), [7, -13]);
+        assert_eq!(
+            without_header.environment.game_globals.unwrap().values(),
+            [7, -13]
+        );
 
         // A generated hidden owner must never turn into an invented
         // NULL object. SELF_OBJ fails in the same installed VM while
