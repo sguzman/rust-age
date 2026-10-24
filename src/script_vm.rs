@@ -879,6 +879,11 @@ impl ScriptVm {
         now_millis: u32,
         max_steps_per_condition: usize,
     ) -> io::Result<Vec<usize>> {
+        // A caller must not accidentally turn interpret(-1) into an
+        // effectively unbounded busy loop on malformed INT conditions.
+        if max_steps_per_condition > 4096 {
+            return Err(invalid("CE conditional core execution exceeds safety bound"));
+        }
         let mut candidate = self.clone();
         candidate.clock_millis = now_millis as i32;
         let mut prepared = Vec::new();
