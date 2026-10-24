@@ -1,4 +1,4 @@
-//! Read-only Fallout 1 CE MAP loading assembly.
+//! Fallout 1 CE MAP loading and explicit, bounded Rust-owned script-state assembly.
 //!
 //! Mirrors map_load_file's data order: header, global/local variables,
 //! floor/roof squares, script records, and object/inventory tables.
@@ -48,7 +48,7 @@ pub struct StaticScene {
     pub bytes_consumed: usize,
 }
 
-/// Owned, unstarted CE script environment: per-record VMs and MAP-local
+/// Initially unstarted CE script environment: per-record VMs and MAP-local
 /// slots are separate from game-wide GAME_GLOBAL_VARS. A missing installed
 /// vault13.gam remains None; no quest default is invented.
 #[derive(Debug, Clone)]
