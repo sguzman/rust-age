@@ -2008,10 +2008,10 @@ impl StaticScene {
     /// on a new, independent Rust VM and preserves all pre-existing mutable
     /// MAP and quest state. Its rust_sid is a collision-free local stand-in
     /// for CE's session-dependent scr_new_id; it is NOT guaranteed to be
-    /// the original live SID. The hidden Object is NOT synthesized: native
-    /// self_obj and inherited target queries fail closed through an explicit
-    /// GeneratedSystemOwnerRequiresEngine resolution until object lifecycle
-    /// is ported. No original game assets are copied into the repository.
+    /// the original live SID. The source-created nonserialized hidden Object
+    /// receives a unique Rust-local opaque handle and its source-known tile,
+    /// elevation, PID and FID. No native Object pointer, gameplay mechanics,
+    /// inventory or save ownership is invented. No game assets are copied.
     ///
     /// Call only after unstarted_script_environment, before initial MAP
     /// lifecycle execution. The result is None for MAP header index <= 0.
@@ -2029,6 +2029,7 @@ impl StaticScene {
             matches!(
                 entry.resolution,
                 ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine
+                    | ScriptOwnerResolution::GeneratedSystemBound { .. }
             )
         }) {
             return Err(io::Error::new(
@@ -2104,9 +2105,12 @@ impl StaticScene {
                 },
                 instance_id: Some(instance_id),
             });
+        // CE creates a nonserialized hidden owner before assigning it to
+        // the generated MAP script. Stage both on this candidate only.
+        let owner_handle = staged.object_queries.add_generated_header_system_object()?;
         staged
             .script_owners
-            .append_generated_system_script(ordinal, rust_sid)?;
+            .append_generated_system_script(ordinal, rust_sid, owner_handle)?;
         staged
             .map_locals
             .add_generated_system_instance(instance_id)?;
@@ -2123,9 +2127,9 @@ impl StaticScene {
     ///
     /// The generated SID is a Rust-local stand-in returned by
     /// install_header_system_script, never a claimed original session
-    /// SID. Native owner/target queries remain unavailable until CE
-    /// creates its hidden Object. The supplied environment is cloned and
-    /// commits only after the supported action succeeds.
+    /// SID. Its hidden owner is a source-known, nonserialized object snapshot;
+    /// unsupported gameplay object effects remain unavailable. The supplied
+    /// environment is cloned and commits only after the action succeeds.
     pub fn enter_header_system_script_transactional_bounded(
         &self,
         environment: &mut PreparedScriptEnvironment,
@@ -2147,7 +2151,7 @@ impl StaticScene {
                 && entry.binding.script_id == rust_sid
                 && entry.binding.script_index == self.header.script_index - 1
                 && environment.owner_for_instance(header_instance)
-                    == Some(ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine)
+                    .is_some_and(|owner| matches!(owner, ScriptOwnerResolution::GeneratedSystemBound { .. }))
         });
         let binding = matches.next().ok_or_else(|| {
             io::Error::new(
@@ -2635,11 +2639,13 @@ mod tests {
         assert_eq!(fresh.scripts.runtime.len(), 1);
         assert_eq!(
             fresh.owner_for_instance(instance),
-            Some(
-                crate::script_owner_binding::ScriptOwnerResolution::
-                    GeneratedSystemOwnerRequiresEngine
-            )
+            Some(crate::script_owner_binding::ScriptOwnerResolution::GeneratedSystemBound {
+                handle: 1,
+            })
         );
+        let object = fresh.object_queries.snapshots()[0];
+        assert_eq!((object.handle, object.tile, object.elevation, object.pid, object.fid),
+            (1, 1, 0, -1, 0x0500_000C));
         assert_eq!(fresh.map_locals.locals(), [99]);
         assert_eq!(fresh.map_locals.globals(), [12, -8]);
         assert!(header_scene
