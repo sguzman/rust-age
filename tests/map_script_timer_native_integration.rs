@@ -74,16 +74,23 @@ fn critical_timed_timer_opcode(delay: i32, fixed_param: i32, terminator: u16) ->
     // argument, resolves SELF_OBJ from the installed MAP owner, then
     // schedules one more timer on the original queue. All instructions
     // fit before the source-format procedure table at byte offset 42.
+    let mut body = vec![0_u8; 20];
+    body[..2].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
+    body[2..4].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+    body[4..6].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT delay
+    body[6..10].copy_from_slice(&delay.to_be_bytes());
+    body[10..12].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT param
+    body[12..16].copy_from_slice(&fixed_param.to_be_bytes());
+    body[16..18].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
+    body[18..20].copy_from_slice(&terminator.to_be_bytes());
+    critical_timed_custom_opcode(&body)
+}
+
+fn critical_timed_custom_opcode(body: &[u8]) -> ScriptVm {
+    assert!(body.len() <= 22);
     let mut bytes = vec![0_u8; 42];
     bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
-    bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
-    bytes[22..24].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
-    bytes[24..26].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT delay
-    bytes[26..30].copy_from_slice(&delay.to_be_bytes());
-    bytes[30..32].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH_INT param
-    bytes[32..36].copy_from_slice(&fixed_param.to_be_bytes());
-    bytes[36..38].copy_from_slice(&0x80F0_u16.to_be_bytes()); // ADD_TIMER_EVENT
-    bytes[38..40].copy_from_slice(&terminator.to_be_bytes());
+    bytes[20..20 + body.len()].copy_from_slice(body);
     bytes.extend_from_slice(&2_i32.to_be_bytes());
     let mut names = Vec::new();
     for (name, flags, body) in [
@@ -154,6 +161,63 @@ fn critical_due_requeue_same_tick_or_late_opcode_failure_rolls_back() {
         assert!(vm.stack().is_empty());
         assert!(vm.return_stack().is_empty());
     }
+}
+
+#[test]
+fn critical_due_callback_removes_owned_events_but_preserves_other_owners() {
+    let remove = [
+        0x80, 0x1A, // POP saved setupCall argument
+        0x80, 0xBC, // SELF_OBJ verified against installed MAP binding
+        0x80, 0xF1, // RM_TIMER_EVENT removes every event kind owned by object
+        0x80, 0x21, // POP_FLAGS_EXIT
+    ];
+    let mut env = environment(critical_timed_custom_opcode(&remove));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    queue
+        .add(100, 15, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    queue
+        .add(100, 20, EventType::Script, None, timed_payload(99))
+        .unwrap();
+    let called = env
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 4)
+        .unwrap();
+    assert_eq!(called.len(), 1);
+    assert_eq!(called[0].1, Some(4));
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_time(), 120);
+    assert!(!queue.find(Some(OWNER), EventType::Script));
+    assert!(!queue.find(Some(OWNER), EventType::Drug));
+    assert!(queue.find(None, EventType::Script));
+}
+
+#[test]
+fn critical_due_callback_removal_rolls_back_if_later_opcode_fails() {
+    let remove_then_fail = [
+        0x80, 0x1A, // POP
+        0x80, 0xBC, // SELF_OBJ
+        0x80, 0xF1, // RM_TIMER_EVENT
+        0x80, 0xFF, // invalid opcode, abort whole pending transaction
+    ];
+    let mut env = environment(critical_timed_custom_opcode(&remove_then_fail));
+    let mut queue = EventQueue::new();
+    queue
+        .add(100, 5, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    queue
+        .add(100, 15, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    assert!(env
+        .process_due_script_timers_transactional_bounded(&mut queue, clock(105), 105, 1005, 1, 4)
+        .is_err());
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.next_time(), 105);
+    assert!(queue.find(Some(OWNER), EventType::Drug));
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
 
 fn main_add(handle: Option<i32>, terminal: u16) -> ScriptVm {
