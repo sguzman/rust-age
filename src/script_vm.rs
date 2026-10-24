@@ -1295,12 +1295,6 @@ impl ScriptVm {
         self.step_core(false)
     }
 
-    /// Explicit clocked WAIT subset for the transactional interpreter tick.
-    /// Generic bounded core/native previews continue to reject WAIT.
-    pub(crate) fn step_core_with_wait(&mut self) -> io::Result<()> {
-        self.step_core(true)
-    }
-
     fn step_core(&mut self, allow_clock_wait: bool) -> io::Result<()> {
         if self.core_wait.is_some() && !allow_clock_wait {
             return Err(invalid("CE WAIT state requires clocked core tick"));
