@@ -1066,6 +1066,41 @@ mod tests {
         assert_eq!(direct.core_wait_state(), None);
     }
 
+    #[test]
+    fn installed_wait_blocks_detached_native_host_and_rolls_back_across_programs() {
+        let mut waiting = ScriptRuntime::new();
+        waiting.register(7, core_wait_vm(4, 0x80EA)).unwrap();
+        waiting
+            .advance_core_tick_transactional_bounded(50, 2)
+            .unwrap();
+        let mut detached = waiting.vm(7).unwrap().clone();
+        let mut called = false;
+        assert!(detached
+            .step_with_variable_host(&mut |_, _| {
+                called = true;
+                Ok(())
+            })
+            .is_err());
+        assert!(!called);
+        assert_eq!(detached.pc(), 8);
+        assert_eq!(detached.core_wait_state(), Some((50, 54)));
+
+        let mut multiple = ScriptRuntime::new();
+        multiple.register(1, core_wait_vm(4, 0x80FC)).unwrap();
+        multiple.register(2, core_wait_vm(4, 0x8000)).unwrap();
+        // Newest script stages its WAIT; older script's unsupported native
+        // must discard BOTH speculative interpreter instances together.
+        assert!(multiple
+            .advance_core_tick_transactional_bounded(50, 3)
+            .is_err());
+        for id in [1, 2] {
+            let vm = multiple.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert_eq!(vm.core_wait_state(), None);
+            assert!(vm.stack().is_empty());
+        }
+    }
+
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
