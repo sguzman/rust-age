@@ -14,9 +14,7 @@ use crate::script_native_vars::{
     ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
-use crate::script_time_advance::{
-    apply_game_time_advance_no_due_opcode, GAME_TIME_ADVANCE_OPCODE,
-};
+use crate::script_time_advance::{apply_game_time_advance_no_due_opcode, GAME_TIME_ADVANCE_OPCODE};
 use crate::script_timer::{
     apply_timer_native_opcode, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,

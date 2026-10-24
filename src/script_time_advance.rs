@@ -90,11 +90,7 @@ pub fn apply_game_time_advance_no_due_opcode(
     remaining_queue_polls: &mut usize,
 ) -> io::Result<()> {
     let mut pending_stack = stack.clone();
-    let plan = plan_game_time_advance_opcode(
-        opcode,
-        &mut pending_stack,
-        *remaining_queue_polls,
-    )?;
+    let plan = plan_game_time_advance_opcode(opcode, &mut pending_stack, *remaining_queue_polls)?;
     let mut pending_clock = *clock;
     for &increment in plan.increments_before_queue_process() {
         pending_clock.ticks = pending_clock
