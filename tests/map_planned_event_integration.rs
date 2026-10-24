@@ -408,6 +408,86 @@ fn critical_action_budget_and_later_invalid_opcode_roll_back_all_quest_state() {
     assert_eq!(noncritical.scripts.runtime.vm(1).unwrap().pc(), 0);
 }
 
+#[test]
+fn mixed_map_enter_phase_executes_critical_now_and_defers_noncritical_in_source_order() {
+    let mut env = two_enter_scripts(0x10);
+    let mut body = Vec::new();
+    body.extend_from_slice(&0x801A_u16.to_be_bytes()); // POP setupCall arg
+    body.extend_from_slice(&0xC001_u16.to_be_bytes());
+    body.extend_from_slice(&0_i32.to_be_bytes());
+    body.extend_from_slice(&0x80C7_u16.to_be_bytes()); // SCRIPT_ACTION
+    body.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+    body.extend_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
+    *env.scripts.runtime.vm_mut(2).unwrap() = critical_map_enter_vm(&body);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: Some(0),
+    };
+    let executed = env
+        .apply_map_lifecycle_phase_transactional_bounded(
+            MapLifecyclePhase::Enter,
+            999,
+            0,
+            clock,
+            100,
+            5,
+        )
+        .unwrap();
+    assert_eq!(executed.len(), 2);
+    assert_eq!(executed[0].0.instance_id, 1);
+    assert_eq!(executed[0].1, None);
+    assert_eq!(executed[1].0.instance_id, 2);
+    assert_eq!(executed[1].1, Some(5));
+    // The second, critical script runs before the first, noncritical
+    // script's prepared body is interpreted on a subsequent tick.
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [15]);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    assert_eq!(env.scripts.runtime.vm(2).unwrap().pc(), 20);
+    for id in [1, 2] {
+        assert_eq!(env.invocations.get(&id).unwrap().action(), 15);
+        assert_eq!(env.invocations.get(&id).unwrap().fixed_parameter(), 1);
+    }
+}
+
+#[test]
+fn mixed_map_phase_rolls_back_prior_noncritical_and_critical_quest_effects_on_failure() {
+    let mut env = two_enter_scripts(0x10);
+    let mut bad = Vec::new();
+    bad.extend_from_slice(&0x801A_u16.to_be_bytes());
+    bad.extend_from_slice(&0xC001_u16.to_be_bytes());
+    bad.extend_from_slice(&0_i32.to_be_bytes());
+    bad.extend_from_slice(&0xC001_u16.to_be_bytes());
+    bad.extend_from_slice(&99_i32.to_be_bytes());
+    bad.extend_from_slice(&0x80C6_u16.to_be_bytes()); // staged quest write
+    bad.extend_from_slice(&0x80FF_u16.to_be_bytes()); // forbidden native
+    *env.scripts.runtime.vm_mut(2).unwrap() = critical_map_enter_vm(&bad);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: Some(0),
+    };
+    assert!(env
+        .apply_map_lifecycle_phase_transactional_bounded(
+            MapLifecyclePhase::Enter,
+            999,
+            0,
+            clock,
+            100,
+            8,
+        )
+        .is_err());
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+    assert!(env.invocations.is_empty());
+    for id in [1, 2] {
+        let vm = env.scripts.runtime.vm(id).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.return_stack().is_empty());
+        assert!(vm.stack().is_empty());
+        assert!(!vm.critical_section());
+    }
+}
+
 fn synthetic_enter_update_vm() -> ScriptVm {
     let mut bytes = vec![0_u8; 42];
     bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
