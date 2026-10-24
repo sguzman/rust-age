@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare C++ and Rust bounded CE critical interpreter bursts
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_critical_burst_oracle.cc -o /tmp/rust-age-ce-critical
+          /tmp/rust-age-ce-critical tests/script_critical_burst_cases.txt > /tmp/rust-age-ce-critical.txt
+          cargo run --quiet --bin script_critical_burst_probe > /tmp/rust-age-rust-critical.txt
+          diff -u /tmp/rust-age-ce-critical.txt /tmp/rust-age-rust-critical.txt
       - name: Compare C++ and Rust source-ordered CE core-only interpreter ticks
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_core_tick_oracle.cc -o /tmp/rust-age-ce-core-tick
