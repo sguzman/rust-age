@@ -304,6 +304,89 @@ impl RuntimeScene {
         })
     }
 
+    /// Dispatch an explicitly requested USE (6) or TALK (11) object
+    /// action against a source-verified serialized MAP object owner.
+    /// The interacting actor becomes CE source_obj and the script owner
+    /// becomes target_obj; never infer either from a saved object ID.
+    ///
+    /// Original CE critical local procedures execute immediately; ordinary
+    /// procedures stage the same installed call frame for a later tick.
+    /// All script/quest/event changes are transactional. This is a native
+    /// object-event entry point, not a mouse/HUD interaction or gameplay AI.
+    pub fn dispatch_object_action_transactional_bounded(
+        &self,
+        environment: &mut PreparedScriptEnvironment,
+        source: ObjectKey,
+        target: ObjectKey,
+        action: usize,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<Option<(PlannedMapAction, Option<usize>)>> {
+        if !matches!(action, 6 | 11) {
+            return Err(invalid("CE object event requires USE or TALK procedure"));
+        }
+        let mut candidate = self.refreshed_script_environment(environment)?;
+        if candidate.object_queries.handle_for(source).is_none()
+            || candidate.object_queries.handle_for(target).is_none()
+        {
+            return Err(invalid("CE object event participant not in current MAP"));
+        }
+
+        let mut matched = candidate.scripts.entries.iter().filter(|entry| {
+            entry.instance_id.is_some()
+                && matches!(
+                    candidate.script_owners.entry(entry.binding.category, entry.binding.ordinal),
+                    Some(owner) if matches!(
+                        owner.resolution,
+                        crate::script_owner_binding::ScriptOwnerResolution::Bound { key, .. }
+                            if key == target
+                    )
+                )
+        });
+        let Some(installed) = matched.next() else {
+            // The object has no installed native INT to handle this action.
+            return Ok(None);
+        };
+        let binding = installed.binding.clone();
+        let instance_id = installed
+            .instance_id
+            .ok_or_else(|| invalid("CE object script not installed"))?;
+        if matched.next().is_some() {
+            return Err(invalid("CE object target has ambiguous installed scripts"));
+        }
+        let Some(procedure) = candidate.scripts.runtime.resolve_action(instance_id, action)? else {
+            return Ok(None);
+        };
+        let planned = PlannedMapAction {
+            instance_id,
+            script_id: binding.script_id,
+            category: binding.category,
+            ordinal: binding.ordinal,
+            action,
+            procedure_index: procedure.procedure_index,
+            external_parameter: None,
+        };
+
+        // Source ownership is stable across the deferred setupCall and the
+        // subsequent interpreter burst. On failure the old event survives.
+        candidate.spatial_sources.insert(instance_id, source);
+        let frame = candidate.local_frame_for_planned(&planned)?;
+        let executed = if frame.critical {
+            Some(candidate.execute_critical_map_action_transactional_bounded(
+                &planned,
+                clock,
+                now_millis,
+                max_critical_steps,
+            )?)
+        } else {
+            candidate.prepare_noncritical_map_action_transactional(&planned)?;
+            None
+        };
+        *environment = candidate;
+        Ok(Some((planned, executed)))
+    }
+
     pub fn plan_actor(
         &self,
         view: &HexViewport,
