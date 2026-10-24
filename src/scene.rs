@@ -643,7 +643,7 @@ impl PreparedScriptEnvironment {
         timer_queue: Option<&mut EventQueue>,
     ) -> io::Result<usize> {
         let clock = time.sample;
-        let mut writable_clock = time.writable;
+        let writable_clock = time.writable;
         let mut updated_clock = clock.clock;
         let mut remaining_queue_polls = time.max_queue_polls;
         let verified = self.local_frame_for_planned(planned)?;
@@ -821,7 +821,7 @@ impl PreparedScriptEnvironment {
         if let (Some(original), Some(staged)) = (timer_queue, queued) {
             *original = staged;
         }
-        if let Some(original_clock) = writable_clock.as_deref_mut() {
+        if let Some(original_clock) = writable_clock {
             *original_clock = updated_clock;
         }
         *self = next;
