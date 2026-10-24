@@ -304,7 +304,7 @@ impl RuntimeScene {
         })
     }
 
-    /// Dispatch an explicitly requested USE (6) or TALK (11) object
+    /// Dispatch an explicitly requested USE (6) object
     /// action against a source-verified serialized MAP object owner.
     /// The interacting actor becomes CE source_obj and the script owner
     /// becomes target_obj; never infer either from a saved object ID.
@@ -323,8 +323,8 @@ impl RuntimeScene {
         now_millis: u32,
         max_critical_steps: usize,
     ) -> io::Result<Option<(PlannedMapAction, Option<usize>)>> {
-        if !matches!(action, 6 | 11) {
-            return Err(invalid("CE object event requires USE or TALK procedure"));
+        if action != 6 {
+            return Err(invalid("CE object event requires USE procedure"));
         }
         let mut candidate = self.refreshed_script_environment(environment)?;
         if candidate.object_queries.handle_for(source).is_none()
