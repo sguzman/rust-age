@@ -372,6 +372,97 @@ fn critical_advance_before_due_foreign_queue_event_reverts_clock_and_timer() {
     assert!(env.scripts.runtime.vm(1).unwrap().stack().is_empty());
 }
 
+fn missing_timer_payload() -> Vec<u8> {
+    let mut payload = Vec::new();
+    payload.extend_from_slice(&(SID + 1).to_be_bytes());
+    payload.extend_from_slice(&11_i32.to_be_bytes());
+    payload
+}
+
+#[test]
+fn critical_game_time_advance_consumes_missing_sid_timer_before_scheduling_new_event() {
+    let mut env = environment(critical_map_enter_advance_then_add_timer_vm());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_100, EventType::Script, Some(OWNER), missing_timer_payload())
+        .unwrap();
+    queue
+        .add(0, 864_200, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    let steps = env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action, &mut clock, &mut queue, 1000, 9, 2,
+        )
+        .unwrap();
+    assert_eq!(steps, 9);
+    assert_eq!(clock.ticks, 864_100);
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.next_time(), 864_105);
+    let scheduled =
+        rust_age::script_timer::ScriptTimerEvent::decode(&queue.pop_due(864_105).unwrap()).unwrap();
+    assert_eq!(scheduled.sid, SID);
+    assert_eq!(scheduled.fixed_parameter, 42);
+    assert_eq!(queue.next_time(), 864_200);
+}
+
+#[test]
+fn missing_sid_timer_before_due_foreign_event_rolls_back_both_records() {
+    let mut env = environment(critical_map_enter_advance_then_add_timer_vm());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_100, EventType::Script, Some(OWNER), missing_timer_payload())
+        .unwrap();
+    queue
+        .add(0, 864_100, EventType::Drug, Some(OWNER), vec![])
+        .unwrap();
+    let saved = queue.clone();
+    assert!(env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action, &mut clock, &mut queue, 1000, 9, 2,
+        )
+        .is_err());
+    assert_eq!(clock.ticks, 100);
+    assert_eq!(queue, saved);
+    assert!(env.invocations.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+}
+
+#[test]
+fn running_ce_game_time_advance_still_rejects_executable_script_due_callback() {
+    let mut script = Vec::new();
+    script.extend_from_slice(&0xC001_u16.to_be_bytes());
+    script.extend_from_slice(&864_000_i32.to_be_bytes());
+    script.extend_from_slice(&0x80FC_u16.to_be_bytes());
+    script.extend_from_slice(&0x8011_u16.to_be_bytes());
+    let mut env = environment(procedure(&script));
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    queue
+        .add(0, 864_100, EventType::Script, Some(OWNER), timed_payload(11))
+        .unwrap();
+    let before = queue.clone();
+    assert!(env
+        .advance_script_state_with_game_time_no_due_bounded(
+            &mut queue, &mut clock, 1000, 3, 0, 2,
+        )
+        .is_err());
+    assert_eq!(queue, before);
+    assert_eq!(clock.ticks, 100);
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 0);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+}
+
 fn critical_map_enter_timer_opcode(terminator: u16) -> ScriptVm {
     let mut body = vec![0_u8; 20];
     body[..2].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP
