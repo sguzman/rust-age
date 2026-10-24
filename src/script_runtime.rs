@@ -463,6 +463,44 @@ impl ScriptRuntime {
         Ok(completed)
     }
 
+    /// Persist source-ordered CE doEvents timer *call preparation*, not
+    /// procedure execution, across installed Rust script VMs. Pinned CE
+    /// clears due timer flags before executeProc's local setupCall. Because
+    /// the original procedure flags are then zero, it does not immediately
+    /// interpret these calls. The resulting PC/stack frames are left ready
+    /// for a separately validated future interpreter burst.
+    ///
+    /// This bounded core-only adapter explicitly rejects conditional and
+    /// imported events, which require unavailable evaluator/host behavior.
+    /// A full cloned runtime is staged first: failures roll back ALL script
+    /// preparations instead of preserving CE's partial error side effects.
+    /// No MAP, gameplay-native, quest, or callback state can be touched.
+    pub fn prepare_due_timed_local_core_transactional(
+        &mut self,
+        now_millis: u32,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut next = self.clone();
+        let mut prepared = Vec::new();
+        for program in &mut next.programs {
+            for procedure_index in 0..program.vm.runtime_procedures().len() {
+                if program
+                    .vm
+                    .prepare_due_timed_local_core_transactional(procedure_index, now_millis)?
+                {
+                    prepared.push(DueProcedure {
+                        program_id: program.id,
+                        procedure_index,
+                    });
+                }
+            }
+        }
+        *self = next;
+        Ok(prepared)
+    }
+
     /// Synthetic-only bounded local interrupt procedure previews for due
     /// programs. Unlike CE's live scheduler, this diagnostic commits the
     /// consumed event flags only when every preview succeeds; engine native
@@ -725,6 +763,105 @@ mod tests {
             .execute_local_action_core_transactional_bounded(1, 23, 3)
             .unwrap()
             .is_none());
+    }
+
+    fn due_timed_preparation_vm(flags: i32, event_time: i32, valid_body: bool) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        if valid_body {
+            bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        }
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, flags, event_time, 0, 20, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn timed_event_preparation_persists_ce_call_frames_in_program_list_order() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(1, due_timed_preparation_vm(0x01, 9, true)).unwrap();
+        runtime.register(2, due_timed_preparation_vm(0x11, 9, true)).unwrap();
+        assert!(runtime
+            .prepare_due_timed_local_core_transactional(9)
+            .unwrap()
+            .is_empty());
+        for id in [1, 2] {
+            assert_eq!(runtime.vm(id).unwrap().pc(), 0);
+            assert!(runtime.vm(id).unwrap().stack().is_empty());
+        }
+        let prepared = runtime.prepare_due_timed_local_core_transactional(10).unwrap();
+        assert_eq!(
+            prepared,
+            [
+                DueProcedure {
+                    program_id: 2,
+                    procedure_index: 1
+                },
+                DueProcedure {
+                    program_id: 1,
+                    procedure_index: 1
+                }
+            ]
+        );
+        for id in [1, 2] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.pc(), 20);
+            assert_eq!(
+                vm.stack(),
+                [
+                    ScriptValue::Int(0),
+                    ScriptValue::Pointer(0),
+                    ScriptValue::Int(0),
+                    ScriptValue::Int(0)
+                ]
+            );
+            assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+            assert_eq!(vm.runtime_procedures()[1].flags, 0);
+            assert_eq!(vm.runtime_procedures()[1].event_time, 9);
+            assert!(!vm.halted());
+            assert!(!vm.critical_section());
+        }
+        assert!(runtime
+            .prepare_due_timed_local_core_transactional(1000)
+            .unwrap()
+            .is_empty());
+        assert_eq!(runtime.vm(2).unwrap().stack().len(), 4);
+    }
+
+    #[test]
+    fn timed_event_preparation_rejects_later_invalid_call_atomically() {
+        let mut runtime = ScriptRuntime::new();
+        // Newest (ID 2) prepares successfully; old (ID 1) then fails.
+        runtime.register(1, due_timed_preparation_vm(0x01, 4, false)).unwrap();
+        runtime.register(2, due_timed_preparation_vm(0x01, 4, true)).unwrap();
+        assert!(runtime.prepare_due_timed_local_core_transactional(5).is_err());
+        for id in [1, 2] {
+            let vm = runtime.vm(id).unwrap();
+            assert_eq!(vm.pc(), 0);
+            assert!(vm.stack().is_empty());
+            assert!(vm.return_stack().is_empty());
+            assert_eq!(vm.runtime_procedures()[1].flags, 0x01);
+        }
+        runtime.set_suspended(true);
+        assert!(runtime
+            .prepare_due_timed_local_core_transactional(5)
+            .unwrap()
+            .is_empty());
+        assert_eq!(runtime.vm(2).unwrap().runtime_procedures()[1].flags, 0x01);
+        runtime.set_suspended(false);
+        let mut unsupported = ScriptRuntime::new();
+        unsupported.register(3, due_timed_preparation_vm(0x03, 4, true)).unwrap();
+        assert!(unsupported.prepare_due_timed_local_core_transactional(5).is_err());
+        assert_eq!(unsupported.vm(3).unwrap().runtime_procedures()[1].flags, 0x03);
     }
 
     #[test]
