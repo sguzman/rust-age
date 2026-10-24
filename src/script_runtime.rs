@@ -4,11 +4,16 @@
 //! removeProgList and doEvents. Newly registered programs are visited first;
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
+use crate::game_globals::GameGlobalState;
+use crate::script_locals::MapScriptLocals;
+use crate::script_native_vars::{
+    apply_readonly_event_native_with_vars, ScriptInvocationState, ScriptNativeEventSnapshot,
+};
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
 use crate::script_vm::{
     PreviewedDueProcedurePoll, PreviewedLocalActionVmFrame, ScriptValue, ScriptVm,
 };
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io;
 
 const MAX_PROGRAMS: usize = 4096;
@@ -73,6 +78,16 @@ pub struct PreviewedProgramDuePoll {
 pub struct PreparedCoreTick {
     pub executed_steps: Vec<(u64, usize)>,
     pub prepared_calls: Vec<DueProcedure>,
+}
+
+/// Snapshot of one script's event/owner context, for read-only CE
+/// native condition evaluation. Snapshot references must come from the
+/// caller's actual installed MAP and script event, not inferred from a
+/// numeric SID. No new event, object, or game-global state is synthesized.
+#[derive(Debug, Clone, Copy)]
+pub struct ReadOnlyConditionEvent<'a> {
+    pub event: ScriptNativeEventSnapshot<'a>,
+    pub invocation: ScriptInvocationState,
 }
 
 #[derive(Debug, Clone)]
@@ -542,6 +557,92 @@ impl ScriptRuntime {
         }
         *self = next;
         Ok(prepared)
+    }
+
+    /// Persist an original-order CE doEvents scan against *read-only*
+    /// installed MAP/quest/native snapshots. Native conditions can read
+    /// existing GAME_GLOBAL_VARS, MAP globals, saved script locals, event
+    /// metadata, game time, owner and object properties via the existing
+    /// source-adapted opcode handlers. All writes and unsupported effects
+    /// remain hard errors. A missing per-program event context is allowed
+    /// for core-only conditions but denied if a native opcode is encountered.
+    ///
+    /// MAP and game-global storage are borrowed immutably and never staged
+    /// for mutation. VMs commit together only after the full scan succeeds.
+    /// This is not native gameplay execution, engine callback dispatch,
+    /// quest mutation, nor a source-compatible CE error longjmp.
+    pub fn prepare_due_with_readonly_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+        map: &MapScriptLocals,
+        game: Option<&GameGlobalState>,
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut next = self.clone();
+        let mut prepared = Vec::new();
+        for program in &mut next.programs {
+            let id = program.id;
+            let event = events.get(&id).copied();
+            let ready = program.vm.prepare_due_with_condition_host_transactional_bounded(
+                now_millis,
+                max_steps_per_condition,
+                &mut |opcode, stack| {
+                    let snapshot = event.ok_or_else(|| {
+                        invalid("CE condition native event context not provided")
+                    })?;
+                    apply_readonly_event_native_with_vars(
+                        snapshot.event,
+                        &snapshot.invocation,
+                        map,
+                        game,
+                        id,
+                        opcode,
+                        stack,
+                    )
+                },
+            )?;
+            for procedure_index in ready {
+                prepared.push(DueProcedure {
+                    program_id: id,
+                    procedure_index,
+                });
+            }
+        }
+        *self = next;
+        Ok(prepared)
+    }
+
+    /// Core interpreter burst first, then source-ordered read-only native
+    /// condition evaluation on a full clone. Native opcodes during the
+    /// ordinary interpreter burst remain unsupported by this subset.
+    /// The backing MAP variables and GAME_GLOBAL_VARS are never mutated.
+    pub fn advance_core_tick_with_readonly_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        map: &MapScriptLocals,
+        game: Option<&GameGlobalState>,
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let executed_steps = next.interpret_core_bursts_bounded(now_millis, cpu_burst)?;
+        let prepared_calls = next.prepare_due_with_readonly_conditions_transactional_bounded(
+            now_millis,
+            max_steps_per_condition,
+            map,
+            game,
+            events,
+        )?;
+        *self = next;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
     }
 
     /// Explicit opt-in counterpart to advance_core_tick_transactional_bounded
