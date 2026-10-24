@@ -2130,7 +2130,10 @@ impl StaticScene {
                     == Some(ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine)
         });
         let binding = matches.next().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "CE generated map script not installed")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE generated map script not installed",
+            )
         })?;
         if matches.next().is_some() {
             return Err(io::Error::new(
@@ -2428,7 +2431,9 @@ mod tests {
         // as a MAP category-0 record. It creates one from scriptIndex - 1
         // and executes MAP_ENTER before the remaining MAP_ENTER phase.
         let mut header_scene = scene.clone();
-        let mut fresh = header_scene.unstarted_script_environment(&mut assets).unwrap();
+        let mut fresh = header_scene
+            .unstarted_script_environment(&mut assets)
+            .unwrap();
         assert!(scene
             .install_header_system_script(&mut assets, &mut fresh)
             .unwrap()
@@ -2493,14 +2498,22 @@ mod tests {
         };
         let prepared = header_scene
             .enter_header_system_script_transactional_bounded(
-                &mut fresh, instance, virtual_sid, context, 200, 5,
+                &mut fresh,
+                instance,
+                virtual_sid,
+                context,
+                200,
+                5,
             )
             .unwrap()
             .unwrap();
         assert_eq!(prepared.0.action, 15);
         assert_eq!(prepared.1, None);
         assert_eq!(fresh.invocations.get(&instance).unwrap().action(), 15);
-        assert_eq!(fresh.invocations.get(&instance).unwrap().fixed_parameter(), 1);
+        assert_eq!(
+            fresh.invocations.get(&instance).unwrap().fixed_parameter(),
+            1
+        );
         assert_eq!(fresh.game_globals.as_ref().unwrap().values(), [7, -13]);
         let ran = fresh
             .advance_script_state_tick_bounded(context, 200, 5, 0)
@@ -2512,7 +2525,9 @@ mod tests {
         // A generated hidden owner must never turn into an invented
         // NULL object. SELF_OBJ fails in the same installed VM while
         // leaving Rust quest state and its PC untouched.
-        let mut unbound = header_scene.unstarted_script_environment(&mut assets).unwrap();
+        let mut unbound = header_scene
+            .unstarted_script_environment(&mut assets)
+            .unwrap();
         let (id, sid) = header_scene
             .install_header_system_script(&mut assets, &mut unbound)
             .unwrap()
@@ -2543,7 +2558,12 @@ mod tests {
         );
         header_scene
             .enter_header_system_script_transactional_bounded(
-                &mut unbound, id, sid, context, 201, 4,
+                &mut unbound,
+                id,
+                sid,
+                context,
+                201,
+                4,
             )
             .unwrap();
         assert!(unbound
