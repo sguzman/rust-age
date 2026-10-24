@@ -2906,7 +2906,10 @@ mod tests {
             .is_err());
         assert!(unprepared.invocations.is_empty());
         assert_eq!(unprepared.game_globals.as_ref().unwrap().values(), [7, -13]);
-        assert_eq!(unprepared.scripts.runtime.vm(unprepared_id).unwrap().pc(), 0);
+        assert_eq!(
+            unprepared.scripts.runtime.vm(unprepared_id).unwrap().pc(),
+            0
+        );
 
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
         assert!(scene
