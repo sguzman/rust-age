@@ -22,7 +22,8 @@ use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
 use crate::script_native_vars::{
-    apply_map_variable_opcode, apply_readonly_event_native_opcode,
+    apply_map_variable_opcode, apply_mutable_condition_native_with_vars,
+    apply_readonly_event_native_opcode,
     apply_readonly_event_native_with_vars, ScriptClockContext, ScriptInvocationState,
     ScriptNativeEventSnapshot, ScriptNativeOwnerSnapshot, ScriptNativeSnapshot, LOCAL_VAR_OPCODE,
     MAP_VAR_OPCODE, SCRIPT_OVERRIDES_OPCODE, SET_LOCAL_VAR_OPCODE, SET_MAP_VAR_OPCODE,
@@ -282,6 +283,101 @@ impl PreparedScriptEnvironment {
         next.invocations.insert(planned.instance_id, invocation);
         *self = next;
         Ok(verified)
+    }
+
+    /// Execute an original CE CRITICAL local MAP lifecycle procedure
+    /// immediately (executeProc -> setupCall -> op_critical_start ->
+    /// interpret(program, 0)), rather than deferring its call frame.
+    /// The selected procedure, installed MAP identity and owner must
+    /// be verified before any effects. Only existing source-derived MAP,
+    /// game-global, clock, invocation, and immutable object native
+    /// adapters are permitted; arbitrary engine gameplay is NOT emulated.
+    ///
+    /// The entire prepared MAP environment is cloned first. Unsupported
+    /// native effects, nested critical/WAIT frames and an exhausted
+    /// 4096-instruction maximum roll back all VM, quest and MAP writes.
+    /// This deliberately differs from CE's nontransactional error path.
+    pub fn execute_critical_map_action_transactional_bounded(
+        &mut self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps: usize,
+    ) -> io::Result<usize> {
+        let verified = self.local_frame_for_planned(planned)?;
+        if !verified.critical {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE noncritical MAP action must be deferred to later interpreter tick",
+            ));
+        }
+        let owner = self.owner_for_instance(planned.instance_id).ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE critical MAP owner missing")
+        })?;
+        let mut invocation = self
+            .invocations
+            .get(&planned.instance_id)
+            .copied()
+            .unwrap_or_else(ScriptInvocationState::installed);
+        let action = i32::try_from(planned.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE critical MAP action outside i32")
+        })?;
+        if !invocation.begin_action(action) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE critical MAP invocation absent",
+            ));
+        }
+        if let Some(parameter) = planned.external_parameter {
+            invocation.set_fixed_parameter(parameter);
+        }
+        let mut next = self.clone();
+        let snapshot = ScriptNativeEventSnapshot {
+            owner: ScriptNativeOwnerSnapshot {
+                native: ScriptNativeSnapshot {
+                    clock,
+                    objects: Some(next.object_queries.snapshots()),
+                },
+                resolution: Some(owner),
+            },
+            source: None,
+            target: None,
+        };
+        let game = next.game_globals.as_mut().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE critical MAP action requires loaded GAME_GLOBAL_VARS",
+            )
+        })?;
+        let executed = next
+            .scripts
+            .runtime
+            .execute_critical_local_action_with_host_bounded(
+                planned.instance_id,
+                planned.action,
+                now_millis,
+                max_steps,
+                &mut |opcode, stack| {
+                    apply_mutable_condition_native_with_vars(
+                        snapshot,
+                        &invocation,
+                        &mut next.map_locals,
+                        game,
+                        planned.instance_id,
+                        opcode,
+                        stack,
+                    )
+                },
+            )?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned critical MAP procedure disappeared",
+                )
+            })?;
+        next.invocations.insert(planned.instance_id, invocation);
+        *self = next;
+        Ok(executed)
     }
 
     /// Prepare an entire original-order MAP lifecycle phase, using the
