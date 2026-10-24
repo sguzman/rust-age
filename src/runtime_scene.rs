@@ -440,6 +440,208 @@ mod tests {
         })
     }
 
+    fn spatial_vm(critical: bool, invalid_after_write: bool) -> ScriptVm {
+        let mut body = Vec::new();
+        body.extend_from_slice(&0x801A_u16.to_be_bytes()); // setupCall POP arg
+        body.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH index
+        body.extend_from_slice(&0_i32.to_be_bytes());
+        body.extend_from_slice(&0x80BD_u16.to_be_bytes()); // SOURCE_OBJ
+        body.extend_from_slice(&0x80D4_u16.to_be_bytes()); // TILE_NUM
+        body.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+        body.extend_from_slice(
+            &(if invalid_after_write { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
+        );
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..20 + body.len()].copy_from_slice(&body);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, 20, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&20_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0spatial_p_proc\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn spatial_scene_fixture(
+        trigger_tile: i32,
+        radius: i32,
+        critical: bool,
+        invalid_after_write: bool,
+    ) -> (RuntimeScene, PreparedScriptEnvironment) {
+        let mut world = scene();
+        let sid = 0x0100_0001;
+        world.snapshot.scripts.categories[1].push(ScriptRecord {
+            script_id: sid,
+            next: -1,
+            subtype: vec![trigger_tile, radius],
+            flags: 0,
+            script_index: 0,
+            program_token: -1,
+            owner_id: -1,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        });
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(7, spatial_vm(critical, invalid_after_write))
+            .unwrap();
+        let scripts = BoundScriptRuntime {
+            runtime,
+            entries: vec![InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 1,
+                    ordinal: 0,
+                    script_id: sid,
+                    script_index: 0,
+                    owner_id: -1,
+                    path: Some("scripts/SPATIAL.int".to_owned()),
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(7),
+            }],
+        };
+        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let object_queries = world.object_query_snapshot().unwrap();
+        let script_owners = MapScriptOwners::from_map(
+            &world.snapshot.scripts,
+            &world.snapshot.objects,
+            &object_queries,
+        )
+        .unwrap();
+        let environment = PreparedScriptEnvironment {
+            scripts,
+            map_locals,
+            game_globals: Some(GameGlobalState::from_initial_values(&[0]).unwrap()),
+            object_queries,
+            script_owners,
+            map_last_visit_ticks: 0,
+            invocations: std::collections::BTreeMap::new(),
+            spatial_sources: std::collections::BTreeMap::new(),
+        };
+        (world, environment)
+    }
+
+    #[test]
+    fn moved_actor_triggers_radius_spatial_critical_script_with_real_source_obj() {
+        let (mut world, mut env) = spatial_scene_fixture(20099, 1, true, false);
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        let result = world
+            .advance_actor_with_spatial_events_transactional_bounded(
+                &view,
+                &mut route,
+                &mut env,
+                clock,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 0,
+                },
+            )
+            .unwrap();
+        assert!(matches!(result.actor, ActorStep::Moved { tile: 20098, .. }));
+        assert_eq!(result.spatial.len(), 1);
+        assert_eq!(result.spatial[0].0.action, 2);
+        assert_eq!(result.spatial[0].0.instance_id, 7);
+        assert_eq!(result.spatial[0].1, Some(6));
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [20098]);
+        assert_eq!(env.spatial_sources.get(&7), Some(&actor));
+        assert_eq!(env.invocations.get(&7).unwrap().action(), 2);
+        assert_eq!(world.snapshot().collision.tile_of(actor), Some(20098));
+        assert_eq!(env.object_queries.snapshots()[0].tile, 20098);
+    }
+
+    #[test]
+    fn moved_actor_spatial_noncritical_uses_deferred_source_on_next_tick() {
+        let (mut world, mut env) = spatial_scene_fixture(20098, 0, false, false);
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        let result = world
+            .advance_actor_with_spatial_events_transactional_bounded(
+                &view,
+                &mut route,
+                &mut env,
+                clock,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 0,
+                },
+            )
+            .unwrap();
+        assert_eq!(result.spatial.len(), 1);
+        assert_eq!(result.spatial[0].1, None);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 20);
+        world
+            .advance_script_state_with_current_scene_bounded(&mut env, clock, 101, 6, 0)
+            .unwrap();
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [20098]);
+        assert_eq!(env.spatial_sources.get(&7), Some(&actor));
+    }
+
+    #[test]
+    fn invalid_spatial_native_after_quest_write_rolls_back_movement_and_all_script_state() {
+        let (mut world, mut env) = spatial_scene_fixture(20098, 0, true, true);
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let actor = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world.plan_actor(&view, actor, 20098, true).unwrap().unwrap();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .advance_actor_with_spatial_events_transactional_bounded(
+                &view,
+                &mut route,
+                &mut env,
+                clock,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 0,
+                },
+            )
+            .is_err());
+        assert_eq!(route.current_tile(), 20099);
+        assert_eq!(route.remaining_steps(), 1);
+        assert_eq!(world.snapshot().collision.tile_of(actor), Some(20099));
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.tile, 20099);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert!(env.spatial_sources.is_empty());
+        assert!(env.invocations.is_empty());
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
+        assert!(env.scripts.runtime.vm(7).unwrap().stack().is_empty());
+    }
+
     #[test]
     fn moved_map_actor_tile_becomes_a_live_ce_script_condition_without_stale_snapshots() {
         let mut world = scene();
