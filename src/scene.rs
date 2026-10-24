@@ -633,6 +633,37 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    /// Execute an immediate, verified CE script with a caller-owned
+    /// world-native adapter in addition to the existing quest and object
+    /// reads. The adapter returns true only for opcodes it handles and
+    /// must not alter the stack when returning false. The Rust script,
+    /// MAP-local and game-global state is committed only on full success.
+    ///
+    /// IMPORTANT: external world state is not rolled back by this method.
+    /// Callers MUST invoke it on a private candidate scene and commit that
+    /// scene only after this method also succeeds.
+    pub fn execute_critical_map_action_with_world_natives_transactional_bounded(
+        &mut self,
+        planned: &PlannedMapAction,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_steps: usize,
+        native: &mut dyn FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<bool>,
+    ) -> io::Result<usize> {
+        self.execute_critical_map_action_with_clock_transactional_bounded(
+            planned,
+            CriticalNativeTime {
+                sample: clock,
+                writable: None,
+                max_queue_polls: 0,
+            },
+            now_millis,
+            max_steps,
+            None,
+            Some(native),
+        )
+    }
+
     /// Source-derived 0x80FC support while executing an immediate
     /// CRITICAL MAP procedure. Unlike ordinary fixed-clock calls, this
     /// explicitly owns a writable game clock and script event queue.
@@ -662,6 +693,7 @@ impl PreparedScriptEnvironment {
             now_millis,
             max_steps,
             Some(queue),
+            None,
         )
     }
 
@@ -688,6 +720,7 @@ impl PreparedScriptEnvironment {
             now_millis,
             max_steps,
             timer_queue,
+            None,
         )
     }
 
@@ -698,6 +731,7 @@ impl PreparedScriptEnvironment {
         now_millis: u32,
         max_steps: usize,
         timer_queue: Option<&mut EventQueue>,
+        mut world_native: Option<&mut dyn FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<bool>>,
     ) -> io::Result<usize> {
         let clock = time.sample;
         let writable_clock = time.writable;
@@ -801,6 +835,11 @@ impl PreparedScriptEnvironment {
                 now_millis,
                 max_steps,
                 &mut |opcode, stack| {
+                    if let Some(handler) = world_native.as_mut() {
+                        if handler(opcode, stack)? {
+                            return Ok(());
+                        }
+                    }
                     if opcode == SCRIPT_OVERRIDES_OPCODE {
                         invocation.mark_overrides();
                         Ok(())
