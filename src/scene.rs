@@ -206,6 +206,17 @@ impl PreviewedSandboxAction {
     }
 }
 
+/// An explicit scr_set_objs(source, NULL) inherits an installed script's
+/// verified owner when exec_script_proc begins. Unresolved spatial owners
+/// remain NULL targets; this does not fabricate a hidden engine Object.
+fn target_for_explicit_source(owner: Option<ScriptOwnerResolution>, source: Option<i32>) -> Option<i32> {
+    source.map(|_| match owner {
+        Some(ScriptOwnerResolution::Bound { handle, .. })
+        | Some(ScriptOwnerResolution::GeneratedSystemBound { handle }) => handle,
+        _ => 0,
+    })
+}
+
 impl PreparedScriptEnvironment {
     /// Run a bounded Rust-owned source-ordered CE script tick on the MAP
     /// environment assembled by StaticScene::unstarted_script_environment.
@@ -257,7 +268,7 @@ impl PreparedScriptEnvironment {
             // interpreter has no asserted scr_set_objs participants. The
             // spatial source path retains its separate verified actor join.
             let (source, target) = if let Some(source) = source {
-                (Some(source), Some(0))
+                (Some(source), target_for_explicit_source(owner, Some(source)))
             } else if self.invocations.contains_key(&id) {
                 let target = match owner {
                     Some(ScriptOwnerResolution::Bound { handle, .. })
@@ -368,7 +379,7 @@ impl PreparedScriptEnvironment {
                         resolution: owner,
                     },
                     source,
-                    target: source.map(|_| 0),
+                    target: target_for_explicit_source(owner, source),
                 },
                 invocation: next
                     .invocations
@@ -480,7 +491,7 @@ impl PreparedScriptEnvironment {
                         resolution: owner,
                     },
                     source,
-                    target: source.map(|_| 0),
+                    target: target_for_explicit_source(owner, source),
                 },
                 invocation: next
                     .invocations
@@ -740,7 +751,7 @@ impl PreparedScriptEnvironment {
                 resolution: Some(owner),
             },
             source,
-            target: source.map(|_| 0),
+            target: target_for_explicit_source(owner, source),
         };
         // A clone of the immutable MAP instance registry is needed for
         // timer SID resolution while the interpreter is mutably borrowed.
