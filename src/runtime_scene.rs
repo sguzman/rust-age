@@ -1433,6 +1433,47 @@ mod tests {
     }
 
     #[test]
+    fn source_backed_description_and_look_at_dispatch_native_object_quest_effects() {
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        for (action, name) in [
+            (3_usize, &b"description_p_proc"[..]),
+            (21_usize, &b"look_at_p_proc"[..]),
+        ] {
+            let (world, mut env) = object_action_fixture(true, false, false, name);
+            let (planned, executed) = world
+                .dispatch_object_action_transactional_bounded(
+                    &mut env,
+                    (source, target),
+                    action,
+                    clock,
+                    25,
+                    100,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(planned.action, action);
+            assert_eq!(planned.procedure_index, 1);
+            assert_eq!(executed, Some(9));
+            assert_eq!(
+                env.game_globals.as_ref().unwrap().values(),
+                [20099 + 0x0300_0001]
+            );
+            assert_eq!(env.invocations.get(&7).unwrap().action(), action as i32);
+        }
+    }
+
+    #[test]
     fn object_use_critical_script_overrides_commits_only_on_success() {
         let source = ObjectKey {
             elevation: 0,
