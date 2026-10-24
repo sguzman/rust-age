@@ -107,11 +107,16 @@ impl BoundScriptRuntime {
         tile: i32,
         elevation: usize,
     ) -> io::Result<Vec<PlannedMapAction>> {
-        if elevation >= 3 || view.tile_distance(tile, tile).is_none() || tile < 10 {
+        if elevation >= 3 || view.tile_distance(tile, tile).is_none() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE spatial event tile or elevation is outside supported MAP bounds",
             ));
+        }
+        // scr_chk_spatials_in returns false (without searching scripts)
+        // when the actor is in the reserved low-numbered hex region.
+        if tile < 10 {
+            return Ok(Vec::new());
         }
         let built_current = (tile as u32) | ((elevation as u32) << 29);
         let mut selected = Vec::new();
@@ -367,7 +372,7 @@ mod tests {
         let upper = bound.plan_spatial_at(&scripts, &view, 20098, 1).unwrap();
         assert_eq!(upper.iter().map(|p| p.instance_id).collect::<Vec<_>>(), [3]);
         assert!(bound.plan_spatial_at(&scripts, &view, 20097, 0).unwrap().is_empty());
-        assert!(bound.plan_spatial_at(&scripts, &view, 9, 0).is_err());
+        assert!(bound.plan_spatial_at(&scripts, &view, 9, 0).unwrap().is_empty());
         assert!(bound.plan_spatial_at(&scripts, &view, 40000, 0).is_err());
         assert!(bound.plan_spatial_at(&scripts, &view, 20098, 3).is_err());
     }
