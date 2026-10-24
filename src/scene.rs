@@ -2807,9 +2807,9 @@ mod tests {
             [333, 888]
         );
 
-        // A generated hidden owner must never turn into an invented
-        // NULL object. SELF_OBJ fails in the same installed VM while
-        // leaving Rust quest state and its PC untouched.
+        // CE creates a nonserialized hidden MAP header owner. Its
+        // registered opaque handle must be readable by SELF_OBJ, not
+        // silently replaced with NULL or rejected as an invented pointer.
         let mut unbound = header_scene
             .unstarted_script_environment(&mut assets)
             .unwrap();
@@ -2851,11 +2851,37 @@ mod tests {
                 4,
             )
             .unwrap();
-        assert!(unbound
+        let self_tick = unbound
             .advance_script_state_tick_bounded(context, 201, 3, 0)
-            .is_err());
+            .unwrap();
+        assert_eq!(self_tick.executed_steps, [(id, 3)]);
+        assert_eq!(
+            unbound.scripts.runtime.vm(id).unwrap().stack(),
+            [crate::script_vm::ScriptValue::Pointer(1)]
+        );
         assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [7, -13]);
         assert_eq!(unbound.scripts.runtime.vm(id).unwrap().pc(), 20);
+        assert_eq!(unbound.map_locals.locals(), [99]);
+
+        // After MAP_ENTER, exec_script_proc's NULL target inherits the
+        // generated owner. TARGET_OBJ -> OBJ_PID must read the exact
+        // source-derived nonserialized system Object and commit its PID
+        // through the existing native GAME_GLOBAL_VARS write pipeline.
+        let mut inherited_target = vec![0_u8; 54];
+        inherited_target[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        inherited_target[2..6].copy_from_slice(&1_i32.to_be_bytes());
+        inherited_target[6..8].copy_from_slice(&0x80BE_u16.to_be_bytes());
+        inherited_target[8..10].copy_from_slice(&0x8100_u16.to_be_bytes());
+        inherited_target[10..12].copy_from_slice(&0x80C6_u16.to_be_bytes());
+        inherited_target[12..14].copy_from_slice(&0x8011_u16.to_be_bytes());
+        *unbound.scripts.runtime.vm_mut(id).unwrap() = crate::script_vm::ScriptVm::new(
+            crate::script_program::ScriptProgram::decode(&inherited_target).unwrap(),
+        );
+        let target_tick = unbound
+            .advance_script_state_tick_bounded(context, 202, 5, 0)
+            .unwrap();
+        assert_eq!(target_tick.executed_steps, [(id, 5)]);
+        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [7, -1]);
         assert_eq!(unbound.map_locals.locals(), [99]);
 
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
