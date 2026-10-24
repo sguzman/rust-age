@@ -25,21 +25,21 @@ const OWNER: ObjectKey = ObjectKey {
 };
 
 fn procedure(main: &[u8]) -> ScriptVm {
-    assert!(main.len() <= 20);
+    assert!(main.len() <= 24);
     let mut bytes = vec![0_u8; 42];
     bytes[..main.len()].copy_from_slice(main);
     // timed_event_p_proc: drop saved argument; game_global[0] = fixed_param.
-    bytes[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
-    bytes[22..24].copy_from_slice(&0xC001_u16.to_be_bytes());
-    bytes[24..28].copy_from_slice(&0_i32.to_be_bytes());
-    bytes[28..30].copy_from_slice(&0x80F7_u16.to_be_bytes());
-    bytes[30..32].copy_from_slice(&0x80C6_u16.to_be_bytes());
-    bytes[32..34].copy_from_slice(&0x8021_u16.to_be_bytes());
+    bytes[24..26].copy_from_slice(&0x801A_u16.to_be_bytes());
+    bytes[26..28].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[28..32].copy_from_slice(&0_i32.to_be_bytes());
+    bytes[32..34].copy_from_slice(&0x80F7_u16.to_be_bytes());
+    bytes[34..36].copy_from_slice(&0x80C6_u16.to_be_bytes());
+    bytes[36..38].copy_from_slice(&0x8021_u16.to_be_bytes());
     bytes.extend_from_slice(&2_i32.to_be_bytes());
     let mut names = Vec::new();
     for (name, body) in [
         (b"main".as_slice(), 0_i32),
-        (b"timed_event_p_proc".as_slice(), 20_i32),
+        (b"timed_event_p_proc".as_slice(), 24_i32),
     ] {
         let offset = 4 + names.len() as i32;
         for field in [offset, 0, 0, 0, body, 0] {
