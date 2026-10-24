@@ -1629,6 +1629,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn earlier_ce_condition_cancel_prevents_later_due_timer_in_same_poll() {
+        // Original CE doEvents reads the next procedure's live metadata
+        // after the earlier condition can execute CANCEL.
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&2_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0x8048_u16.to_be_bytes()); // CANCEL
+        bytes[8..10].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[10..14].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[14..16].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[32..36].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&3_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, 0x02, 0, 0, 32, 0],
+            [13_i32, 0x01, 10, 0, 32, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&13_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0one\0two\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(4, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let calls = runtime
+            .prepare_due_core_with_conditions_transactional_bounded(100, 4)
+            .unwrap();
+        assert!(calls.is_empty());
+        let vm = runtime.vm(4).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[2].flags, 0);
+        assert_eq!(vm.runtime_procedures()[2].event_time, 0);
+        assert_eq!(vm.first_interpret_clock_millis(), 100);
+        assert!(vm.return_stack().is_empty());
+        assert!(vm.stack().is_empty());
+    }
+
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
