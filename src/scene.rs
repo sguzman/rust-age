@@ -2714,6 +2714,65 @@ mod tests {
             [7, -13]
         );
 
+        // Entering a second original MAP must NOT reinitialize quest
+        // globals to vault13.gam defaults. The caller keeps ownership of
+        // its previous bank; startup scripts see a cloned continuation.
+        let prior_game = crate::game_globals::GameGlobalState::from_initial_values(
+            &[333, 888],
+        )
+        .unwrap();
+        let carried = header_scene
+            .load_initial_script_lifecycle_with_game_globals_bounded(
+                &mut assets,
+                &prior_game,
+                context,
+                204,
+                5,
+            )
+            .unwrap();
+        assert_eq!(prior_game.values(), [333, 888]);
+        assert_eq!(
+            carried.environment.game_globals.as_ref().unwrap().values(),
+            [333, 888]
+        );
+        assert_eq!(carried.environment.map_locals.globals(), [12, -8]);
+        assert_eq!(carried.environment.map_locals.locals(), [99]);
+        let mut continued = carried.environment;
+        let second_map_tick = continued
+            .advance_script_state_tick_bounded(context, 204, 5, 0)
+            .unwrap();
+        assert_eq!(second_map_tick.executed_steps, [(1, 5)]);
+        assert_eq!(continued.game_globals.as_ref().unwrap().values(), [15, 888]);
+        assert_eq!(prior_game.values(), [333, 888]);
+        assert_eq!(scene.variables.globals, [12, -8]);
+
+        let bad_game = crate::game_globals::GameGlobalState::from_initial_values(&[7])
+            .unwrap();
+        assert!(header_scene
+            .load_initial_script_lifecycle_with_game_globals_bounded(
+                &mut assets,
+                &bad_game,
+                context,
+                205,
+                5,
+            )
+            .is_err());
+        assert_eq!(bad_game.values(), [7]);
+        let empty_map = scene
+            .load_initial_script_lifecycle_with_game_globals_bounded(
+                &mut assets,
+                &prior_game,
+                context,
+                206,
+                5,
+            )
+            .unwrap();
+        assert!(empty_map.header_script.is_none());
+        assert_eq!(
+            empty_map.environment.game_globals.unwrap().values(),
+            [333, 888]
+        );
+
         // A generated hidden owner must never turn into an invented
         // NULL object. SELF_OBJ fails in the same installed VM while
         // leaving Rust quest state and its PC untouched.
