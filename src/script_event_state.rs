@@ -399,10 +399,9 @@ mod tests {
         assert_eq!(objects.key_for(owner_handle), None);
         assert!(objects.add_generated_header_system_object().is_err());
 
-        let mut event =
-            DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
-                handle: owner_handle,
-            });
+        let mut event = DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
+            handle: owner_handle,
+        });
         event.begin_action(15, Some(1), &objects).unwrap();
         let snapshot = event.snapshot(&objects, clock()).unwrap();
         assert_eq!(snapshot.target, Some(owner_handle));
@@ -446,10 +445,9 @@ mod tests {
 
         // No ObjectKey or forged native pointer can alias the nonserialized
         // header object. Explicitly reject unregistered owner handles.
-        let mut forged =
-            DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
-                handle: owner_handle + 1,
-            });
+        let mut forged = DetachedScriptEvent::new(ScriptOwnerResolution::GeneratedSystemBound {
+            handle: owner_handle + 1,
+        });
         assert!(forged.begin_action(15, None, &objects).is_err());
         assert!(!forged.is_active());
     }
