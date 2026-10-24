@@ -1507,6 +1507,115 @@ mod tests {
         );
     }
 
+    fn visibility_vm(on_source: bool, invisible: i32, invalid_tail: bool) -> ScriptVm {
+        // Pinned op_set_obj_visibility pops visibility first, then object.
+        // The script uses an actually verified source or owner pointer.
+        let mut body = Vec::new();
+        body.extend_from_slice(&0x801A_u16.to_be_bytes()); // POP argument
+        body.extend_from_slice(
+            &(if on_source { 0x80BD_u16 } else { 0x80BC_u16 }).to_be_bytes(),
+        );
+        body.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH invisible
+        body.extend_from_slice(&invisible.to_be_bytes());
+        body.extend_from_slice(&0x80E3_u16.to_be_bytes()); // SET_OBJ_VISIBILITY
+        body.extend_from_slice(
+            &(if invalid_tail { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
+        );
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..20 + body.len()].copy_from_slice(&body);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, 0x10, 0, 0, 20, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&16_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0use_p_proc\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn world_visibility_fixture(
+        on_source: bool,
+        invisible: i32,
+        invalid_tail: bool,
+    ) -> (RuntimeScene, PreparedScriptEnvironment) {
+        let (world, mut env) = object_action_fixture(true, false, false, b"use_p_proc");
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(7, visibility_vm(on_source, invisible, invalid_tail)).unwrap();
+        env.scripts.runtime = runtime;
+        (world, env)
+    }
+
+    #[test]
+    fn use_native_visibility_hides_original_target_and_updates_live_collision() {
+        let (mut world, mut env) = world_visibility_fixture(false, 1, false);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        assert!(world.snapshot().collision.first_blocker(&view, 20100, 0, None).is_some());
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        let (_, executed) = world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, (source, target), 6, clock, 25, 100,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(executed, Some(5));
+        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 0x01);
+        assert!(world.snapshot().collision.first_blocker(&view, 20100, 0, None).is_none());
+        assert_eq!(env.invocations.get(&7).unwrap().action(), 6);
+        assert_eq!(env.spatial_sources.get(&7), Some(&source));
+    }
+
+    #[test]
+    fn use_native_visibility_shows_critter_and_clears_ce_no_block() {
+        let (mut world, mut env) = world_visibility_fixture(true, 0, false);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        world.set_object_flags(source, 0x11).unwrap();
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        assert!(world.snapshot().collision.first_blocker(&view, 20099, 0, None).is_none());
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, (source, target), 6, clock, 25, 100,
+            )
+            .unwrap();
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 0);
+        assert!(world.snapshot().collision.first_blocker(&view, 20099, 0, None).is_some());
+    }
+
+    #[test]
+    fn use_native_visibility_rolls_back_world_and_script_on_later_error() {
+        let (mut world, mut env) = world_visibility_fixture(false, 1, true);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, (source, target), 6, clock, 25, 100,
+            )
+            .is_err());
+        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 0);
+        assert_eq!(world.snapshot().collision.tile_of(target), Some(20100));
+        assert!(env.invocations.is_empty());
+        assert!(env.spatial_sources.is_empty());
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
+    }
+
     #[test]
     fn source_backed_description_and_look_at_dispatch_native_object_quest_effects() {
         let source = ObjectKey {
