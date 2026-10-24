@@ -1183,4 +1183,188 @@ mod tests {
             )
             .is_err());
     }
+
+    fn object_use_vm(critical: bool, invalid_after_write: bool) -> ScriptVm {
+        // Real source-shaped CE local setupCall followed by SOURCE_OBJ,
+        // TARGET_OBJ, object-property reads and a quest-global mutation.
+        let mut body = Vec::new();
+        body.extend_from_slice(&0x801A_u16.to_be_bytes()); // POP argument
+        body.extend_from_slice(&0xC001_u16.to_be_bytes()); // PUSH index
+        body.extend_from_slice(&0_i32.to_be_bytes());
+        for opcode in [
+            0x80BD_u16, // SOURCE_OBJ
+            0x80D4, // TILE_NUM
+            0x80BE, // TARGET_OBJ
+            0x8100, // OBJ_PID
+            0x8039, // ADD
+            0x80C6, // SET_GLOBAL_VAR
+            if invalid_after_write { 0x80FF } else { 0x8021 },
+        ] {
+            body.extend_from_slice(&opcode.to_be_bytes());
+        }
+        let mut bytes = vec![0_u8; 42];
+        bytes[20..20 + body.len()].copy_from_slice(&body);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, 20, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&16_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0use_p_proc\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    fn object_use_fixture(
+        critical: bool,
+        invalid_after_write: bool,
+    ) -> (RuntimeScene, PreparedScriptEnvironment) {
+        let mut world = scene();
+        let sid = 0x0300_0001;
+        world.snapshot.objects.elevations[0][1].record.header.script_id = sid;
+        world.snapshot.scripts.categories[3].push(ScriptRecord {
+            script_id: sid,
+            next: -1,
+            subtype: vec![],
+            flags: 0,
+            script_index: 0,
+            program_token: -1,
+            owner_id: 2,
+            local_variable_offset: -1,
+            local_variable_count: 0,
+            remaining: [0; 8],
+        });
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(7, object_use_vm(critical, invalid_after_write)).unwrap();
+        let scripts = BoundScriptRuntime {
+            runtime,
+            entries: vec![InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 3,
+                    ordinal: 0,
+                    script_id: sid,
+                    script_index: 0,
+                    owner_id: 2,
+                    path: Some("scripts/USE.int".to_owned()),
+                    run_info: None,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(7),
+            }],
+        };
+        let map_locals = scripts.script_local_state(&world.snapshot.variables).unwrap();
+        let object_queries = world.object_query_snapshot().unwrap();
+        let script_owners =
+            MapScriptOwners::from_map(&world.snapshot.scripts, &world.snapshot.objects, &object_queries)
+                .unwrap();
+        let env = PreparedScriptEnvironment {
+            scripts,
+            map_locals,
+            game_globals: Some(GameGlobalState::from_initial_values(&[0]).unwrap()),
+            object_queries,
+            script_owners,
+            map_last_visit_ticks: 0,
+            invocations: std::collections::BTreeMap::new(),
+            spatial_sources: std::collections::BTreeMap::new(),
+        };
+        (world, env)
+    }
+
+    #[test]
+    fn object_use_dispatch_runs_critical_native_source_and_target_quest_mutation() {
+        let (world, mut env) = object_use_fixture(true, false);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        let (action, executed) = world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, target, 6, clock, 25, 100,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.instance_id, 7);
+        assert_eq!(action.category, 3);
+        assert_eq!(action.action, 6);
+        assert_eq!(executed, Some(9));
+        assert_eq!(
+            env.game_globals.as_ref().unwrap().values(),
+            [20099 + 0x0300_0001]
+        );
+        assert_eq!(env.invocations.get(&7).unwrap().action(), 6);
+        assert_eq!(env.spatial_sources.get(&7), Some(&source));
+    }
+
+    #[test]
+    fn object_use_noncritical_is_deferred_and_rejects_unbound_participants() {
+        let (world, mut env) = object_use_fixture(false, false);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, ObjectKey { elevation: 0, ordinal: 99 },
+                6, clock, 25, 100,
+            )
+            .is_err());
+        assert!(env.spatial_sources.is_empty());
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, target, 23, clock, 25, 100,
+            )
+            .is_err());
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, source, 6, clock, 25, 100,
+            )
+            .unwrap()
+            .is_none());
+        assert!(env.spatial_sources.is_empty());
+        let (_, executed) = world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, target, 6, clock, 25, 100,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(executed, None);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 20);
+        world
+            .advance_script_state_with_current_scene_bounded(&mut env, clock, 26, 9, 0)
+            .unwrap();
+        assert_eq!(
+            env.game_globals.as_ref().unwrap().values(),
+            [20099 + 0x0300_0001]
+        );
+    }
+
+    #[test]
+    fn object_use_critical_native_failure_does_not_commit_event_or_quest() {
+        let (world, mut env) = object_use_fixture(true, true);
+        let source = ObjectKey { elevation: 0, ordinal: 0 };
+        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 100 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env, source, target, 6, clock, 25, 100,
+            )
+            .is_err());
+        assert!(env.spatial_sources.is_empty());
+        assert!(env.invocations.is_empty());
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
+    }
 }
