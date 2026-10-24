@@ -1209,7 +1209,12 @@ mod tests {
             body.extend_from_slice(&0x80B9_u16.to_be_bytes()); // SCRIPT_OVERRIDES
         }
         body.extend_from_slice(
-            &(if invalid_after_write { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
+            &(if invalid_after_write {
+                0x80FF_u16
+            } else {
+                0x8021_u16
+            })
+            .to_be_bytes(),
         );
         let mut bytes = vec![0_u8; 42];
         bytes[20..20 + body.len()].copy_from_slice(&body);
@@ -1253,7 +1258,10 @@ mod tests {
         });
         let mut runtime = ScriptRuntime::new();
         runtime
-            .register(7, object_use_vm(critical, invalid_after_write, with_overrides))
+            .register(
+                7,
+                object_use_vm(critical, invalid_after_write, with_overrides),
+            )
             .unwrap();
         let scripts = BoundScriptRuntime {
             runtime,
