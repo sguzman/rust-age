@@ -1570,6 +1570,65 @@ mod tests {
         );
     }
 
+    #[test]
+    fn earlier_ce_condition_can_arm_later_condition_in_same_persistent_poll() {
+        // The initial condition registers a later CALL_WHEN and returns
+        // false. doEvents must visit the newly armed later slot in this
+        // same ascending pass, preserving scheduling writes on one VM.
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&24_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&2_i32.to_be_bytes());
+        bytes[12..14].copy_from_slice(&0x8007_u16.to_be_bytes()); // CALL_WHEN
+        bytes[14..16].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[16..20].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[20..22].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[24..26].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[26..30].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[30..32].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[36..40].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&3_i32.to_be_bytes());
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, 0x02, 0, 0, 36, 0],
+            [13_i32, 0, 0, 0, 36, 0],
+        ] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&13_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0one\0two\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(4, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        let prepared = runtime
+            .prepare_due_core_with_conditions_transactional_bounded(100, 5)
+            .unwrap();
+        assert_eq!(
+            prepared,
+            [DueProcedure {
+                program_id: 4,
+                procedure_index: 2,
+            }]
+        );
+        let vm = runtime.vm(4).unwrap();
+        assert_eq!(vm.first_interpret_clock_millis(), 100);
+        assert_eq!(vm.pc(), 36);
+        assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
+        assert_eq!(vm.runtime_procedures()[2].flags, 0);
+        assert_eq!(vm.runtime_procedures()[2].condition_offset, 24);
+        assert_eq!(vm.stack().len(), 4);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(0), ScriptValue::Int(20)]
+        );
+    }
+
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
