@@ -833,11 +833,9 @@ impl ScriptRuntime {
         now_millis: u32,
         cpu_burst: usize,
     ) -> io::Result<Vec<(u64, usize)>> {
-        self.interpret_native_bursts_bounded(
-            now_millis,
-            cpu_burst,
-            &mut |_, _, _| Err(invalid("CE core tick native host unavailable")),
-        )
+        self.interpret_native_bursts_bounded(now_millis, cpu_burst, &mut |_, _, _| {
+            Err(invalid("CE core tick native host unavailable"))
+        })
     }
 
     /// Pinned CE updatePrograms order with an explicit source-owned native
@@ -1937,18 +1935,15 @@ mod tests {
     fn ce_native_main_burst_writes_quest_flag_before_due_condition_reads_it() {
         let mut runtime = ScriptRuntime::new();
         runtime.register(1, readonly_condition_vm(0x80C5)).unwrap();
-        runtime.register(2, native_global_write_program(37)).unwrap();
+        runtime
+            .register(2, native_global_write_program(37))
+            .unwrap();
         let mut map = mutable_condition_state(&runtime, 0);
         let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
         let events = readonly_condition_events(&[1, 2]);
         let tick = runtime
             .advance_tick_with_mutable_native_state_transactional_bounded(
-                100,
-                4,
-                3,
-                &mut map,
-                &mut game,
-                &events,
+                100, 4, 3, &mut map, &mut game, &events,
             )
             .unwrap();
         assert_eq!(tick.executed_steps, [(2, 4), (1, 4)]);
@@ -1972,20 +1967,18 @@ mod tests {
     #[test]
     fn ce_native_main_burst_rolls_back_quest_mutation_when_older_program_fails() {
         let mut runtime = ScriptRuntime::new();
-        runtime.register(1, main_native_vm(&0x80FF_u16.to_be_bytes()))
+        runtime
+            .register(1, main_native_vm(&0x80FF_u16.to_be_bytes()))
             .unwrap();
-        runtime.register(2, native_global_write_program(37)).unwrap();
+        runtime
+            .register(2, native_global_write_program(37))
+            .unwrap();
         let mut map = mutable_condition_state(&runtime, 0);
         let mut game = GameGlobalState::from_initial_values(&[0]).unwrap();
         let events = readonly_condition_events(&[1, 2]);
         assert!(runtime
             .advance_tick_with_mutable_native_state_transactional_bounded(
-                100,
-                4,
-                3,
-                &mut map,
-                &mut game,
-                &events,
+                100, 4, 3, &mut map, &mut game, &events,
             )
             .is_err());
         assert_eq!(game.values(), [0]);
@@ -2008,24 +2001,14 @@ mod tests {
         let events = BTreeMap::new();
         let first = runtime
             .advance_tick_with_mutable_native_state_transactional_bounded(
-                1000,
-                2,
-                3,
-                &mut map,
-                &mut game,
-                &events,
+                1000, 2, 3, &mut map, &mut game, &events,
             )
             .unwrap();
         assert_eq!(first.executed_steps, [(1, 2)]);
         assert_eq!(runtime.vm(1).unwrap().core_wait_state(), Some((1000, 1005)));
         let still_blocked = runtime
             .advance_tick_with_mutable_native_state_transactional_bounded(
-                1006,
-                2,
-                3,
-                &mut map,
-                &mut game,
-                &events,
+                1006, 2, 3, &mut map, &mut game, &events,
             )
             .unwrap();
         assert_eq!(still_blocked.executed_steps, [(1, 0)]);
