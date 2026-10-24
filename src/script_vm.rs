@@ -1672,9 +1672,27 @@ impl ScriptVm {
         &mut self,
         native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
     ) -> io::Result<()> {
+        self.step_with_variable_host_internal(native, false)
+    }
+
+    /// Runtime-only source checkWait path. The caller must first poll the
+    /// clocked WAIT state, and stage any mutable native state on a clone.
+    /// Ordinary read-only host previews cannot bypass an active WAIT.
+    pub(crate) fn step_with_variable_host_clocked(
+        &mut self,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.step_with_variable_host_internal(native, true)
+    }
+
+    fn step_with_variable_host_internal(
+        &mut self,
+        native: &mut impl FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+        clocked: bool,
+    ) -> io::Result<()> {
         // A caller-owned native callback cannot bypass an installed clocked
-        // WAIT. Only advance_core_tick's source checkWait branch may resume it.
-        if self.core_wait.is_some() {
+        // WAIT unless the runtime first passed CE's checkWait predicate.
+        if self.core_wait.is_some() && !clocked {
             return Err(invalid("CE WAIT cannot run through native preview host"));
         }
         if self.halted {
@@ -1706,7 +1724,7 @@ impl ScriptVm {
             && !(0x8118..=0x8119).contains(&opcode)
             && opcode != 0x811B
         {
-            return self.step();
+            return self.step_core(clocked);
         }
         let next_pc = self
             .pc

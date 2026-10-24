@@ -712,6 +712,63 @@ impl ScriptRuntime {
         })
     }
 
+    /// One complete, Rust-owned conditional script tick for supported CE
+    /// MAP/local/global writes: interpret ordinary program bytecode in
+    /// newest-first order, followed by doEvents' source-ordered conditions
+    /// and local procedure setup. Both phases share the SAME cloned MAP
+    /// and GAME_GLOBAL_VARS banks, so conditions can observe script writes
+    /// from the preceding CPU bursts and from earlier conditions.
+    ///
+    /// This is a bounded subset of original script-world mutation, not a
+    /// general Fallout engine callback or a MAP savegame writer. Any
+    /// unsupported opcode, unresolvable event snapshot, invalid frame or
+    /// condition error reverts ALL staged interpreter and variable changes.
+    pub fn advance_tick_with_mutable_native_state_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        map: &mut MapScriptLocals,
+        game: &mut GameGlobalState,
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let mut next_map = map.clone();
+        let mut next_game = game.clone();
+        let executed_steps = next.interpret_native_bursts_bounded(
+            now_millis,
+            cpu_burst,
+            &mut |id, opcode, stack| {
+                let snapshot = events
+                    .get(&id)
+                    .ok_or_else(|| invalid("CE interpreter native event context unavailable"))?;
+                apply_mutable_condition_native_with_vars(
+                    snapshot.event,
+                    &snapshot.invocation,
+                    &mut next_map,
+                    &mut next_game,
+                    id,
+                    opcode,
+                    stack,
+                )
+            },
+        )?;
+        let prepared_calls = next.prepare_due_with_mutable_conditions_transactional_bounded(
+            now_millis,
+            max_steps_per_condition,
+            &mut next_map,
+            &mut next_game,
+            events,
+        )?;
+        *self = next;
+        *map = next_map;
+        *game = next_game;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
     /// Explicit opt-in counterpart to advance_core_tick_transactional_bounded
     /// for supported CORE-ONLY CE conditional bytecode. Source ordering is
     /// updatePrograms interpreter bursts (newest registered program first),
@@ -776,6 +833,23 @@ impl ScriptRuntime {
         now_millis: u32,
         cpu_burst: usize,
     ) -> io::Result<Vec<(u64, usize)>> {
+        self.interpret_native_bursts_bounded(
+            now_millis,
+            cpu_burst,
+            &mut |_, _, _| Err(invalid("CE core tick native host unavailable")),
+        )
+    }
+
+    /// Pinned CE updatePrograms order with an explicit source-owned native
+    /// host for the normal interpreter burst. Only the fully staged caller
+    /// may provide mutable script state; this method never touches actual
+    /// engine or MAP object callbacks.
+    fn interpret_native_bursts_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        native: &mut impl FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<()>,
+    ) -> io::Result<Vec<(u64, usize)>> {
         if cpu_burst > 4096 {
             return Err(invalid("CE core tick CPU burst exceeds safety bound"));
         }
@@ -814,7 +888,12 @@ impl ScriptRuntime {
                     remaining -= 1;
                 }
                 if program.vm.poll_core_wait() {
-                    program.vm.step_core_with_wait()?;
+                    let id = program.id;
+                    program
+                        .vm
+                        .step_with_variable_host_clocked(&mut |opcode, stack| {
+                            native(id, opcode, stack)
+                        })?;
                     steps += 1;
                 }
             }
