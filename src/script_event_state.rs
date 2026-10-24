@@ -178,7 +178,17 @@ fn resolve_key(objects: &MapObjectReadBindings, key: Option<ObjectKey>) -> io::R
 }
 
 fn check_handle(objects: &MapObjectReadBindings, handle: i32) -> io::Result<()> {
-    if handle != 0 && objects.key_for(handle).is_none() {
+    // Top-level MAP objects have ObjectKeys, while CE's source-created
+    // header system Object is nonserialized and intentionally has none.
+    // Both are valid only when registered under one unique opaque handle.
+    if handle != 0
+        && objects
+            .snapshots()
+            .iter()
+            .filter(|snapshot| snapshot.handle == handle)
+            .count()
+            != 1
+    {
         return Err(invalid("CE event pointer not in detached MAP snapshot"));
     }
     Ok(())
