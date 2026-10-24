@@ -111,8 +111,10 @@ pub fn apply_game_time_advance_no_due_opcode(
     Ok(())
 }
 
-/// Original script_q_process is a no-op if the timer's script SID is
-/// absent (or no callable timed procedure is installed). Such due script
+/// Original script_q_process is a no-op when the timer's script SID
+/// is absent from the complete installed script registry. It is NOT a
+/// no-op for an existing script with a missing timed procedure, because
+/// CE still updates that script's fixedParam and event action. Absent-SID
 /// records can be consumed during the pinned 0x80FC queue_process poll
 /// without executing a callback. Other due types and any executable script
 /// timer still require reentrant dispatch, which this boundary rejects.
@@ -149,9 +151,13 @@ pub fn apply_game_time_advance_with_inert_timers_opcode(
                 ));
             }
             let timer = ScriptTimerEvent::decode(&event)?;
-            if bound.plan_script_timer(&timer)?.is_some() {
+            if bound
+                .entries
+                .iter()
+                .any(|entry| entry.binding.script_id == timer.sid)
+            {
                 return Err(invalid(
-                    "CE game_time_advance executable script timer needs reentrant dispatch",
+                    "CE game_time_advance installed script timer needs reentrant dispatch",
                 ));
             }
         }
