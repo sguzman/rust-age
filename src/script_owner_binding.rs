@@ -164,10 +164,20 @@ impl MapScriptOwners {
     ) -> io::Result<()> {
         if !(0..32000).contains(&rust_sid)
             || self.entries.iter().any(|entry| entry.script_id == rust_sid)
-            || self.entries.iter().any(|entry| entry.category == 0 && entry.ordinal == ordinal)
-            || ordinal != self.entries.iter().filter(|entry| entry.category == 0).count()
+            || self
+                .entries
+                .iter()
+                .any(|entry| entry.category == 0 && entry.ordinal == ordinal)
+            || ordinal
+                != self
+                    .entries
+                    .iter()
+                    .filter(|entry| entry.category == 0)
+                    .count()
         {
-            return Err(invalid("generated CE MAP system-script binding is ambiguous"));
+            return Err(invalid(
+                "generated CE MAP system-script binding is ambiguous",
+            ));
         }
         self.entries.push(ScriptOwnerEntry {
             category: 0,

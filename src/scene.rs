@@ -2005,15 +2005,12 @@ impl StaticScene {
         if self.header.script_index <= 0 {
             return Ok(None);
         }
-        if environment
-            .script_owners
-            .entries()
-            .iter()
-            .any(|entry| matches!(
+        if environment.script_owners.entries().iter().any(|entry| {
+            matches!(
                 entry.resolution,
                 ScriptOwnerResolution::GeneratedSystemOwnerRequiresEngine
-            ))
-        {
+            )
+        }) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "CE MAP header system script already installed",
@@ -2023,10 +2020,16 @@ impl StaticScene {
             io::Error::new(io::ErrorKind::InvalidData, "CE header script index invalid")
         })?;
         let path = assets.script_path_by_index(index)?.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "CE header script not in scripts.lst")
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "CE header script not in scripts.lst",
+            )
         })?;
         let program = assets.script_program_by_index(index)?.ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "CE header INT script program missing")
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "CE header INT script program missing",
+            )
         })?;
         let mut staged = environment.clone();
         let ordinal = staged
@@ -2036,9 +2039,18 @@ impl StaticScene {
             .filter(|entry| entry.binding.category == 0)
             .count();
         let rust_sid = (0..32000)
-            .find(|sid| !staged.scripts.entries.iter().any(|entry| entry.binding.script_id == *sid))
+            .find(|sid| {
+                !staged
+                    .scripts
+                    .entries
+                    .iter()
+                    .any(|entry| entry.binding.script_id == *sid)
+            })
             .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "CE generated MAP system SID exhausted")
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE generated MAP system SID exhausted",
+                )
             })?;
         let instance_id = staged
             .scripts
@@ -2053,26 +2065,31 @@ impl StaticScene {
             .scripts
             .runtime
             .register(instance_id, crate::script_vm::ScriptVm::new(program))?;
-        staged.scripts.entries.push(crate::script_binding::InstalledScriptBinding {
-            binding: ScriptBinding {
-                category: 0,
-                ordinal,
-                script_id: rust_sid,
-                script_index: i32::try_from(index).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidData, "MAP script index exceeds i32")
-                })?,
-                owner_id: -1,
-                path: Some(path),
-                run_info: assets.script_run_info_by_index(index)?,
-                local_variable_offset: -1,
-                local_variable_count: 0,
-            },
-            instance_id: Some(instance_id),
-        });
+        staged
+            .scripts
+            .entries
+            .push(crate::script_binding::InstalledScriptBinding {
+                binding: ScriptBinding {
+                    category: 0,
+                    ordinal,
+                    script_id: rust_sid,
+                    script_index: i32::try_from(index).map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidData, "MAP script index exceeds i32")
+                    })?,
+                    owner_id: -1,
+                    path: Some(path),
+                    run_info: assets.script_run_info_by_index(index)?,
+                    local_variable_offset: -1,
+                    local_variable_count: 0,
+                },
+                instance_id: Some(instance_id),
+            });
         staged
             .script_owners
             .append_generated_system_script(ordinal, rust_sid)?;
-        staged.map_locals.add_generated_system_instance(instance_id)?;
+        staged
+            .map_locals
+            .add_generated_system_instance(instance_id)?;
         *environment = staged;
         Ok(Some((instance_id, rust_sid)))
     }

@@ -115,7 +115,9 @@ impl MapScriptLocals {
     /// Rust-only instance ID, not the original session-specific SID.
     pub fn add_generated_system_instance(&mut self, instance_id: u64) -> io::Result<()> {
         if self.instances.contains_key(&instance_id) {
-            return Err(invalid("generated CE system script repeats installed local ID"));
+            return Err(invalid(
+                "generated CE system script repeats installed local ID",
+            ));
         }
         self.instances.insert(
             instance_id,
