@@ -69,6 +69,10 @@ pub struct PreparedScriptEnvironment {
     /// staged through prepare_noncritical_map_action_transactional.
     /// Absent IDs retain their original initial action value zero.
     pub invocations: BTreeMap<u64, ScriptInvocationState>,
+    /// Source MAP actor key from a source-verified spatial scr_set_objs
+    /// event, paired with an explicit NULL target. Only that event
+    /// authorizes source_obj; unresolved handles fail closed on use.
+    pub spatial_sources: BTreeMap<u64, ObjectKey>,
 }
 
 /// Pure sandbox result from a CLONED CE local script preview.
@@ -177,6 +181,19 @@ impl PreparedScriptEnvironment {
             let owner = self
                 .script_owners
                 .resolution_for_instance(&self.scripts, id);
+
+            let source = self
+                .spatial_sources
+                .get(&id)
+                .map(|key| {
+                    self.object_queries.handle_for(*key).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "CE spatial source object handle unavailable",
+                        )
+                    })
+                })
+                .transpose()?;
             let event = ReadOnlyConditionEvent {
                 event: ScriptNativeEventSnapshot {
                     owner: ScriptNativeOwnerSnapshot {
@@ -186,8 +203,8 @@ impl PreparedScriptEnvironment {
                         },
                         resolution: owner,
                     },
-                    source: None,
-                    target: None,
+                    source,
+                    target: source.map(|_| 0),
                 },
                 invocation: self
                     .invocations
@@ -337,6 +354,18 @@ impl PreparedScriptEnvironment {
             invocation.set_fixed_parameter(parameter);
         }
         let mut next = self.clone();
+        let source = next
+            .spatial_sources
+            .get(&planned.instance_id)
+            .map(|key| {
+                next.object_queries.handle_for(*key).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "CE spatial critical event source handle unavailable",
+                    )
+                })
+            })
+            .transpose()?;
         let snapshot = ScriptNativeEventSnapshot {
             owner: ScriptNativeOwnerSnapshot {
                 native: ScriptNativeSnapshot {
@@ -345,8 +374,8 @@ impl PreparedScriptEnvironment {
                 },
                 resolution: Some(owner),
             },
-            source: None,
-            target: None,
+            source,
+            target: source.map(|_| 0),
         };
         let game = next.game_globals.as_mut().ok_or_else(|| {
             io::Error::new(
@@ -1288,6 +1317,7 @@ impl StaticScene {
             script_owners,
             map_last_visit_ticks: self.header.last_visit_time,
             invocations: BTreeMap::new(),
+            spatial_sources: BTreeMap::new(),
         })
     }
 
