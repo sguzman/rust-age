@@ -759,7 +759,9 @@ impl ScriptVm {
             return Ok(false);
         }
         if procedure.flags & 0x04 != 0 {
-            return Err(invalid("CE imported scheduled procedure host not installed"));
+            return Err(invalid(
+                "CE imported scheduled procedure host not installed",
+            ));
         }
         let mut next = self.clone();
         next.runtime_procedures[procedure_index].flags = 0;
@@ -1977,12 +1979,16 @@ mod tests {
         prefix[20..22].copy_from_slice(&0x8011_u16.to_be_bytes());
         let mut vm = synthetic_due_vm(&prefix, &body, 0x11);
         vm.runtime_procedures[1].event_time = 100;
-        assert!(!vm.prepare_due_timed_local_core_transactional(1, 100).unwrap());
+        assert!(!vm
+            .prepare_due_timed_local_core_transactional(1, 100)
+            .unwrap());
         assert_eq!(vm.pc(), 0);
         assert!(vm.stack().is_empty());
         assert!(vm.return_stack().is_empty());
         assert_eq!(vm.runtime_procedures()[1].flags, 0x11);
-        assert!(vm.prepare_due_timed_local_core_transactional(1, 101).unwrap());
+        assert!(vm
+            .prepare_due_timed_local_core_transactional(1, 101)
+            .unwrap());
         assert_eq!(vm.runtime_procedures()[1].flags, 0);
         assert_eq!(vm.runtime_procedures()[1].event_time, 100);
         assert_eq!(vm.pc(), 28);
@@ -1995,7 +2001,10 @@ mod tests {
                 ScriptValue::Int(0)
             ]
         );
-        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(0), ScriptValue::Int(20)]
+        );
         assert!(!vm.halted());
         assert!(!vm.critical_section());
         // No CE opcodes were run by the scheduler. The next interpreter
@@ -2006,7 +2015,10 @@ mod tests {
         vm.step().unwrap();
         assert_eq!(vm.pc(), 20);
         assert!(vm.halted());
-        assert_eq!(vm.halt_reason(), Some(super::ScriptHaltReason::ReturnFromCall));
+        assert_eq!(
+            vm.halt_reason(),
+            Some(super::ScriptHaltReason::ReturnFromCall)
+        );
     }
 
     #[test]
