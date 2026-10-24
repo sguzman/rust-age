@@ -2615,6 +2615,39 @@ mod tests {
         assert_eq!(fresh.game_globals.as_ref().unwrap().values(), [15, -13]);
         assert_eq!(scene.variables.globals, [12, -8]);
 
+        // Full map-load initialization preserves the pinned order:
+        // generated header MAP_ENTER, all installed START, non-header
+        // MAP_ENTER, then MAP_UPDATE. None of those later phases has a
+        // procedure in this single-script synthetic source.
+        let init = header_scene
+            .load_initial_script_lifecycle_bounded(&mut assets, context, 202, 5)
+            .unwrap();
+        assert_eq!(init.header_script, Some((1, 0)));
+        assert_eq!(init.header_enter.as_ref().unwrap().0.action, 15);
+        assert_eq!(init.header_enter.as_ref().unwrap().1, None);
+        assert!(init.start.is_empty());
+        assert!(init.enter.is_empty());
+        assert!(init.update.is_empty());
+        assert_eq!(init.environment.game_globals.as_ref().unwrap().values(), [7, -13]);
+        assert_eq!(init.environment.scripts.runtime.vm(1).unwrap().pc(), 20);
+        let mut ready = init.environment;
+        let tick = ready
+            .advance_script_state_tick_bounded(context, 202, 5, 0)
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(1, 5)]);
+        assert_eq!(ready.game_globals.as_ref().unwrap().values(), [15, -13]);
+        assert_eq!(scene.variables.globals, [12, -8]);
+
+        let without_header = scene
+            .load_initial_script_lifecycle_bounded(&mut assets, context, 203, 5)
+            .unwrap();
+        assert!(without_header.header_script.is_none());
+        assert!(without_header.header_enter.is_none());
+        assert!(without_header.start.is_empty());
+        assert!(without_header.enter.is_empty());
+        assert!(without_header.update.is_empty());
+        assert_eq!(without_header.environment.game_globals.unwrap().values(), [7, -13]);
+
         // A generated hidden owner must never turn into an invented
         // NULL object. SELF_OBJ fails in the same installed VM while
         // leaving Rust quest state and its PC untouched.
