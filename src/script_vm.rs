@@ -860,6 +860,56 @@ impl ScriptVm {
         Ok(true)
     }
 
+    /// Opt-in, core-only CE doEvents transaction, INCLUDING conditional
+    /// procedures. Scan ascending procedure indexes against one candidate
+    /// VM. Every supported condition executes bounded core bytecode while
+    /// saving/restoring the source PC and flags, but its data/return stack
+    /// and CALL_AT/CALL_WHEN metadata effects persist to later entries.
+    ///
+    /// A ready conditional procedure takes precedence over a due timed bit,
+    /// clears all its procedure flags and stages a local executeProc frame
+    /// for the NEXT interpreter burst; it does not execute its body here.
+    /// The source also prepares timed frames in this same ordered scan.
+    /// Imported/local-argument procedures, non-core native condition reads,
+    /// window and wait callbacks, and invalid return frames reject the full
+    /// cloned transaction. This deliberately does not reproduce CE's partial
+    /// side effects on interpreter error or actual game dispatch.
+    pub fn prepare_due_core_with_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<usize>> {
+        let mut candidate = self.clone();
+        candidate.clock_millis = now_millis as i32;
+        let mut prepared = Vec::new();
+        for index in 0..candidate.runtime_procedures.len() {
+            let entry = candidate.runtime_procedures[index];
+            if entry.flags & 0x02 != 0 {
+                let condition = candidate.preview_condition_frame_with_host_bounded(
+                    entry.condition_offset,
+                    max_steps_per_condition,
+                    &mut |_, _| Err(invalid("CE conditional native callback unavailable")),
+                )?;
+                // Original CE doEvents restores PC/flags while preserving
+                // stack, frame and procedure-table effects of the condition.
+                candidate.stack = condition.data_stack;
+                candidate.return_stack = condition.return_stack;
+                candidate.frame_pointer = condition.frame_pointer;
+                candidate.base_pointer = condition.base_pointer;
+                candidate.runtime_procedures = condition.procedures;
+                if condition.satisfied {
+                    candidate.runtime_procedures[index].flags = 0;
+                    candidate.stage_local_core_call_frame(index, false)?;
+                    prepared.push(index);
+                }
+            } else if candidate.prepare_due_timed_local_core_transactional(index, now_millis)? {
+                prepared.push(index);
+            }
+        }
+        *self = candidate;
+        Ok(prepared)
+    }
+
     /// Inspect the full candidate state after a source-derived local
     /// executeProc/setupCall frame returns, including procedure writes.
     /// All effects remain on a CLONE. Callers must only supply read-only

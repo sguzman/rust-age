@@ -512,6 +512,69 @@ impl ScriptRuntime {
         Ok(prepared)
     }
 
+    /// Persistent, core-only opt-in CE doEvents preparation including
+    /// bounded original INT conditional expressions. This does NOT execute
+    /// the resulting procedure body or any engine/game native callbacks.
+    /// All registered script instances commit together or not at all.
+    pub fn prepare_due_core_with_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        max_steps_per_condition: usize,
+    ) -> io::Result<Vec<DueProcedure>> {
+        if self.suspended {
+            return Ok(Vec::new());
+        }
+        let mut next = self.clone();
+        let mut prepared = Vec::new();
+        for program in &mut next.programs {
+            for procedure_index in program
+                .vm
+                .prepare_due_core_with_conditions_transactional_bounded(
+                    now_millis,
+                    max_steps_per_condition,
+                )?
+            {
+                prepared.push(DueProcedure {
+                    program_id: program.id,
+                    procedure_index,
+                });
+            }
+        }
+        *self = next;
+        Ok(prepared)
+    }
+
+    /// Explicit opt-in counterpart to advance_core_tick_transactional_bounded
+    /// for supported CORE-ONLY CE conditional bytecode. Source ordering is
+    /// updatePrograms interpreter bursts (newest registered program first),
+    /// THEN a single doEvents scan in the same order. Each condition's core
+    /// data/return stack and CALL_AT/CALL_WHEN changes persist on the staged
+    /// Rust VM; ready local procedure bodies run in later interpreter bursts.
+    ///
+    /// Unmodeled native reads, imported calls, parent/child and saved-world
+    /// effects remain hard errors. Conditional evaluation is bounded rather
+    /// than CE's original unbounded interpret(-1); failures roll back ALL
+    /// VM and scheduling changes across programs.
+    pub fn advance_core_tick_with_conditions_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let executed_steps = next.interpret_core_bursts_bounded(now_millis, cpu_burst)?;
+        let prepared_calls =
+            next.prepare_due_core_with_conditions_transactional_bounded(
+                now_millis,
+                max_steps_per_condition,
+            )?;
+        *self = next;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
     /// One explicit, transactional core-only subset of pinned CE
     /// updatePrograms: interpret each installed program in newest-first
     /// order for at most cpu_burst instructions, THEN call doEvents'
@@ -531,12 +594,26 @@ impl ScriptRuntime {
         now_millis: u32,
         cpu_burst: usize,
     ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let executed_steps = next.interpret_core_bursts_bounded(now_millis, cpu_burst)?;
+        let prepared_calls = next.prepare_due_timed_local_core_transactional(now_millis)?;
+        *self = next;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
+    fn interpret_core_bursts_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+    ) -> io::Result<Vec<(u64, usize)>> {
         if cpu_burst > 4096 {
             return Err(invalid("CE core tick CPU burst exceeds safety bound"));
         }
-        let mut next = self.clone();
-        let mut executed_steps = Vec::with_capacity(next.programs.len());
-        for program in &mut next.programs {
+        let mut executed_steps = Vec::with_capacity(self.programs.len());
+        for program in &mut self.programs {
             program.vm.set_clock_millis(now_millis as i32);
             program.vm.prepare_core_interpreter_entry();
             // Pinned CE interpret: if already critical with fewer than three
@@ -584,12 +661,7 @@ impl ScriptRuntime {
             program.vm.finish_core_interpreter_burst();
             executed_steps.push((program.id, steps));
         }
-        let prepared_calls = next.prepare_due_timed_local_core_transactional(now_millis)?;
-        *self = next;
-        Ok(PreparedCoreTick {
-            executed_steps,
-            prepared_calls,
-        })
+        Ok(executed_steps)
     }
 
     /// Synthetic-only bounded local interrupt procedure previews for due
