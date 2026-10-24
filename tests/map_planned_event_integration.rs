@@ -841,6 +841,88 @@ fn source_order_due_conditions_observe_native_game_time_advance_within_same_scan
     assert!(queue.is_empty());
 }
 
+fn critical_game_time_advance_vm(delta_ticks: i32) -> ScriptVm {
+    let mut body = Vec::new();
+    body.extend_from_slice(&0x801A_u16.to_be_bytes()); // setupCall argument
+    body.extend_from_slice(&0xC001_u16.to_be_bytes());
+    body.extend_from_slice(&0_i32.to_be_bytes()); // GAME_GLOBAL_VARS index
+    body.extend_from_slice(&0xC001_u16.to_be_bytes());
+    body.extend_from_slice(&delta_ticks.to_be_bytes());
+    body.extend_from_slice(&0x80FC_u16.to_be_bytes()); // GAME_TIME_ADVANCE
+    body.extend_from_slice(&0x80EA_u16.to_be_bytes()); // GAME_TIME
+    body.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+    body.extend_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
+    critical_map_enter_vm(&body)
+}
+
+#[test]
+fn critical_map_enter_native_game_time_advance_mutates_clock_and_quest_immediately() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = critical_game_time_advance_vm(864_000);
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let action = env
+        .scripts
+        .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap()[0];
+    let mut clock = ScriptGameClock { ticks: 100 };
+    let mut queue = EventQueue::new();
+    let count = env
+        .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+            &action,
+            &mut clock,
+            &mut queue,
+            100,
+            7,
+            2,
+        )
+        .unwrap();
+    assert_eq!(count, 7);
+    assert_eq!(clock.ticks, 864_100);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [864_100]);
+    assert!(queue.is_empty());
+    assert_eq!(env.scripts.runtime.vm(1).unwrap().pc(), 20);
+    assert!(!env.scripts.runtime.vm(1).unwrap().critical_section());
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 15);
+}
+
+#[test]
+fn critical_game_time_advance_due_queue_and_final_zero_poll_fail_atomically() {
+    for (budget, due) in [(2_usize, Some(864_100)), (1, None)] {
+        let mut env = environment();
+        *env.scripts.runtime.vm_mut(1).unwrap() = critical_game_time_advance_vm(864_000);
+        env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+        let action = env
+            .scripts
+            .plan_map_lifecycle(MapLifecyclePhase::Enter, 999, 0)
+            .unwrap()[0];
+        let mut clock = ScriptGameClock { ticks: 100 };
+        let mut queue = EventQueue::new();
+        if let Some(deadline) = due {
+            queue.add(0, deadline, EventType::Script, None, vec![]).unwrap();
+        }
+        let original_queue = queue.clone();
+        assert!(env
+            .execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+                &action,
+                &mut clock,
+                &mut queue,
+                100,
+                7,
+                budget,
+            )
+            .is_err());
+        assert_eq!(clock.ticks, 100);
+        assert_eq!(queue, original_queue);
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+        assert!(env.invocations.is_empty());
+        let vm = env.scripts.runtime.vm(1).unwrap();
+        assert_eq!(vm.pc(), 0);
+        assert!(vm.return_stack().is_empty());
+        assert!(vm.stack().is_empty());
+        assert!(!vm.critical_section());
+    }
+}
+
 #[test]
 fn planner_checks_owner_sid_instance_procedure_and_preserves_inert_vm() {
     let env = environment();
