@@ -2222,7 +2222,67 @@ impl StaticScene {
         now_millis: u32,
         max_critical_steps: usize,
     ) -> io::Result<LoadedMapScriptLifecycle> {
+        self.load_initial_script_lifecycle_with_quest_state_bounded(
+            assets,
+            None,
+            clock,
+            now_millis,
+            max_critical_steps,
+        )
+    }
+
+    /// Initialize another MAP in an existing Rust-owned game session
+    /// WITHOUT resetting quest flags to vault13.gam defaults.
+    ///
+    /// The original game-global variable bank belongs to the GAME, not to
+    /// individual MAP files: new MAP-local slots and script VMs are freshly
+    /// decoded, but every START / MAP_ENTER / MAP_UPDATE native opcode
+    /// observes the supplied previously mutated GAME_GLOBAL_VARS.
+    /// An available vault13.gam establishes the original slot count and
+    /// mismatched caller state fails closed instead of truncating it.
+    ///
+    /// The caller-owned bank is borrowed and NEVER changed, even if
+    /// startup fails; the returned environment owns a distinct committed
+    /// clone. This is in-memory quest continuity, not SAVE.DAT persistence.
+    pub fn load_initial_script_lifecycle_with_game_globals_bounded(
+        &self,
+        assets: &mut GameAssets,
+        current_game_globals: &GameGlobalState,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<LoadedMapScriptLifecycle> {
+        self.load_initial_script_lifecycle_with_quest_state_bounded(
+            assets,
+            Some(current_game_globals),
+            clock,
+            now_millis,
+            max_critical_steps,
+        )
+    }
+
+    fn load_initial_script_lifecycle_with_quest_state_bounded(
+        &self,
+        assets: &mut GameAssets,
+        current_game_globals: Option<&GameGlobalState>,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        max_critical_steps: usize,
+    ) -> io::Result<LoadedMapScriptLifecycle> {
         let mut environment = self.unstarted_script_environment(assets)?;
+        if let Some(globals) = current_game_globals {
+            if environment
+                .game_globals
+                .as_ref()
+                .is_some_and(|defaults| defaults.values().len() != globals.values().len())
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE cross-MAP quest global bank does not match installed vault13.gam",
+                ));
+            }
+            environment.game_globals = Some(globals.clone());
+        }
         let header_script = self.install_header_system_script(assets, &mut environment)?;
         let header_sid = header_script.map_or(-1, |(_, sid)| sid);
         let header_enter = if let Some((id, sid)) = header_script {
