@@ -17,6 +17,7 @@ use crate::script_binding::{
     ScriptProcedureBinding,
 };
 use crate::script_data::ScriptTables;
+use crate::script_lifecycle::MapLifecyclePhase;
 use crate::script_event_state::DetachedScriptEvent;
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_locals::{MapScriptChangeSummary, MapScriptLocals};
@@ -240,7 +241,25 @@ impl PreparedScriptEnvironment {
                 "CE critical MAP action requires immediate interpretation",
             ));
         }
-        let invocation = planned.detached_invocation()?;
+        // CE exec_script_proc updates the action and resets overrides,
+        // but leaves script->fixedParam unchanged unless the surrounding
+        // MAP_ENTER event explicitly sets it.
+        let mut invocation = self
+            .invocations
+            .get(&planned.instance_id)
+            .copied()
+            .unwrap_or_else(ScriptInvocationState::installed);
+        if !invocation.begin_action(i32::try_from(planned.action).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "CE MAP action outside i32")
+        })?) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "CE MAP lifecycle invocation is absent",
+            ));
+        }
+        if let Some(parameter) = planned.external_parameter {
+            invocation.set_fixed_parameter(parameter);
+        }
         let mut next = self.clone();
         let installed = next
             .scripts
@@ -261,6 +280,45 @@ impl PreparedScriptEnvironment {
         next.invocations.insert(planned.instance_id, invocation);
         *self = next;
         Ok(verified)
+    }
+
+    /// Prepare an entire original-order MAP lifecycle phase, using the
+    /// existing scr_exec_map_* selection rules and one atomic Rust-owned
+    /// transaction. A missing built-in procedure remains absent, not an
+    /// invented call. Each selected instance receives its source local
+    /// executeProc/setupCall frame and action/fixedParam state. The caller
+    /// can subsequently run advance_script_state_tick_bounded to interpret
+    /// these prepared NONCRITICAL procedure bodies.
+    ///
+    /// Unlike original CE, which may leave already-started scripts changed
+    /// after an error, a later unsupported critical/imported/argumented
+    /// procedure aborts the whole candidate without partial VM or invocation
+    /// writes. Duplicate instance entries fail instead of overwriting a
+    /// pending call frame. Critical lifecycle actions are NOT silently
+    /// deferred; they require synchronous interpret in the full port.
+    pub fn prepare_noncritical_map_lifecycle_transactional(
+        &mut self,
+        phase: MapLifecyclePhase,
+        map_script_id: i32,
+        map_flags: i32,
+    ) -> io::Result<Vec<PlannedLocalActionFrame>> {
+        let selected = self
+            .scripts
+            .plan_map_lifecycle(phase, map_script_id, map_flags)?;
+        let mut next = self.clone();
+        let mut staged = Vec::with_capacity(selected.len());
+        let mut seen = std::collections::BTreeSet::new();
+        for action in &selected {
+            if !seen.insert(action.instance_id) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE MAP lifecycle repeated one installed script instance",
+                ));
+            }
+            staged.push(next.prepare_noncritical_map_action_transactional(action)?);
+        }
+        *self = next;
+        Ok(staged)
     }
 
     /// Find the source-derived CE owner of an installed, unstarted Rust VM.
