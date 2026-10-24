@@ -4,13 +4,19 @@
 //! removeProgList and doEvents. Newly registered programs are visited first;
 //! procedure slots within one program are visited in their original order.
 //! This is NOT a gameplay event loop or program execution system.
+use crate::event_queue::EventQueue;
 use crate::game_globals::GameGlobalState;
+use crate::script_binding::BoundScriptRuntime;
 use crate::script_locals::MapScriptLocals;
 use crate::script_native_vars::{
     apply_mutable_condition_native_with_vars, apply_readonly_event_native_with_vars,
     ScriptInvocationState, ScriptNativeEventSnapshot,
 };
 use crate::script_procedures::{build_lookup_table, SCRIPT_PROC_NAMES};
+use crate::script_timer::{
+    apply_timer_native_opcode, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
+    REMOVE_TIMER_EVENT_OPCODE,
+};
 use crate::script_vm::{
     PreviewedDueProcedurePoll, PreviewedLocalActionVmFrame, ScriptValue, ScriptVm,
 };
@@ -828,6 +834,92 @@ impl ScriptRuntime {
         *self = next;
         *map = next_map;
         *game = next_game;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
+    /// Complete bounded core/allowlisted-native script tick with the
+    /// original CE add_timer_event and rm_timer_event opcodes sharing the
+    /// SAME cloned event queue as later doEvents condition evaluation.
+    /// Native event object handles must be verified against installed
+    /// original MAP owners and script IDs by the caller.
+    ///
+    /// Runtime, MAP local/global banks, quest-global bank and the caller's
+    /// queued events commit together. No external engine callback or
+    /// arbitrary timer owner pointer is ever constructed. The original
+    /// queue_process phase is deliberately separate and explicit.
+    pub fn advance_tick_with_mutable_native_timer_queue_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        map: &mut MapScriptLocals,
+        game: &mut GameGlobalState,
+        queue: &mut EventQueue,
+        now_game_ticks: i32,
+        bound: &BoundScriptRuntime,
+        timer_bindings: &[TimerObjectBinding],
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let mut next_map = map.clone();
+        let mut next_game = game.clone();
+        let mut next_queue = queue.clone();
+        let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
+            if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
+                apply_timer_native_opcode(
+                    bound,
+                    &mut next_queue,
+                    now_game_ticks,
+                    timer_bindings,
+                    opcode,
+                    stack,
+                )
+            } else {
+                let snapshot = events
+                    .get(&id)
+                    .ok_or_else(|| invalid("CE timer-aware interpreter event context unavailable"))?;
+                apply_mutable_condition_native_with_vars(
+                    snapshot.event,
+                    &snapshot.invocation,
+                    &mut next_map,
+                    &mut next_game,
+                    id,
+                    opcode,
+                    stack,
+                )
+            }
+        };
+        let executed_steps = next.interpret_native_bursts_bounded(
+            now_millis,
+            cpu_burst,
+            &mut host,
+        )?;
+        let mut prepared_calls = Vec::new();
+        if !next.suspended {
+            for program in &mut next.programs {
+                let id = program.id;
+                let due = program
+                    .vm
+                    .prepare_due_with_condition_host_transactional_bounded(
+                        now_millis,
+                        max_steps_per_condition,
+                        &mut |opcode, stack| host(id, opcode, stack),
+                    )?;
+                for procedure_index in due {
+                    prepared_calls.push(DueProcedure {
+                        program_id: id,
+                        procedure_index,
+                    });
+                }
+            }
+        }
+        *self = next;
+        *map = next_map;
+        *game = next_game;
+        *queue = next_queue;
         Ok(PreparedCoreTick {
             executed_steps,
             prepared_calls,
