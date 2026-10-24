@@ -20,6 +20,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
+      - name: Compare CE C++ and Rust persistent core conditional scheduling
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_core_condition_oracle.cc -o /tmp/rust-age-ce-core-conditions
+          /tmp/rust-age-ce-core-conditions tests/script_core_condition_cases.txt > /tmp/rust-age-ce-core-conditions.txt
+          cargo run --quiet --bin script_core_condition_probe > /tmp/rust-age-rust-core-conditions.txt
+          diff -u /tmp/rust-age-ce-core-conditions.txt /tmp/rust-age-rust-core-conditions.txt
       - name: Compare CE C++ and Rust first interpret clock sentinel
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_first_entry_oracle.cc -o /tmp/rust-age-ce-first-entry
