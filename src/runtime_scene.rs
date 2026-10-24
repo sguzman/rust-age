@@ -1224,7 +1224,14 @@ mod tests {
         bytes.extend_from_slice(&2_i32.to_be_bytes());
         for fields in [
             [4_i32, 0, 0, 0, 0, 0],
-            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, body_offset as i32, 0],
+            [
+                9_i32,
+                if critical { 0x10 } else { 0 },
+                0,
+                0,
+                body_offset as i32,
+                0,
+            ],
         ] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
