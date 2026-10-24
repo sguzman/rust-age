@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare C++ and Rust CE deferred timed local call preparation
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_due_prepare_oracle.cc -o /tmp/rust-age-ce-due-prepare
+          /tmp/rust-age-ce-due-prepare tests/script_due_prepare_cases.txt > /tmp/rust-age-ce-due-prepare.txt
+          cargo run --quiet --bin script_due_prepare_probe > /tmp/rust-age-rust-due-prepare.txt
+          diff -u /tmp/rust-age-ce-due-prepare.txt /tmp/rust-age-rust-due-prepare.txt
       - name: Compare C++ and Rust CE local core action transactional state
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_core_transaction_oracle.cc -o /tmp/rust-age-ce-core-transaction
