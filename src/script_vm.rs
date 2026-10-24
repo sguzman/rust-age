@@ -284,6 +284,17 @@ impl ScriptVm {
         self.halt_reason
     }
 
+    /// Complete one bounded interpret() burst after a POP_EXIT/POP_FLAGS_EXIT
+    /// return. Pinned CE interpret clears transient PROGRAM_FLAG_0x40
+    /// before restoring currentProgram and returning. Preserve EXITED and
+    /// STOPPED halts; only ReturnFromCall is a resumable transient marker.
+    pub(crate) fn finish_core_interpreter_burst(&mut self) {
+        if self.halt_reason == Some(ScriptHaltReason::ReturnFromCall) {
+            self.halted = false;
+            self.halt_reason = None;
+        }
+    }
+
     /// Only the CE program flag bits modeled by this detached interpreter.
     /// This is NOT the full original Program::flags register.
     pub fn modeled_program_low_flags(&self) -> u16 {
@@ -1969,6 +1980,25 @@ mod tests {
             vm.preview_local_action_core_bounded(0, 6).unwrap(),
             Some(ScriptValue::Int(37))
         );
+    }
+
+    #[test]
+    fn ce_bounded_interpret_burst_clears_only_transient_return_flag() {
+        let mut returned = local_return_fixture(0, 0x8021, 0, 0, 0, 36);
+        assert_eq!(returned.run_bounded(6).unwrap(), 6);
+        assert!(returned.halted());
+        assert_eq!(returned.halt_reason(), Some(super::ScriptHaltReason::ReturnFromCall));
+        returned.finish_core_interpreter_burst();
+        assert!(!returned.halted());
+        assert_eq!(returned.halt_reason(), None);
+        assert_eq!(returned.pc(), 36);
+        assert!(returned.return_stack().is_empty());
+
+        let mut stopped = ScriptVm::new(fixture(&[0x80, 0x11]));
+        stopped.step().unwrap();
+        stopped.finish_core_interpreter_burst();
+        assert!(stopped.halted());
+        assert_eq!(stopped.halt_reason(), Some(super::ScriptHaltReason::StopProgram));
     }
 
     #[test]

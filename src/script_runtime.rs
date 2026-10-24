@@ -546,6 +546,14 @@ impl ScriptRuntime {
                 program.vm.step()?;
                 steps += 1;
             }
+            if program.vm.critical_section() {
+                return Err(invalid(
+                    "CE critical section cannot be suspended by bounded core tick",
+                ));
+            }
+            // CE interpret returns to updatePrograms after clearing
+            // transient PROGRAM_FLAG_0x40. Keep real STOP/EXIT terminal.
+            program.vm.finish_core_interpreter_burst();
             executed_steps.push((program.id, steps));
         }
         let prepared_calls = next.prepare_due_timed_local_core_transactional(now_millis)?;
@@ -992,7 +1000,32 @@ mod tests {
         assert_eq!(later.executed_steps, [(2, 2), (1, 2)]);
         assert_eq!(runtime.vm(1).unwrap().pc(), 20);
         assert_eq!(runtime.vm(1).unwrap().return_stack(), [ScriptValue::Int(2)]);
-        assert!(runtime.vm(1).unwrap().halted());
+        assert!(!runtime.vm(1).unwrap().halted());
+        assert_eq!(runtime.vm(1).unwrap().halt_reason(), None);
+    }
+
+    #[test]
+    fn ce_core_tick_rejects_interrupted_critical_section_but_allows_completion() {
+        let mut bytes = vec![0_u8; 42];
+        // Enter and then leave the CE critical section before this script
+        // can yield a CPU burst. The bounded adapter rejects the partial
+        // first instruction rather than committing a fictitious CE yield.
+        bytes[..4].copy_from_slice(&[0x80, 0x02, 0x80, 0x03]);
+        bytes.extend_from_slice(&[0_u8; 12]);
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(1, ScriptVm::new(ScriptProgram::decode(&bytes).unwrap()))
+            .unwrap();
+        assert!(runtime.advance_core_tick_transactional_bounded(1, 1).is_err());
+        assert_eq!(runtime.vm(1).unwrap().pc(), 0);
+        assert!(!runtime.vm(1).unwrap().critical_section());
+        let complete = runtime
+            .advance_core_tick_transactional_bounded(1, 2)
+            .unwrap();
+        assert_eq!(complete.executed_steps, [(1, 2)]);
+        assert!(complete.prepared_calls.is_empty());
+        assert_eq!(runtime.vm(1).unwrap().pc(), 4);
+        assert!(!runtime.vm(1).unwrap().critical_section());
     }
 
     #[test]
