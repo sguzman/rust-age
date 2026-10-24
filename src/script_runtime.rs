@@ -1579,7 +1579,9 @@ mod tests {
 
     fn readonly_condition_vm(native: u16) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
-        bytes[0..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+        // Four valid main interpreter NOPs before the detached condition.
+        // Native state ticks may execute these before polling doEvents.
+        bytes[0..8].copy_from_slice(&[0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00]);
         bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
         bytes[22..26].copy_from_slice(&0_i32.to_be_bytes());
         bytes[26..28].copy_from_slice(&native.to_be_bytes());
