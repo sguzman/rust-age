@@ -1517,23 +1517,24 @@ mod tests {
 
     #[test]
     fn sequential_conditions_retain_stack_for_later_procedure_in_same_poll() {
-        let mut bytes = vec![0_u8; 62];
-        bytes[0..2].copy_from_slice(&0x8000_u16.to_be_bytes());
-        bytes[20..22].copy_from_slice(&0xC001_u16.to_be_bytes());
-        bytes[22..26].copy_from_slice(&77_i32.to_be_bytes());
-        bytes[26..28].copy_from_slice(&0xC001_u16.to_be_bytes());
-        bytes[28..32].copy_from_slice(&0_i32.to_be_bytes());
-        bytes[32..34].copy_from_slice(&0x8011_u16.to_be_bytes());
-        bytes[36..38].copy_from_slice(&0xC001_u16.to_be_bytes());
-        bytes[38..42].copy_from_slice(&77_i32.to_be_bytes());
-        bytes[42..44].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
-        bytes[44..46].copy_from_slice(&0x8011_u16.to_be_bytes());
-        bytes[52..56].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        // Synthetic INT instructions must fit the source's fixed 42-byte
+        // preamble; the procedure table starts at byte offset 42.
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&77_i32.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&0_i32.to_be_bytes());
+        bytes[12..14].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[14..16].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[16..20].copy_from_slice(&77_i32.to_be_bytes());
+        bytes[20..22].copy_from_slice(&0x8033_u16.to_be_bytes()); // EQUAL
+        bytes[22..24].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes[28..32].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
         bytes.extend_from_slice(&3_i32.to_be_bytes());
         for fields in [
             [4_i32, 0, 0, 0, 0, 0],
-            [9_i32, 0x02, 0, 20, 52, 0],
-            [13_i32, 0x02, 0, 36, 52, 0],
+            [9_i32, 0x02, 0, 0, 28, 0],
+            [13_i32, 0x02, 0, 14, 28, 0],
         ] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
@@ -1557,7 +1558,7 @@ mod tests {
             }]
         );
         let vm = rt.vm(7).unwrap();
-        assert_eq!(vm.pc(), 52);
+        assert_eq!(vm.pc(), 28);
         assert_eq!(vm.runtime_procedures()[1].flags, 0x02);
         assert_eq!(vm.runtime_procedures()[2].flags, 0);
         assert_eq!(vm.stack().len(), 4); // zero-arg call frame
