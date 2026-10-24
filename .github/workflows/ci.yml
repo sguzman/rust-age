@@ -140,6 +140,12 @@ jobs:
           /tmp/rust-age-ce-due-mutation tests/script_due_mutation_cases.txt > /tmp/rust-age-ce-due-mutation.txt
           cargo run --quiet --bin script_due_mutation_probe > /tmp/rust-age-rust-due-mutation.txt
           diff -u /tmp/rust-age-ce-due-mutation.txt /tmp/rust-age-rust-due-mutation.txt
+      - name: Compare C++ and Rust CE same-tick CALL_AT and CANCEL decisions
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror tests/script_same_tick_schedule_oracle.cc -o /tmp/rust-age-ce-same-tick
+          /tmp/rust-age-ce-same-tick tests/script_same_tick_schedule_cases.txt > /tmp/rust-age-ce-same-tick.txt
+          cargo run --quiet --bin script_same_tick_schedule_probe > /tmp/rust-age-rust-same-tick.txt
+          diff -u /tmp/rust-age-ce-same-tick.txt /tmp/rust-age-rust-same-tick.txt
       - name: Compare C++ and Rust bounded CE critical interpreter bursts
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror tests/script_critical_burst_oracle.cc -o /tmp/rust-age-ce-critical
