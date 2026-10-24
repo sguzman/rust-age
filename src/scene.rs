@@ -528,7 +528,47 @@ impl PreparedScriptEnvironment {
         &self,
         planned: &PlannedMapAction,
     ) -> io::Result<PlannedLocalActionFrame> {
-        let _ = self.detached_event_for_planned(planned)?;
+        if planned.category == 1
+            && planned.action == 2
+            && self.spatial_sources.contains_key(&planned.instance_id)
+        {
+            // A real CE spatial script may have a runtime-synthesized
+            // self owner which this subset cannot invent. Authorize its
+            // *separate* scr_set_objs source/NULL target only when the
+            // spatial script record and actual source actor key are
+            // unambiguous. The self_obj native still fails closed.
+            let source = self.spatial_sources[&planned.instance_id];
+            if self.object_queries.handle_for(source).is_none() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE spatial action has an unbound MAP source object",
+                ));
+            }
+            let mut entries = self
+                .scripts
+                .entries
+                .iter()
+                .filter(|entry| entry.instance_id == Some(planned.instance_id));
+            let entry = entries.next().ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned spatial MAP instance missing",
+                )
+            })?;
+            if entries.next().is_some()
+                || entry.binding.script_id != planned.script_id
+                || entry.binding.category != planned.category
+                || entry.binding.ordinal != planned.ordinal
+                || self.owner_for_instance(planned.instance_id).is_none()
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "CE planned spatial record identity or owner changed",
+                ));
+            }
+        } else {
+            let _ = self.detached_event_for_planned(planned)?;
+        }
         let frame = self
             .scripts
             .runtime
