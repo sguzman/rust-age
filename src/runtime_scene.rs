@@ -426,13 +426,7 @@ mod tests {
         assert_eq!(environment.game_globals.as_ref().unwrap().values(), [0]);
 
         let executed = world
-            .advance_script_state_with_current_scene_bounded(
-                &mut environment,
-                clock,
-                102,
-                5,
-                5,
-            )
+            .advance_script_state_with_current_scene_bounded(&mut environment, clock, 102, 5, 5)
             .unwrap();
         assert_eq!(executed.executed_steps, [(1, 5)]);
         assert_eq!(environment.game_globals.as_ref().unwrap().values(), [1]);
