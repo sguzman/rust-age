@@ -191,6 +191,93 @@ impl RuntimeScene {
         Ok((step, tick))
     }
 
+    /// Apply scr_chk_spatials_in's source-ordered spatial script
+    /// matching when an actual visible/non-flat MAP actor moves, then
+    /// run the installed bounded CE script tick on its new properties.
+    ///
+    /// The original script record must identify a valid installed VM.
+    /// scr_set_objs(script->sid, actor, NULL) uses a verified ObjectKey
+    /// and NULL target; the opaque source handle is refreshed for reads.
+    /// Critical spatial procedures run immediately, while noncritical
+    /// procedures create deferred local CE call frames.
+    ///
+    /// This runs on cloned scene, route, collision and script/quest
+    /// state. Any failure rolls back all of them, unlike original CE
+    /// error side effects. Mouse cursors, explicit engine spatial-disable
+    /// state, nested movement natives, visuals and saves remain unsupported.
+    pub fn advance_actor_with_spatial_events_transactional_bounded(
+        &mut self,
+        view: &HexViewport,
+        route: &mut ActorRoute,
+        environment: &mut PreparedScriptEnvironment,
+        clock: ScriptClockContext,
+        budget: ScriptTickBudget,
+    ) -> io::Result<SpatialActorTick> {
+        let mut candidate_world = self.clone();
+        let mut candidate_route = route.clone();
+        let step = candidate_world.advance_actor(view, &mut candidate_route)?;
+        let mut state = candidate_world.refreshed_script_environment(environment)?;
+        let mut spatial = Vec::new();
+        if let ActorStep::Moved { tile, .. } = step {
+            let key = candidate_route.actor_key();
+            let header = &candidate_world
+                .snapshot
+                .objects
+                .elevations
+                .get(key.elevation)
+                .and_then(|objects| objects.get(key.ordinal))
+                .ok_or_else(|| invalid("CE moving spatial source actor disappeared"))?
+                .record
+                .header;
+            // CE skips OBJECT_HIDDEN and OBJECT_FLAT spatial sources.
+            // Mouse cursors cannot appear in the decoded MAP object table.
+            if header.flags & (0x01 | 0x08) == 0 {
+                let selected = state.scripts.plan_spatial_at(
+                    &candidate_world.snapshot.scripts,
+                    view,
+                    tile,
+                    key.elevation,
+                )?;
+                let mut seen = std::collections::BTreeSet::new();
+                for action in selected {
+                    if !seen.insert(action.instance_id) {
+                        return Err(invalid(
+                            "CE spatial dispatch repeated one installed interpreter",
+                        ));
+                    }
+                    state.spatial_sources.insert(action.instance_id, key);
+                    let critical = state.local_frame_for_planned(&action)?.critical;
+                    let executed = if critical {
+                        Some(state.execute_critical_map_action_transactional_bounded(
+                            &action,
+                            clock,
+                            budget.now_millis,
+                            4096,
+                        )?)
+                    } else {
+                        state.prepare_noncritical_map_action_transactional(&action)?;
+                        None
+                    };
+                    spatial.push((action, executed));
+                }
+            }
+        }
+        let tick = state.advance_script_state_tick_bounded(
+            clock,
+            budget.now_millis,
+            budget.cpu_burst,
+            budget.max_steps_per_condition,
+        )?;
+        *self = candidate_world;
+        *route = candidate_route;
+        *environment = state;
+        Ok(SpatialActorTick {
+            actor: step,
+            spatial,
+            tick,
+        })
+    }
+
     pub fn plan_actor(
         &self,
         view: &HexViewport,
