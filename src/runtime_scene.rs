@@ -1306,7 +1306,12 @@ mod tests {
         };
         let (action, executed) = world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
             )
             .unwrap()
             .unwrap();
@@ -1340,10 +1345,13 @@ mod tests {
         assert!(world
             .dispatch_object_action_transactional_bounded(
                 &mut env,
-                (source, ObjectKey {
-                    elevation: 0,
-                    ordinal: 99
-                }),
+                (
+                    source,
+                    ObjectKey {
+                        elevation: 0,
+                        ordinal: 99
+                    }
+                ),
                 6,
                 clock,
                 25,
@@ -1353,19 +1361,34 @@ mod tests {
         assert!(env.spatial_sources.is_empty());
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 23, clock, 25, 100,
+                &mut env,
+                (source, target),
+                23,
+                clock,
+                25,
+                100,
             )
             .is_err());
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, source), 6, clock, 25, 100,
+                &mut env,
+                (source, source),
+                6,
+                clock,
+                25,
+                100,
             )
             .unwrap()
             .is_none());
         assert!(env.spatial_sources.is_empty());
         let (_, executed) = world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
             )
             .unwrap()
             .unwrap();
@@ -1398,7 +1421,12 @@ mod tests {
         };
         assert!(world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
             )
             .is_err());
         assert!(env.spatial_sources.is_empty());
