@@ -167,7 +167,8 @@ impl MapScriptOwners {
         rust_sid: i32,
         handle: i32,
     ) -> io::Result<()> {
-        if handle <= 0 || !(0..32000).contains(&rust_sid)
+        if handle <= 0
+            || !(0..32000).contains(&rust_sid)
             || self.entries.iter().any(|entry| entry.script_id == rust_sid)
             || self
                 .entries
