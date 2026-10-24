@@ -7,8 +7,8 @@
 //! processes an event, or invokes a game script.
 use crate::event_queue::{EventQueue, EventType};
 use crate::script_binding::BoundScriptRuntime;
-use crate::script_timer::ScriptTimerEvent;
 use crate::script_clock::ScriptGameClock;
+use crate::script_timer::ScriptTimerEvent;
 use crate::script_vm::ScriptValue;
 use std::io;
 
@@ -132,11 +132,7 @@ pub fn apply_game_time_advance_with_inert_timers_opcode(
     remaining_queue_polls: &mut usize,
 ) -> io::Result<()> {
     let mut pending_stack = stack.clone();
-    let plan = plan_game_time_advance_opcode(
-        opcode,
-        &mut pending_stack,
-        *remaining_queue_polls,
-    )?;
+    let plan = plan_game_time_advance_opcode(opcode, &mut pending_stack, *remaining_queue_polls)?;
     let mut pending_clock = *clock;
     let mut pending_queue = queue.clone();
     for &increment in plan.increments_before_queue_process() {

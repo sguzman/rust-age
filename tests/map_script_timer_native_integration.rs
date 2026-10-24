@@ -389,7 +389,13 @@ fn critical_game_time_advance_consumes_missing_sid_timer_before_scheduling_new_e
     let mut clock = ScriptGameClock { ticks: 100 };
     let mut queue = EventQueue::new();
     queue
-        .add(0, 864_100, EventType::Script, Some(OWNER), missing_timer_payload())
+        .add(
+            0,
+            864_100,
+            EventType::Script,
+            Some(OWNER),
+            missing_timer_payload(),
+        )
         .unwrap();
     queue
         .add(0, 864_200, EventType::Drug, Some(OWNER), vec![])
@@ -420,7 +426,13 @@ fn missing_sid_timer_before_due_foreign_event_rolls_back_both_records() {
     let mut clock = ScriptGameClock { ticks: 100 };
     let mut queue = EventQueue::new();
     queue
-        .add(0, 864_100, EventType::Script, Some(OWNER), missing_timer_payload())
+        .add(
+            0,
+            864_100,
+            EventType::Script,
+            Some(OWNER),
+            missing_timer_payload(),
+        )
         .unwrap();
     queue
         .add(0, 864_100, EventType::Drug, Some(OWNER), vec![])
@@ -451,7 +463,13 @@ fn installed_sid_without_timed_procedure_is_not_silently_discarded() {
     let mut clock = ScriptGameClock { ticks: 100 };
     let mut queue = EventQueue::new();
     queue
-        .add(0, 864_100, EventType::Script, Some(OWNER), timed_payload(11))
+        .add(
+            0,
+            864_100,
+            EventType::Script,
+            Some(OWNER),
+            timed_payload(11),
+        )
         .unwrap();
     let original = queue.clone();
     assert!(env
@@ -476,13 +494,17 @@ fn running_ce_game_time_advance_still_rejects_executable_script_due_callback() {
     let mut clock = ScriptGameClock { ticks: 100 };
     let mut queue = EventQueue::new();
     queue
-        .add(0, 864_100, EventType::Script, Some(OWNER), timed_payload(11))
+        .add(
+            0,
+            864_100,
+            EventType::Script,
+            Some(OWNER),
+            timed_payload(11),
+        )
         .unwrap();
     let before = queue.clone();
     assert!(env
-        .advance_script_state_with_game_time_no_due_bounded(
-            &mut queue, &mut clock, 1000, 3, 0, 2,
-        )
+        .advance_script_state_with_game_time_no_due_bounded(&mut queue, &mut clock, 1000, 3, 0, 2,)
         .is_err());
     assert_eq!(queue, before);
     assert_eq!(clock.ticks, 100);
