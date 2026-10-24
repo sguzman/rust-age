@@ -36,7 +36,7 @@ use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
     ReadOnlyConditionEvent, TimerNativeTickContext,
 };
-use crate::script_time_advance::TimeAdvancePlan;
+use crate::script_time_advance::{plan_game_time_advance_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE};
 use crate::script_timer::{
     apply_timer_native_opcode, ScriptTimerEvent, TimerObjectBinding, ADD_TIMER_EVENT_OPCODE,
     REMOVE_TIMER_EVENT_OPCODE,
@@ -89,6 +89,15 @@ pub struct ScriptTimeAdvanceBudget {
     pub max_queue_polls: usize,
     pub max_events_per_poll: usize,
     pub max_critical_steps: usize,
+}
+
+/// Internal bounded time host for CE immediate critical executeProc. An
+/// explicit writable game clock is required for 0x80FC, unlike legacy
+/// fixed-clock event entrypoints which continue to reject that opcode.
+struct CriticalNativeTime<'a> {
+    sample: ScriptClockContext,
+    writable: Option<&'a mut ScriptGameClock>,
+    max_queue_polls: usize,
 }
 
 /// Verified chunk sequence: every signed game-time increment is followed
@@ -565,6 +574,38 @@ impl PreparedScriptEnvironment {
         )
     }
 
+    /// Source-derived 0x80FC support while executing an immediate
+    /// CRITICAL MAP procedure. Unlike ordinary fixed-clock calls, this
+    /// explicitly owns a writable game clock and script event queue.
+    /// All source daily/remainder queue_process polls must be empty;
+    /// reentrant due callbacks are still unsupported and roll back
+    /// every script, MAP/quest, clock and queued-event change.
+    pub fn execute_critical_map_action_with_game_time_no_due_transactional_bounded(
+        &mut self,
+        planned: &PlannedMapAction,
+        clock: &mut ScriptGameClock,
+        queue: &mut EventQueue,
+        now_millis: u32,
+        max_steps: usize,
+        max_queue_polls: usize,
+    ) -> io::Result<usize> {
+        let snapshot = ScriptClockContext {
+            clock: *clock,
+            last_visit_ticks: Some(self.map_last_visit_ticks),
+        };
+        self.execute_critical_map_action_with_clock_transactional_bounded(
+            planned,
+            CriticalNativeTime {
+                sample: snapshot,
+                writable: Some(clock),
+                max_queue_polls,
+            },
+            now_millis,
+            max_steps,
+            Some(queue),
+        )
+    }
+
     /// Internal critical native host that can also route original timer
     /// queue add/remove callbacks. The queue and script/quest state are
     /// separately cloned before any interpreter bytecode executes.
@@ -578,6 +619,31 @@ impl PreparedScriptEnvironment {
         max_steps: usize,
         timer_queue: Option<&mut EventQueue>,
     ) -> io::Result<usize> {
+        self.execute_critical_map_action_with_clock_transactional_bounded(
+            planned,
+            CriticalNativeTime {
+                sample: clock,
+                writable: None,
+                max_queue_polls: 0,
+            },
+            now_millis,
+            max_steps,
+            timer_queue,
+        )
+    }
+
+    fn execute_critical_map_action_with_clock_transactional_bounded(
+        &mut self,
+        planned: &PlannedMapAction,
+        time: CriticalNativeTime<'_>,
+        now_millis: u32,
+        max_steps: usize,
+        timer_queue: Option<&mut EventQueue>,
+    ) -> io::Result<usize> {
+        let clock = time.sample;
+        let mut writable_clock = time.writable;
+        let mut updated_clock = clock.clock;
+        let mut remaining_queue_polls = time.max_queue_polls;
         let verified = self.local_frame_for_planned(planned)?;
         if !verified.critical {
             return Err(io::Error::new(
@@ -676,7 +742,44 @@ impl PreparedScriptEnvironment {
                 now_millis,
                 max_steps,
                 &mut |opcode, stack| {
-                    if opcode == ADD_TIMER_EVENT_OPCODE || opcode == REMOVE_TIMER_EVENT_OPCODE {
+                    if opcode == GAME_TIME_ADVANCE_OPCODE {
+                        if writable_clock.is_none() {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "CE critical native game-time mutation requires writable clock",
+                            ));
+                        }
+                        let queue = queued.as_mut().ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "CE critical game_time_advance requires an owned event queue",
+                            )
+                        })?;
+                        let plan = plan_game_time_advance_opcode(
+                            opcode,
+                            stack,
+                            remaining_queue_polls,
+                        )?;
+                        remaining_queue_polls -= plan.queue_polls();
+                        for &increment in plan.increments_before_queue_process() {
+                            updated_clock.ticks =
+                                updated_clock.ticks.checked_add(increment).ok_or_else(|| {
+                                    io::Error::new(
+                                        io::ErrorKind::InvalidData,
+                                        "CE critical game_time_advance signed clock overflow",
+                                    )
+                                })?;
+                            if queue.pop_due(updated_clock.ticks).is_some() {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "CE critical game_time_advance due event needs reentrant dispatch",
+                                ));
+                            }
+                        }
+                        Ok(())
+                    } else if opcode == ADD_TIMER_EVENT_OPCODE
+                        || opcode == REMOVE_TIMER_EVENT_OPCODE
+                    {
                         let queue = queued.as_mut().ok_or_else(|| {
                             io::Error::new(
                                 io::ErrorKind::InvalidData,
@@ -686,14 +789,16 @@ impl PreparedScriptEnvironment {
                         apply_timer_native_opcode(
                             &bound,
                             queue,
-                            clock.clock.ticks,
+                            updated_clock.ticks,
                             &timer_bindings,
                             opcode,
                             stack,
                         )
                     } else {
+                        let mut current_snapshot = snapshot;
+                        current_snapshot.owner.native.clock.clock = updated_clock;
                         apply_mutable_condition_native_with_vars(
-                            snapshot,
+                            current_snapshot,
                             &invocation,
                             &mut next.map_locals,
                             game,
@@ -713,6 +818,9 @@ impl PreparedScriptEnvironment {
         next.invocations.insert(planned.instance_id, invocation);
         if let (Some(original), Some(staged)) = (timer_queue, queued) {
             *original = staged;
+        }
+        if let Some(original_clock) = writable_clock.as_deref_mut() {
+            *original_clock = updated_clock;
         }
         *self = next;
         Ok(executed)
