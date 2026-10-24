@@ -255,13 +255,19 @@ fn entire_map_enter_phase_stages_source_order_and_fixed_param_atomically() {
         .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Enter, 999, 0)
         .unwrap();
     assert_eq!(
-        staged.iter().map(|frame| frame.program_id).collect::<Vec<_>>(),
+        staged
+            .iter()
+            .map(|frame| frame.program_id)
+            .collect::<Vec<_>>(),
         [1, 2]
     );
     for id in [1, 2] {
         let vm = env.scripts.runtime.vm(id).unwrap();
         assert_eq!(vm.pc(), 20);
-        assert_eq!(vm.return_stack(), [ScriptValue::Int(0), ScriptValue::Int(20)]);
+        assert_eq!(
+            vm.return_stack(),
+            [ScriptValue::Int(0), ScriptValue::Int(20)]
+        );
         assert_eq!(env.invocations.get(&id).unwrap().action(), 15);
         assert_eq!(env.invocations.get(&id).unwrap().fixed_parameter(), 1);
     }
@@ -295,6 +301,69 @@ fn failed_later_critical_lifecycle_action_rolls_back_all_prepared_scripts() {
     assert!(duplicate.invocations.is_empty());
     assert_eq!(duplicate.scripts.runtime.vm(1).unwrap().pc(), 0);
     assert_eq!(duplicate.scripts.runtime.vm(2).unwrap().pc(), 0);
+}
+
+fn synthetic_enter_update_vm() -> ScriptVm {
+    let mut bytes = vec![0_u8; 42];
+    bytes[..2].copy_from_slice(&0x8000_u16.to_be_bytes());
+    bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+    bytes[24..26].copy_from_slice(&0x801A_u16.to_be_bytes());
+    bytes[26..28].copy_from_slice(&0xC001_u16.to_be_bytes());
+    bytes[28..32].copy_from_slice(&0_i32.to_be_bytes());
+    bytes[32..34].copy_from_slice(&0x80F7_u16.to_be_bytes()); // FIXED_PARAM
+    bytes[34..36].copy_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+    bytes[36..38].copy_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
+    bytes.extend_from_slice(&3_i32.to_be_bytes());
+    let mut strings = Vec::new();
+    for (name, body) in [
+        (b"main".as_slice(), 0_i32),
+        (b"map_enter_p_proc".as_slice(), 20_i32),
+        (b"map_update_p_proc".as_slice(), 24_i32),
+    ] {
+        let offset = 4 + strings.len() as i32;
+        for field in [offset, 0, 0, 0, body, 0] {
+            bytes.extend_from_slice(&field.to_be_bytes());
+        }
+        strings.extend_from_slice(name);
+        strings.push(0);
+    }
+    bytes.extend_from_slice(&(strings.len() as i32).to_be_bytes());
+    bytes.extend_from_slice(&strings);
+    bytes.extend_from_slice(&0_i32.to_be_bytes());
+    ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+}
+
+#[test]
+fn map_update_retains_prior_enter_fixed_parameter_during_native_execution() {
+    let mut env = environment();
+    *env.scripts.runtime.vm_mut(1).unwrap() = synthetic_enter_update_vm();
+    env.game_globals = Some(GameGlobalState::from_initial_values(&[0]).unwrap());
+    let enter = env
+        .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Enter, 999, 0)
+        .unwrap();
+    assert_eq!(enter.len(), 1);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 1);
+    let clock = ScriptClockContext {
+        clock: ScriptGameClock { ticks: 0 },
+        last_visit_ticks: Some(0),
+    };
+    let first = env.advance_script_state_tick_bounded(clock, 100, 2, 0).unwrap();
+    assert_eq!(first.executed_steps, [(1, 2)]);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
+
+    // CE does not clear fixedParam when scr_exec_map_update_scripts
+    // selects a subsequent built-in procedure. Its native opcode must
+    // observe the previous MAP_ENTER flag-derived value.
+    let update = env
+        .prepare_noncritical_map_lifecycle_transactional(MapLifecyclePhase::Update, 999, 0)
+        .unwrap();
+    assert_eq!(update.len(), 1);
+    assert_eq!(update[0].procedure_index, 2);
+    assert_eq!(env.invocations.get(&1).unwrap().action(), 23);
+    assert_eq!(env.invocations.get(&1).unwrap().fixed_parameter(), 1);
+    let tick = env.advance_script_state_tick_bounded(clock, 101, 5, 0).unwrap();
+    assert_eq!(tick.executed_steps, [(1, 5)]);
+    assert_eq!(env.game_globals.as_ref().unwrap().values(), [1]);
 }
 
 #[test]
