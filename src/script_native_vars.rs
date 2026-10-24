@@ -570,8 +570,9 @@ pub fn apply_mutable_condition_native_with_vars(
         LOCAL_VAR_OPCODE | SET_LOCAL_VAR_OPCODE | MAP_VAR_OPCODE | SET_MAP_VAR_OPCODE => {
             apply_map_variable_opcode(map, instance_id, opcode, stack)
         }
-        crate::game_globals::GLOBAL_VAR_OPCODE
-        | crate::game_globals::SET_GLOBAL_VAR_OPCODE => game.apply_opcode(opcode, stack),
+        crate::game_globals::GLOBAL_VAR_OPCODE | crate::game_globals::SET_GLOBAL_VAR_OPCODE => {
+            game.apply_opcode(opcode, stack)
+        }
         _ => apply_readonly_event_native_opcode(snapshot, invocation, opcode, stack),
     }
 }

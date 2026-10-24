@@ -1747,11 +1747,7 @@ mod tests {
         let events = readonly_condition_events(&[1, 2]);
         let prepared = runtime
             .prepare_due_with_mutable_conditions_transactional_bounded(
-                100,
-                5,
-                &mut map,
-                &mut game,
-                &events,
+                100, 5, &mut map, &mut game, &events,
             )
             .unwrap();
         assert_eq!(
@@ -1771,11 +1767,7 @@ mod tests {
         // without re-running a cleared conditional procedure.
         assert!(runtime
             .prepare_due_with_mutable_conditions_transactional_bounded(
-                101,
-                5,
-                &mut map,
-                &mut game,
-                &events,
+                101, 5, &mut map, &mut game, &events,
             )
             .unwrap()
             .is_empty());
@@ -1802,11 +1794,7 @@ mod tests {
         assert_eq!(map.locals(), []);
         let prepared = runtime
             .prepare_due_with_mutable_conditions_transactional_bounded(
-                100,
-                8,
-                &mut map,
-                &mut game,
-                &events,
+                100, 8, &mut map, &mut game, &events,
             )
             .unwrap();
         assert_eq!(prepared.len(), 1);
@@ -1833,11 +1821,7 @@ mod tests {
         let events = readonly_condition_events(&[1, 2]);
         assert!(runtime
             .prepare_due_with_mutable_conditions_transactional_bounded(
-                100,
-                5,
-                &mut map,
-                &mut game,
-                &events,
+                100, 5, &mut map, &mut game, &events,
             )
             .is_err());
         assert_eq!(game.values(), [0]);
