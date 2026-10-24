@@ -2717,10 +2717,8 @@ mod tests {
         // Entering a second original MAP must NOT reinitialize quest
         // globals to vault13.gam defaults. The caller keeps ownership of
         // its previous bank; startup scripts see a cloned continuation.
-        let prior_game = crate::game_globals::GameGlobalState::from_initial_values(
-            &[333, 888],
-        )
-        .unwrap();
+        let prior_game =
+            crate::game_globals::GameGlobalState::from_initial_values(&[333, 888]).unwrap();
         let carried = header_scene
             .load_initial_script_lifecycle_with_game_globals_bounded(
                 &mut assets,
@@ -2746,8 +2744,7 @@ mod tests {
         assert_eq!(prior_game.values(), [333, 888]);
         assert_eq!(scene.variables.globals, [12, -8]);
 
-        let bad_game = crate::game_globals::GameGlobalState::from_initial_values(&[7])
-            .unwrap();
+        let bad_game = crate::game_globals::GameGlobalState::from_initial_values(&[7]).unwrap();
         assert!(header_scene
             .load_initial_script_lifecycle_with_game_globals_bounded(
                 &mut assets,
