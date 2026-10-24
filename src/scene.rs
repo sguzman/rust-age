@@ -1103,6 +1103,7 @@ mod tests {
         );
         assert_eq!(environment.game_globals.unwrap().values(), [7, -13]);
         assert_eq!(scene.variables.globals, [12, -8]); // game globals stay separate.
+
         // An installed MAP-owned Rust VM now reaches the transactional
         // normal CE interpreter tick through PreparedScriptEnvironment.
         // The synthetic INT writes a source-backed GAME_GLOBAL_VARS slot,
@@ -1130,10 +1131,13 @@ mod tests {
             local_variable_offset: -1,
             local_variable_count: 0,
         };
-        active.scripts.entries.push(crate::script_binding::InstalledScriptBinding {
-            binding,
-            instance_id: Some(1),
-        });
+        active
+            .scripts
+            .entries
+            .push(crate::script_binding::InstalledScriptBinding {
+                binding,
+                instance_id: Some(1),
+            });
         active.map_locals = active.scripts.script_local_state(&scene.variables).unwrap();
         let mut map_scripts = crate::script_data::ScriptTables {
             categories: std::array::from_fn(|_| Vec::new()),
