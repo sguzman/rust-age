@@ -244,6 +244,8 @@ pub struct ScriptVm {
     frame_pointer: i32,
     base_pointer: i32,
     critical_section: bool,
+    // Pinned CE checkWait callback timing, gated to core tick only.
+    core_wait: Option<(u32, u32)>,
     halted: bool,
     halt_reason: Option<ScriptHaltReason>,
 }
@@ -261,6 +263,7 @@ impl ScriptVm {
             frame_pointer: -1,
             base_pointer: -1,
             critical_section: false,
+            core_wait: None,
             halted: false,
             halt_reason: None,
         }
@@ -299,6 +302,9 @@ impl ScriptVm {
     /// This is NOT the full original Program::flags register.
     pub fn modeled_program_low_flags(&self) -> u16 {
         let mut flags = if self.critical_section { 0x80 } else { 0 };
+        if self.core_wait.is_some() {
+            flags |= 0x10; // PROGRAM_IS_WAITING, pinned intrpret.h
+        }
         if let Some(reason) = self.halt_reason {
             // Original interpret clears PROGRAM_FLAG_0x40 after a
             // POP_EXIT return before the caller observes program flags.
@@ -323,6 +329,26 @@ impl ScriptVm {
 
     pub fn critical_section(&self) -> bool {
         self.critical_section
+    }
+
+    /// The saved source WAIT start/end in unsigned scaled clock milliseconds.
+    /// This does not represent arbitrary CE wait callback pointers.
+    pub fn core_wait_state(&self) -> Option<(u32, u32)> {
+        self.core_wait
+    }
+
+    /// CE interpret polls checkWait before fetching an opcode. The pinned
+    /// callback returns true on now <= waitEnd; preserve its exact predicate
+    /// (even though it is counterintuitive) rather than inventing sleep semantics.
+    /// A false result consumes interpreter budget but executes no instruction.
+    pub(crate) fn poll_core_wait(&mut self) -> bool {
+        if let Some((_, end)) = self.core_wait {
+            if (self.clock_millis as u32) > end {
+                return false;
+            }
+            self.core_wait = None;
+        }
+        true
     }
 
     /// Deterministic CE timer snapshot in milliseconds; no wall clock used.
@@ -1131,6 +1157,19 @@ impl ScriptVm {
     }
 
     pub fn step(&mut self) -> io::Result<()> {
+        self.step_core(false)
+    }
+
+    /// Explicit clocked WAIT subset for the transactional interpreter tick.
+    /// Generic bounded core/native previews continue to reject WAIT.
+    pub(crate) fn step_core_with_wait(&mut self) -> io::Result<()> {
+        self.step_core(true)
+    }
+
+    fn step_core(&mut self, allow_clock_wait: bool) -> io::Result<()> {
+        if self.core_wait.is_some() && !allow_clock_wait {
+            return Err(invalid("CE WAIT state requires clocked core tick"));
+        }
         if self.halted {
             return Ok(());
         }
@@ -1436,6 +1475,14 @@ impl ScriptVm {
                     ScriptValue::Int(value) => ScriptValue::Int(value),
                     _ => return Err(invalid("non-numeric CE FLOOR operand")),
                 })?;
+            }
+            0x47 if allow_clock_wait => {
+                // Pinned CE op_wait stores scaled timer milliseconds in two
+                // unsigned fields and installs the built-in checkWait.
+                // The core tick supplies already-scaled deterministic time.
+                let duration = self.pop_int()?;
+                let start = self.clock_millis as u32;
+                self.core_wait = Some((start, start.wrapping_add(duration as u32)));
             }
             0x48 => {
                 let index = self.pop_int()?;

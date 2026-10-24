@@ -67,7 +67,8 @@ pub struct PreviewedProgramDuePoll {
 /// Bounded, core-only source-order interpreter tick result.
 /// CE updatePrograms first interprets each program (newest first), then
 /// doEvents prepares due procedure calls. Original engine-native libraries,
-/// program cleanup, wait callbacks and game-world effects are unavailable.
+/// program cleanup, arbitrary wait callbacks and game-world effects are unavailable.
+/// executed_steps counts executed opcodes, excluding blocked WAIT polls.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedCoreTick {
     pub executed_steps: Vec<(u64, usize)>,
@@ -520,8 +521,9 @@ impl ScriptRuntime {
     /// not run until a later interpreter burst.
     ///
     /// Conditional events, native engine opcodes, window callbacks,
-    /// imported procedures, CE wait handling and program removal are
-    /// unsupported. The entire tick is staged on a clone and committed
+    /// imported procedures, arbitrary CE wait callbacks and program removal
+    /// are unsupported. Only pinned CE op_wait/checkWait against an explicit
+    /// scaled clock is modeled; its original <= predicate is preserved. The entire tick is staged on a clone and committed
     /// only after every supported program and timed call succeeds. The
     /// atomic error policy differs deliberately from original CE.
     pub fn advance_core_tick_transactional_bounded(
@@ -566,8 +568,10 @@ impl ScriptRuntime {
                 } else {
                     remaining -= 1;
                 }
-                program.vm.step()?;
-                steps += 1;
+                if program.vm.poll_core_wait() {
+                    program.vm.step_core_with_wait()?;
+                    steps += 1;
+                }
             }
             if program.vm.critical_section() {
                 return Err(invalid(
@@ -967,6 +971,71 @@ mod tests {
             unsupported.vm(3).unwrap().runtime_procedures()[1].flags,
             0x03
         );
+    }
+
+
+    fn core_wait_vm(duration: i32, after_wait_opcode: u16) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&duration.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0x8047_u16.to_be_bytes());
+        bytes[8..10].copy_from_slice(&after_wait_opcode.to_be_bytes());
+        bytes[10..12].copy_from_slice(&0x8011_u16.to_be_bytes());
+        bytes.extend_from_slice(&[0_u8; 12]); // empty source procedure table
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn clocked_ce_wait_uses_pinned_checkwait_predicate_and_counts_real_opcodes() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(77, core_wait_vm(5, 0x8000)).unwrap();
+        let first = runtime.advance_core_tick_transactional_bounded(1000, 2).unwrap();
+        assert_eq!(first.executed_steps, [(77, 2)]);
+        assert_eq!(runtime.vm(77).unwrap().core_wait_state(), Some((1000, 1005)));
+        assert_eq!(runtime.vm(77).unwrap().modeled_program_low_flags() & 0x10, 0x10);
+        assert_eq!(runtime.vm(77).unwrap().pc(), 8);
+
+        // Pinned checkWait returns false after the deadline, so the CE
+        // interpreter skips the opcode while consuming finite CPU budget.
+        let blocked = runtime.advance_core_tick_transactional_bounded(1006, 3).unwrap();
+        assert_eq!(blocked.executed_steps, [(77, 0)]);
+        assert_eq!(runtime.vm(77).unwrap().pc(), 8);
+        assert_eq!(runtime.vm(77).unwrap().core_wait_state(), Some((1000, 1005)));
+
+        // Back inside the source predicate, the wait clears and execution
+        // resumes. This records the original behavior, not an intended sleep.
+        let resumed = runtime.advance_core_tick_transactional_bounded(1005, 1).unwrap();
+        assert_eq!(resumed.executed_steps, [(77, 1)]);
+        assert_eq!(runtime.vm(77).unwrap().pc(), 10);
+        assert_eq!(runtime.vm(77).unwrap().core_wait_state(), None);
+        assert_eq!(runtime.vm(77).unwrap().modeled_program_low_flags() & 0x10, 0);
+        runtime.advance_core_tick_transactional_bounded(1007, 1).unwrap();
+        assert!(runtime.vm(77).unwrap().halted());
+    }
+
+    #[test]
+    fn ce_wait_wraparound_and_unsupported_followup_are_atomic() {
+        let mut runtime = ScriptRuntime::new();
+        runtime.register(3, core_wait_vm(-1, 0x8000)).unwrap();
+        runtime.advance_core_tick_transactional_bounded(0, 2).unwrap();
+        assert_eq!(runtime.vm(3).unwrap().core_wait_state(), Some((0, u32::MAX)));
+        runtime.advance_core_tick_transactional_bounded(u32::MAX, 1).unwrap();
+        assert_eq!(runtime.vm(3).unwrap().pc(), 10);
+        assert_eq!(runtime.vm(3).unwrap().core_wait_state(), None);
+
+        let mut rejected = ScriptRuntime::new();
+        rejected.register(9, core_wait_vm(3, 0x80FC)).unwrap();
+        assert!(rejected.advance_core_tick_transactional_bounded(30, 3).is_err());
+        let original = rejected.vm(9).unwrap();
+        assert_eq!(original.pc(), 0);
+        assert_eq!(original.core_wait_state(), None);
+        assert!(original.stack().is_empty());
+
+        // Only the explicit tick may invoke the clocked WAIT handler.
+        let mut direct = core_wait_vm(2, 0x8000);
+        direct.step().unwrap();
+        assert!(direct.step().is_err());
+        assert_eq!(direct.core_wait_state(), None);
     }
 
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
