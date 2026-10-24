@@ -13,7 +13,12 @@ fn fixture(mode: &str, seconds: i32) -> Result<ScriptVm, Box<dyn Error>> {
         bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
         bytes[8..12].copy_from_slice(&1_i32.to_be_bytes());
         bytes[12..14].copy_from_slice(
-            &if mode == "WHEN" { 0x8007_u16 } else { 0x8006_u16 }.to_be_bytes(),
+            &if mode == "WHEN" {
+                0x8007_u16
+            } else {
+                0x8006_u16
+            }
+            .to_be_bytes(),
         );
         bytes[14..16].copy_from_slice(&0x8011_u16.to_be_bytes());
     } else if mode == "CANCEL" {
@@ -26,7 +31,10 @@ fn fixture(mode: &str, seconds: i32) -> Result<ScriptVm, Box<dyn Error>> {
     }
     bytes[20..24].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
     bytes.extend_from_slice(&2_i32.to_be_bytes());
-    for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, i32::from(mode == "CANCEL"), 0, 0, 20, 0]] {
+    for fields in [
+        [4_i32, 0, 0, 0, 0, 0],
+        [9_i32, i32::from(mode == "CANCEL"), 0, 0, 20, 0],
+    ] {
         for field in fields {
             bytes.extend_from_slice(&field.to_be_bytes());
         }
@@ -42,7 +50,9 @@ fn simulate(mode: &str, seconds: i32, now: u32) -> Result<String, Box<dyn Error>
     runtime.register(7, fixture(mode, seconds)?)?;
     let burst = if mode == "CANCEL" { 2 } else { 3 };
     let result = runtime.advance_core_tick_transactional_bounded(now, burst);
-    let vm = runtime.vm(7).ok_or("installed CE synthetic script missing")?;
+    let vm = runtime
+        .vm(7)
+        .ok_or("installed CE synthetic script missing")?;
     match result {
         Ok(tick) => {
             if tick.executed_steps != [(7, burst)]
