@@ -1216,7 +1216,7 @@ mod tests {
             })
             .to_be_bytes(),
         );
-        let mut bytes = vec![0_u8; 42];
+        let mut bytes = vec![0_u8; 20 + body.len()];
         bytes[20..20 + body.len()].copy_from_slice(&body);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
         for fields in [
