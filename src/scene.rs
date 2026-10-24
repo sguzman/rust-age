@@ -2819,9 +2819,13 @@ mod tests {
             .unwrap();
         let vm = unbound.scripts.runtime.vm_mut(id).unwrap();
         let mut object_int = vec![0_u8; 42];
-        object_int[20..22].copy_from_slice(&0x801A_u16.to_be_bytes());
-        object_int[22..24].copy_from_slice(&0x80BC_u16.to_be_bytes());
-        object_int[24..26].copy_from_slice(&0x8021_u16.to_be_bytes());
+        object_int[20..22].copy_from_slice(&0x801A_u16.to_be_bytes()); // POP action arg
+        object_int[22..24].copy_from_slice(&0xC001_u16.to_be_bytes()); // PUSH index
+        object_int[24..28].copy_from_slice(&0_i32.to_be_bytes());
+        object_int[28..30].copy_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
+        object_int[30..32].copy_from_slice(&0x8100_u16.to_be_bytes()); // OBJ_PID
+        object_int[32..34].copy_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
+        object_int[34..36].copy_from_slice(&0x8021_u16.to_be_bytes()); // POP_FLAGS_EXIT
         object_int.extend_from_slice(&2_i32.to_be_bytes());
         let mut offsets = Vec::new();
         for (name, body) in [
@@ -2852,14 +2856,11 @@ mod tests {
             )
             .unwrap();
         let self_tick = unbound
-            .advance_script_state_tick_bounded(context, 201, 3, 0)
+            .advance_script_state_tick_bounded(context, 201, 6, 0)
             .unwrap();
-        assert_eq!(self_tick.executed_steps, [(id, 3)]);
-        assert_eq!(
-            unbound.scripts.runtime.vm(id).unwrap().stack(),
-            [crate::script_vm::ScriptValue::Pointer(1)]
-        );
-        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [7, -13]);
+        assert_eq!(self_tick.executed_steps, [(id, 6)]);
+        assert!(unbound.scripts.runtime.vm(id).unwrap().stack().is_empty());
+        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [-1, -13]);
         assert_eq!(unbound.scripts.runtime.vm(id).unwrap().pc(), 20);
         assert_eq!(unbound.map_locals.locals(), [99]);
 
@@ -2881,7 +2882,7 @@ mod tests {
             .advance_script_state_tick_bounded(context, 202, 5, 0)
             .unwrap();
         assert_eq!(target_tick.executed_steps, [(id, 5)]);
-        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [7, -1]);
+        assert_eq!(unbound.game_globals.as_ref().unwrap().values(), [-1, -1]);
         assert_eq!(unbound.map_locals.locals(), [99]);
 
         fs::remove_file(root.join("data").join("VAULT13.GAM")).unwrap();
