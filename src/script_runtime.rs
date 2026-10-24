@@ -1101,6 +1101,60 @@ mod tests {
         }
     }
 
+    fn core_wait_after_call_at_vm(delay_seconds: i32) -> ScriptVm {
+        let mut bytes = vec![0_u8; 42];
+        bytes[0..2].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[2..6].copy_from_slice(&delay_seconds.to_be_bytes());
+        bytes[6..8].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[8..12].copy_from_slice(&1_i32.to_be_bytes());
+        bytes[12..14].copy_from_slice(&0x8006_u16.to_be_bytes()); // CALL_AT
+        bytes[14..16].copy_from_slice(&0xC001_u16.to_be_bytes());
+        bytes[16..20].copy_from_slice(&5_i32.to_be_bytes());
+        bytes[20..24].copy_from_slice(&[0x80, 0x47, 0x80, 0x11]); // WAIT, STOP
+        bytes[32..36].copy_from_slice(&[0x80, 0x1A, 0x80, 0x21]);
+        bytes.extend_from_slice(&2_i32.to_be_bytes());
+        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, 0, 0, 0, 32, 0]] {
+            for field in fields {
+                bytes.extend_from_slice(&field.to_be_bytes());
+            }
+        }
+        bytes.extend_from_slice(&11_i32.to_be_bytes());
+        bytes.extend_from_slice(b"main\0start\0");
+        bytes.extend_from_slice(&0_i32.to_be_bytes());
+        ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
+    }
+
+    #[test]
+    fn due_setup_does_not_silently_discard_ce_wait_callback_flags() {
+        let mut deferred = ScriptRuntime::new();
+        deferred
+            .register(1, core_wait_after_call_at_vm(10))
+            .unwrap();
+        let tick = deferred
+            .advance_core_tick_transactional_bounded(1001, 5)
+            .unwrap();
+        assert_eq!(tick.executed_steps, [(1, 5)]);
+        assert!(tick.prepared_calls.is_empty());
+        let vm = deferred.vm(1).unwrap();
+        assert_eq!(vm.pc(), 22);
+        assert_eq!(vm.core_wait_state(), Some((1001, 1006)));
+        assert_eq!(vm.runtime_procedures()[1].flags, 1);
+
+        // Source setupCall saves flags and checkWait callback state. Its
+        // null-host subset cannot yet restore a WAIT-bearing call frame.
+        // Reject the entire tick instead of inventing a dropped WAIT flag.
+        let mut due = ScriptRuntime::new();
+        due.register(1, core_wait_after_call_at_vm(-1)).unwrap();
+        assert!(due
+            .advance_core_tick_transactional_bounded(1001, 5)
+            .is_err());
+        let unchanged = due.vm(1).unwrap();
+        assert_eq!(unchanged.pc(), 0);
+        assert_eq!(unchanged.core_wait_state(), None);
+        assert_eq!(unchanged.runtime_procedures()[1].flags, 0);
+        assert!(unchanged.return_stack().is_empty());
+    }
+
     fn tick_local_vm(flags: i32, time: i32, invalid_start: bool) -> ScriptVm {
         let mut bytes = vec![0_u8; 42];
         // Built-in NOPs at PC=0 and PC=2, then CE 0x8011 STOP_PROGRAM.
