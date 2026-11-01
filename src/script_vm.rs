@@ -1822,8 +1822,7 @@ impl ScriptVm {
                 | 0x80F7
                 | 0x80FC
                 | 0x8100
-                | 0x812D..=0x8130
-                | 0x8149
+                | 0x812D..=0x8130 | 0x8149
         ) && !(0x80C1..=0x80C7).contains(&opcode)
             && !(0x8118..=0x8119).contains(&opcode)
             && opcode != 0x811B
