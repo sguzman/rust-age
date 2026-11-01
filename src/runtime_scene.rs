@@ -6,6 +6,7 @@
 use crate::actor_route::{ActorRoute, ActorStep};
 use crate::collision::ObjectKey;
 use crate::hex::HexViewport;
+use crate::object_data::ObjectUpdate;
 use crate::scene::{PreparedScriptEnvironment, StaticScene};
 use crate::script_lifecycle::PlannedMapAction;
 use crate::script_native_vars::ScriptClockContext;
@@ -16,6 +17,11 @@ use crate::script_vm::ScriptValue;
 use std::io;
 
 const SET_OBJ_VISIBILITY_OPCODE: u16 = 0x80E3;
+const OBJ_IS_LOCKED_OPCODE: u16 = 0x812D;
+const OBJ_LOCK_OPCODE: u16 = 0x812E;
+const OBJ_UNLOCK_OPCODE: u16 = 0x812F;
+const OBJ_IS_OPEN_OPCODE: u16 = 0x8130;
+const OBJ_LOCKED: i32 = 0x0200_0000;
 const OBJECT_HIDDEN: i32 = 0x01;
 const OBJECT_NO_BLOCK: i32 = 0x10;
 
@@ -204,7 +210,7 @@ impl RuntimeScene {
             cpu_burst,
             max_steps_per_condition,
             &mut |_: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
-                next_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+                next_world.apply_world_object_native(&bindings, opcode, stack)
             },
         )?;
         *self = next_world;
@@ -314,7 +320,7 @@ impl RuntimeScene {
                         let bindings = state.object_queries.clone();
                         let mut native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
                             candidate_world
-                                .apply_set_obj_visibility_native(&bindings, opcode, stack)
+                                .apply_world_object_native(&bindings, opcode, stack)
                         };
                         Some(
                             state.execute_critical_map_action_with_world_natives_transactional_bounded(
@@ -349,6 +355,96 @@ impl RuntimeScene {
             spatial,
             tick,
         })
+    }
+
+    /// Source CE protinst.cc object lock/open state, using the current
+    /// serialized MAP record. Item locks occupy ObjectData.flags;
+    /// scenery door locks occupy the first serialized subtype word.
+    /// Unrepresented data, inventory children and unbound handles fail closed.
+    fn apply_lock_and_open_native(
+        &mut self,
+        bindings: &MapObjectReadBindings,
+        opcode: u16,
+        stack: &mut Vec<ScriptValue>,
+    ) -> io::Result<bool> {
+        if !matches!(
+            opcode,
+            OBJ_IS_LOCKED_OPCODE | OBJ_LOCK_OPCODE | OBJ_UNLOCK_OPCODE | OBJ_IS_OPEN_OPCODE
+        ) {
+            return Ok(false);
+        }
+        let Some(ScriptValue::Pointer(handle)) = stack.last().copied() else {
+            return Err(invalid("CE lock/open requires typed object pointer"));
+        };
+        let query = matches!(opcode, OBJ_IS_LOCKED_OPCODE | OBJ_IS_OPEN_OPCODE);
+        if handle == 0 {
+            stack.pop();
+            if query {
+                stack.push(ScriptValue::Int(0));
+            }
+            return Ok(true);
+        }
+        let key = bindings
+            .key_for(handle)
+            .ok_or_else(|| invalid("CE lock/open pointer does not belong to MAP"));
+        let key = key?;
+        let object = self
+            .snapshot
+            .objects
+            .elevations
+            .get_mut(key.elevation)
+            .and_then(|row| row.get_mut(key.ordinal))
+            .ok_or_else(|| invalid("CE lock/open target disappeared"))?;
+        let kind = (object.record.header.pid >> 24) & 0x0F;
+        let result = if opcode == OBJ_IS_OPEN_OPCODE {
+            Some(i32::from(object.record.header.frame != 0))
+        } else {
+            let field = match (kind, &mut object.record.update) {
+                (0, ObjectUpdate::Generic { flags, .. }) => Some(flags),
+                (2, ObjectUpdate::Generic { subtype_fields, .. }) => {
+                    Some(subtype_fields.first_mut().ok_or_else(|| {
+                        invalid("CE scenery lock flags are not represented")
+                    })?)
+                }
+                (0 | 2, _) => return Err(invalid("CE object lock data type mismatch")),
+                _ => None,
+            };
+            match opcode {
+                OBJ_IS_LOCKED_OPCODE => Some(i32::from(
+                    field.as_ref().is_some_and(|flags| **flags & OBJ_LOCKED != 0),
+                )),
+                OBJ_LOCK_OPCODE => {
+                    if let Some(flags) = field {
+                        *flags |= OBJ_LOCKED;
+                    }
+                    None
+                }
+                OBJ_UNLOCK_OPCODE => {
+                    if let Some(flags) = field {
+                        *flags &= !OBJ_LOCKED;
+                    }
+                    None
+                }
+                _ => unreachable!(),
+            }
+        };
+        stack.pop();
+        if let Some(value) = result {
+            stack.push(ScriptValue::Int(value));
+        }
+        Ok(true)
+    }
+
+    fn apply_world_object_native(
+        &mut self,
+        bindings: &MapObjectReadBindings,
+        opcode: u16,
+        stack: &mut Vec<ScriptValue>,
+    ) -> io::Result<bool> {
+        if self.apply_lock_and_open_native(bindings, opcode, stack)? {
+            return Ok(true);
+        }
+        self.apply_set_obj_visibility_native(bindings, opcode, stack)
     }
 
     /// Source CE op_set_obj_visibility (0x80E3) mutates the current
@@ -485,7 +581,7 @@ impl RuntimeScene {
         let executed = if frame.critical {
             let bindings = candidate.object_queries.clone();
             let mut world_native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
-                candidate_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+                candidate_world.apply_world_object_native(&bindings, opcode, stack)
             };
             Some(
                 candidate.execute_critical_map_action_with_world_natives_transactional_bounded(
