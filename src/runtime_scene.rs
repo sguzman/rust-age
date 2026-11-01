@@ -311,12 +311,19 @@ impl RuntimeScene {
                     state.spatial_sources.insert(action.instance_id, key);
                     let critical = state.local_frame_for_planned(&action)?.critical;
                     let executed = if critical {
-                        Some(state.execute_critical_map_action_transactional_bounded(
-                            &action,
-                            clock,
-                            budget.now_millis,
-                            4096,
-                        )?)
+                        let bindings = state.object_queries.clone();
+                        let mut native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
+                            candidate_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+                        };
+                        Some(
+                            state.execute_critical_map_action_with_world_natives_transactional_bounded(
+                                &action,
+                                clock,
+                                budget.now_millis,
+                                4096,
+                                &mut native,
+                            )?,
+                        )
                     } else {
                         state.prepare_noncritical_map_action_transactional(&action)?;
                         None
