@@ -442,7 +442,7 @@ impl RuntimeScene {
         let frame = candidate.local_frame_for_planned(&planned)?;
         let executed = if frame.critical {
             let bindings = candidate.object_queries.clone();
-            let mut world_native = |opcode, stack| {
+            let mut world_native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
                 candidate_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
             };
             Some(
