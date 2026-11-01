@@ -209,6 +209,8 @@ impl PreviewedSandboxAction {
 /// An explicit scr_set_objs(source, NULL) inherits an installed script's
 /// verified owner when exec_script_proc begins. Unresolved spatial owners
 /// remain NULL targets; this does not fabricate a hidden engine Object.
+type WorldNativeHandler<'a> = &'a mut dyn FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<bool>;
+
 fn target_for_explicit_source(
     owner: Option<ScriptOwnerResolution>,
     source: Option<i32>,
@@ -731,7 +733,7 @@ impl PreparedScriptEnvironment {
         now_millis: u32,
         max_steps: usize,
         timer_queue: Option<&mut EventQueue>,
-        mut world_native: Option<&mut dyn FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<bool>>,
+        mut world_native: Option<WorldNativeHandler<'_>>,
     ) -> io::Result<usize> {
         let clock = time.sample;
         let writable_clock = time.writable;
