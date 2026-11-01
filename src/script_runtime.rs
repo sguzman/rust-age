@@ -856,6 +856,74 @@ impl ScriptRuntime {
         })
     }
 
+    /// Execute one installed script tick with a source-owned MAP world
+    /// native adapter. The host is called only for explicit original native
+    /// opcodes and returns false to delegate to the existing mutable
+    /// MAP/quest/event adapters. Main interpreter bursts and due conditions
+    /// observe effects in original newest-program-first order.
+    ///
+    /// Script VM and MAP/quest banks are staged transactionally here; the
+    /// caller MUST also stage and commit the external world independently.
+    pub fn advance_tick_with_mutable_world_native_state_transactional_bounded(
+        &mut self,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        map: &mut MapScriptLocals,
+        game: &mut GameGlobalState,
+        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
+        world_native: &mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next = self.clone();
+        let mut next_map = map.clone();
+        let mut next_game = game.clone();
+        let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
+            if world_native(id, opcode, stack)? {
+                return Ok(());
+            }
+            let snapshot = events
+                .get(&id)
+                .ok_or_else(|| invalid("CE world-native event context unavailable"))?;
+            apply_mutable_condition_native_with_vars(
+                snapshot.event,
+                &snapshot.invocation,
+                &mut next_map,
+                &mut next_game,
+                id,
+                opcode,
+                stack,
+            )
+        };
+        let executed_steps =
+            next.interpret_native_bursts_bounded(now_millis, cpu_burst, &mut host)?;
+        let mut prepared_calls = Vec::new();
+        if !next.suspended {
+            for program in &mut next.programs {
+                let id = program.id;
+                let due = program
+                    .vm
+                    .prepare_due_with_condition_host_transactional_bounded(
+                        now_millis,
+                        max_steps_per_condition,
+                        &mut |opcode, stack| host(id, opcode, stack),
+                    )?;
+                for procedure_index in due {
+                    prepared_calls.push(DueProcedure {
+                        program_id: id,
+                        procedure_index,
+                    });
+                }
+            }
+        }
+        *self = next;
+        *map = next_map;
+        *game = next_game;
+        Ok(PreparedCoreTick {
+            executed_steps,
+            prepared_calls,
+        })
+    }
+
     /// Complete bounded core/allowlisted-native script tick with the
     /// original CE add_timer_event and rm_timer_event opcodes sharing the
     /// SAME cloned event queue as later doEvents condition evaluation.
