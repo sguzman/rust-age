@@ -1867,7 +1867,7 @@ mod tests {
             .unwrap();
         assert_eq!(result.spatial.len(), 1);
         assert_eq!(result.spatial[0].1, Some(5));
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 1);
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 0x11);
         assert_eq!(world.snapshot().collision.tile_of(source), Some(20098));
         assert!(world.snapshot().collision.first_blocker(&view, 20098, 0, None).is_none());
     }
