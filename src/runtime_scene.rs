@@ -2089,7 +2089,7 @@ mod tests {
                 &mut env, (source, target), 6, clock, 25, 100,
             ).unwrap();
             let flags = match &world.snapshot().objects.elevations[0][1].record.update {
-                ObjectUpdate::Generic { flags, subtype_fields } if scenery => subtype_fields[0],
+                ObjectUpdate::Generic { subtype_fields, .. } if scenery => subtype_fields[0],
                 ObjectUpdate::Generic { flags, .. } => *flags,
                 _ => panic!("unexpected object update"),
             };
