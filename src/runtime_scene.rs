@@ -345,7 +345,7 @@ impl RuntimeScene {
             .ok_or_else(|| invalid("CE set_obj_visibility target disappeared"))?
             .record
             .header;
-        let critter = ((header.pid as u32 >> 24) & 0x0F) == 1;
+        let critter = ((header.pid >> 24) & 0x0F) == 1;
         let mut flags = header.flags;
         if invisible != 0 && flags & OBJECT_HIDDEN == 0 {
             flags |= OBJECT_HIDDEN;
