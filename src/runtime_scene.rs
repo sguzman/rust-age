@@ -1543,7 +1543,12 @@ mod tests {
         );
     }
 
-    fn visibility_vm(critical: bool, on_source: bool, invisible: i32, invalid_tail: bool) -> ScriptVm {
+    fn visibility_vm(
+        critical: bool,
+        on_source: bool,
+        invisible: i32,
+        invalid_tail: bool,
+    ) -> ScriptVm {
         // Pinned op_set_obj_visibility pops visibility first, then object.
         // The script uses an actually verified source or owner pointer.
         let mut body = Vec::new();
@@ -1556,7 +1561,10 @@ mod tests {
         let mut bytes = vec![0_u8; 42];
         bytes[20..20 + body.len()].copy_from_slice(&body);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
-        for fields in [[4_i32, 0, 0, 0, 0, 0], [9_i32, if critical { 0x10 } else { 0 }, 0, 0, 20, 0]] {
+        for fields in [
+            [4_i32, 0, 0, 0, 0, 0],
+            [9_i32, if critical { 0x10 } else { 0 }, 0, 0, 20, 0],
+        ] {
             for field in fields {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }
@@ -1576,7 +1584,10 @@ mod tests {
         let (world, mut env) = object_action_fixture(critical, false, false, b"use_p_proc");
         let mut runtime = ScriptRuntime::new();
         runtime
-            .register(7, visibility_vm(critical, on_source, invisible, invalid_tail))
+            .register(
+                7,
+                visibility_vm(critical, on_source, invisible, invalid_tail),
+            )
             .unwrap();
         env.scripts.runtime = runtime;
         (world, env)
@@ -1732,21 +1743,40 @@ mod tests {
         };
         let (_, immediate) = world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
             )
             .unwrap()
             .unwrap();
         assert_eq!(immediate, None);
-        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 0);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][1]
+                .record
+                .header
+                .flags,
+            0
+        );
         assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 20);
         world
-            .advance_script_state_and_world_transactional_bounded(
-                &mut env, clock, 26, 5, 0,
-            )
+            .advance_script_state_and_world_transactional_bounded(&mut env, clock, 26, 5, 0)
             .unwrap();
-        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 1);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][1]
+                .record
+                .header
+                .flags,
+            1
+        );
         let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
-        assert!(world.snapshot().collision.first_blocker(&view, 20100, 0, None).is_none());
+        assert!(world
+            .snapshot()
+            .collision
+            .first_blocker(&view, 20100, 0, None)
+            .is_none());
     }
 
     #[test]
@@ -1766,15 +1796,24 @@ mod tests {
         };
         world
             .dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
             )
             .unwrap();
         assert!(world
-            .advance_script_state_and_world_transactional_bounded(
-                &mut env, clock, 26, 5, 0,
-            )
+            .advance_script_state_and_world_transactional_bounded(&mut env, clock, 26, 5, 0,)
             .is_err());
-        assert_eq!(world.snapshot().objects.elevations[0][1].record.header.flags, 0);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][1]
+                .record
+                .header
+                .flags,
+            0
+        );
         assert_eq!(world.snapshot().collision.tile_of(target), Some(20100));
         assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 20);
         assert_eq!(env.invocations.get(&7).unwrap().action(), 6);
