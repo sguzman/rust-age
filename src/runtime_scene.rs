@@ -179,6 +179,39 @@ impl RuntimeScene {
         Ok(tick)
     }
 
+    /// Run a native-aware CE script tick against the current mutable MAP
+    /// scene. This opt-in path can commit set_obj_visibility changes to both
+    /// original object flags and the collision index, including noncritical
+    /// local procedures resumed in a later interpreter burst.
+    ///
+    /// World, script VMs, local/quest banks and source event state commit
+    /// together only after all source-ordered native and condition calls
+    /// succeed. Unknown world/game natives still fail closed.
+    pub fn advance_script_state_and_world_transactional_bounded(
+        &mut self,
+        environment: &mut PreparedScriptEnvironment,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        let mut next_world = self.clone();
+        let mut next = next_world.refreshed_script_environment(environment)?;
+        let bindings = next.object_queries.clone();
+        let tick = next.advance_script_state_tick_with_world_native_bounded(
+            clock,
+            now_millis,
+            cpu_burst,
+            max_steps_per_condition,
+            &mut |_: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
+                next_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+            },
+        )?;
+        *self = next_world;
+        *environment = next;
+        Ok(tick)
+    }
+
     /// Apply one CE actor-route step and run the installed bounded
     /// script/native-state tick against the resulting CURRENT MAP object
     /// properties, all inside one caller-owned Rust transaction.
@@ -205,7 +238,7 @@ impl RuntimeScene {
         let mut candidate_route = route.clone();
         let mut candidate_environment = environment.clone();
         let step = candidate_world.advance_actor(view, &mut candidate_route)?;
-        let tick = candidate_world.advance_script_state_with_current_scene_bounded(
+        let tick = candidate_world.advance_script_state_and_world_transactional_bounded(
             &mut candidate_environment,
             clock,
             budget.now_millis,
@@ -293,7 +326,8 @@ impl RuntimeScene {
                 candidate_world.spatials_enabled = true;
             }
         }
-        let tick = state.advance_script_state_tick_bounded(
+        let tick = candidate_world.advance_script_state_and_world_transactional_bounded(
+            &mut state,
             clock,
             budget.now_millis,
             budget.cpu_burst,
