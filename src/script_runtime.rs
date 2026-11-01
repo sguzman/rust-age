@@ -91,6 +91,16 @@ pub struct PreparedCoreTick {
     pub prepared_calls: Vec<DueProcedure>,
 }
 
+/// Caller-owned native world transaction for a persistent CE tick.
+/// A failed script tick does not roll back effects of this callback by itself:
+/// its owner must stage world changes on a separate candidate.
+pub struct WorldNativeTickContext<'a> {
+    pub map: &'a mut MapScriptLocals,
+    pub game: &'a mut GameGlobalState,
+    pub events: &'a BTreeMap<u64, ReadOnlyConditionEvent<'a>>,
+    pub world_native: &'a mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>,
+}
+
 /// Snapshot of one script's event/owner context, for read-only CE
 /// native condition evaluation. Snapshot references must come from the
 /// caller's actual installed MAP and script event, not inferred from a
@@ -869,19 +879,16 @@ impl ScriptRuntime {
         now_millis: u32,
         cpu_burst: usize,
         max_steps_per_condition: usize,
-        map: &mut MapScriptLocals,
-        game: &mut GameGlobalState,
-        events: &BTreeMap<u64, ReadOnlyConditionEvent<'_>>,
-        world_native: &mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>,
+        context: WorldNativeTickContext<'_>,
     ) -> io::Result<PreparedCoreTick> {
         let mut next = self.clone();
-        let mut next_map = map.clone();
-        let mut next_game = game.clone();
+        let mut next_map = (*context.map).clone();
+        let mut next_game = (*context.game).clone();
         let mut host = |id: u64, opcode: u16, stack: &mut Vec<ScriptValue>| {
-            if world_native(id, opcode, stack)? {
+            if (context.world_native)(id, opcode, stack)? {
                 return Ok(());
             }
-            let snapshot = events
+            let snapshot = context.events
                 .get(&id)
                 .ok_or_else(|| invalid("CE world-native event context unavailable"))?;
             apply_mutable_condition_native_with_vars(
@@ -916,8 +923,8 @@ impl ScriptRuntime {
             }
         }
         *self = next;
-        *map = next_map;
-        *game = next_game;
+        *context.map = next_map;
+        *context.game = next_game;
         Ok(PreparedCoreTick {
             executed_steps,
             prepared_calls,
