@@ -2175,7 +2175,7 @@ mod tests {
 
     #[test]
     fn source_obj_is_open_reads_live_frame_and_null_is_false_without_aliasing_handles() {
-        let (mut world, mut env) = lock_fixture(false, 0x812E, false);
+        let (mut world, env) = lock_fixture(false, 0x812E, false);
         let bindings = env.object_queries.clone();
         let mut null = vec![ScriptValue::Pointer(0)];
         assert!(world
