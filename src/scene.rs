@@ -210,6 +210,8 @@ impl PreviewedSandboxAction {
 /// verified owner when exec_script_proc begins. Unresolved spatial owners
 /// remain NULL targets; this does not fabricate a hidden engine Object.
 type WorldNativeHandler<'a> = &'a mut dyn FnMut(u16, &mut Vec<ScriptValue>) -> io::Result<bool>;
+type WorldTickNativeHandler<'a> =
+    &'a mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>;
 
 fn target_for_explicit_source(
     owner: Option<ScriptOwnerResolution>,
@@ -245,6 +247,44 @@ impl PreparedScriptEnvironment {
         now_millis: u32,
         cpu_burst: usize,
         max_steps_per_condition: usize,
+    ) -> io::Result<PreparedCoreTick> {
+        self.advance_script_state_tick_with_optional_world_native_bounded(
+            clock,
+            now_millis,
+            cpu_burst,
+            max_steps_per_condition,
+            None,
+        )
+    }
+
+    /// An explicitly hosted world-native variant of the persistent CE
+    /// interpreter tick. Original object handles come only from the live
+    /// prepared scene; callers must stage all outside-world mutations on
+    /// a clone before committing this script environment.
+    pub fn advance_script_state_tick_with_world_native_bounded(
+        &mut self,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        world_native: WorldTickNativeHandler<'_>,
+    ) -> io::Result<PreparedCoreTick> {
+        self.advance_script_state_tick_with_optional_world_native_bounded(
+            clock,
+            now_millis,
+            cpu_burst,
+            max_steps_per_condition,
+            Some(world_native),
+        )
+    }
+
+    fn advance_script_state_tick_with_optional_world_native_bounded(
+        &mut self,
+        clock: ScriptClockContext,
+        now_millis: u32,
+        cpu_burst: usize,
+        max_steps_per_condition: usize,
+        world_native: Option<WorldTickNativeHandler<'_>>,
     ) -> io::Result<PreparedCoreTick> {
         let mut events = BTreeMap::new();
         for entry in &self.scripts.entries {
@@ -319,16 +359,30 @@ impl PreparedScriptEnvironment {
                 "CE mutable script tick requires loaded GAME_GLOBAL_VARS",
             )
         })?;
-        self.scripts
-            .runtime
-            .advance_tick_with_mutable_native_state_transactional_bounded(
-                now_millis,
-                cpu_burst,
-                max_steps_per_condition,
-                &mut self.map_locals,
-                game,
-                &events,
-            )
+        if let Some(world_native) = world_native {
+            self.scripts
+                .runtime
+                .advance_tick_with_mutable_world_native_state_transactional_bounded(
+                    now_millis,
+                    cpu_burst,
+                    max_steps_per_condition,
+                    &mut self.map_locals,
+                    game,
+                    &events,
+                    world_native,
+                )
+        } else {
+            self.scripts
+                .runtime
+                .advance_tick_with_mutable_native_state_transactional_bounded(
+                    now_millis,
+                    cpu_burst,
+                    max_steps_per_condition,
+                    &mut self.map_locals,
+                    game,
+                    &events,
+                )
+        }
     }
 
     /// Run one installed MAP script tick with CE script queue add/remove
