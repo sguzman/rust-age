@@ -888,7 +888,8 @@ impl ScriptRuntime {
             if (context.world_native)(id, opcode, stack)? {
                 return Ok(());
             }
-            let snapshot = context.events
+            let snapshot = context
+                .events
                 .get(&id)
                 .ok_or_else(|| invalid("CE world-native event context unavailable"))?;
             apply_mutable_condition_native_with_vars(
