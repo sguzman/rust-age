@@ -1555,6 +1555,7 @@ mod tests {
         on_source: bool,
         invisible: i32,
         invalid_tail: bool,
+        name: &[u8],
     ) -> ScriptVm {
         // Pinned op_set_obj_visibility pops visibility first, then object.
         // The script uses an actually verified source or owner pointer.
@@ -1576,8 +1577,11 @@ mod tests {
                 bytes.extend_from_slice(&field.to_be_bytes());
             }
         }
-        bytes.extend_from_slice(&16_i32.to_be_bytes());
-        bytes.extend_from_slice(b"main\0use_p_proc\0");
+        let mut names = b"main\0".to_vec();
+        names.extend_from_slice(name);
+        names.push(0);
+        bytes.extend_from_slice(&i32::try_from(names.len()).unwrap().to_be_bytes());
+        bytes.extend_from_slice(&names);
         bytes.extend_from_slice(&0_i32.to_be_bytes());
         ScriptVm::new(ScriptProgram::decode(&bytes).unwrap())
     }
@@ -1593,7 +1597,7 @@ mod tests {
         runtime
             .register(
                 7,
-                visibility_vm(critical, on_source, invisible, invalid_tail),
+                visibility_vm(critical, on_source, invisible, invalid_tail, b"use_p_proc"),
             )
             .unwrap();
         env.scripts.runtime = runtime;
@@ -1825,6 +1829,88 @@ mod tests {
         assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 20);
         assert_eq!(env.invocations.get(&7).unwrap().action(), 6);
         assert_eq!(env.spatial_sources.get(&7), Some(&source));
+    }
+
+    #[test]
+    fn critical_spatial_native_visibility_mutates_source_actor_and_collision() {
+        let (mut world, mut env) = spatial_scene_fixture(20098, 0, true, false);
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(7, visibility_vm(true, true, 1, false, b"spatial_p_proc"))
+            .unwrap();
+        env.scripts.runtime = runtime;
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world
+            .plan_actor(&view, source, 20098, true)
+            .unwrap()
+            .unwrap();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        let result = world
+            .advance_actor_with_spatial_events_transactional_bounded(
+                &view,
+                &mut route,
+                &mut env,
+                clock,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 0,
+                },
+            )
+            .unwrap();
+        assert_eq!(result.spatial.len(), 1);
+        assert_eq!(result.spatial[0].1, Some(5));
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 1);
+        assert_eq!(world.snapshot().collision.tile_of(source), Some(20098));
+        assert!(world.snapshot().collision.first_blocker(&view, 20098, 0, None).is_none());
+    }
+
+    #[test]
+    fn failed_critical_spatial_native_visibility_rolls_back_actor_route_and_world() {
+        let (mut world, mut env) = spatial_scene_fixture(20098, 0, true, false);
+        let mut runtime = ScriptRuntime::new();
+        runtime
+            .register(7, visibility_vm(true, true, 1, true, b"spatial_p_proc"))
+            .unwrap();
+        env.scripts.runtime = runtime;
+        let view = HexViewport::new(200, 200, 640, 380, 20099).unwrap();
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let mut route = world
+            .plan_actor(&view, source, 20098, true)
+            .unwrap()
+            .unwrap();
+        let clock = ScriptClockContext {
+            clock: ScriptGameClock { ticks: 0 },
+            last_visit_ticks: Some(0),
+        };
+        assert!(world
+            .advance_actor_with_spatial_events_transactional_bounded(
+                &view,
+                &mut route,
+                &mut env,
+                clock,
+                ScriptTickBudget {
+                    now_millis: 100,
+                    cpu_burst: 0,
+                    max_steps_per_condition: 0,
+                },
+            )
+            .is_err());
+        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 0);
+        assert_eq!(world.snapshot().collision.tile_of(source), Some(20099));
+        assert_eq!(route.current_tile(), 20099);
+        assert!(env.invocations.is_empty());
+        assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
     }
 
     #[test]
