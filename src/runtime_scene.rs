@@ -674,7 +674,7 @@ mod tests {
     use crate::script_owner_binding::MapScriptOwners;
     use crate::script_program::ScriptProgram;
     use crate::script_runtime::{DueProcedure, ScriptRuntime};
-    use crate::script_vm::ScriptVm;
+    use crate::script_vm::{ScriptValue, ScriptVm};
 
     fn object(id: i32, tile: i32, kind: i32) -> MapObject {
         MapObject {
@@ -2131,6 +2131,27 @@ mod tests {
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
         assert!(env.invocations.is_empty());
         assert_eq!(env.scripts.runtime.vm(7).unwrap().pc(), 0);
+    }
+
+    #[test]
+    fn source_obj_is_open_reads_live_frame_and_null_is_false_without_aliasing_handles() {
+        let (mut world, mut env) = lock_fixture(false, 0x812E, false);
+        let bindings = env.object_queries.clone();
+        let mut null = vec![ScriptValue::Pointer(0)];
+        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut null).unwrap());
+        assert_eq!(null, [ScriptValue::Int(0)]);
+        let mut forged = vec![ScriptValue::Pointer(999)];
+        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut forged).is_err());
+        assert_eq!(forged, [ScriptValue::Pointer(999)]);
+        let mut wrong_type = vec![ScriptValue::Int(2)];
+        assert!(world.apply_lock_and_open_native(&bindings, 0x812E, &mut wrong_type).is_err());
+        assert_eq!(wrong_type, [ScriptValue::Int(2)]);
+        world.snapshot.objects.elevations[0][1].record.header.frame = 1;
+        let mut target = vec![ScriptValue::Pointer(2)];
+        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut target).unwrap());
+        assert_eq!(target, [ScriptValue::Int(1)]);
+        assert!(env.invocations.is_empty());
+        assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
     }
 
     #[test]
