@@ -319,8 +319,7 @@ impl RuntimeScene {
                     let executed = if critical {
                         let bindings = state.object_queries.clone();
                         let mut native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
-                            candidate_world
-                                .apply_world_object_native(&bindings, opcode, stack)
+                            candidate_world.apply_world_object_native(&bindings, opcode, stack)
                         };
                         Some(
                             state.execute_critical_map_action_with_world_natives_transactional_bounded(
@@ -401,17 +400,19 @@ impl RuntimeScene {
         } else {
             let field = match (kind, &mut object.record.update) {
                 (0, ObjectUpdate::Generic { flags, .. }) => Some(flags),
-                (2, ObjectUpdate::Generic { subtype_fields, .. }) => {
-                    Some(subtype_fields.first_mut().ok_or_else(|| {
-                        invalid("CE scenery lock flags are not represented")
-                    })?)
-                }
+                (2, ObjectUpdate::Generic { subtype_fields, .. }) => Some(
+                    subtype_fields
+                        .first_mut()
+                        .ok_or_else(|| invalid("CE scenery lock flags are not represented"))?,
+                ),
                 (0 | 2, _) => return Err(invalid("CE object lock data type mismatch")),
                 _ => None,
             };
             match opcode {
                 OBJ_IS_LOCKED_OPCODE => Some(i32::from(
-                    field.as_ref().is_some_and(|flags| **flags & OBJ_LOCKED != 0),
+                    field
+                        .as_ref()
+                        .is_some_and(|flags| **flags & OBJ_LOCKED != 0),
                 )),
                 OBJ_LOCK_OPCODE => {
                     if let Some(flags) = field {
@@ -2036,9 +2037,7 @@ mod tests {
         body.extend_from_slice(&0x80BC_u16.to_be_bytes()); // SELF_OBJ
         body.extend_from_slice(&0x812D_u16.to_be_bytes()); // obj_is_locked
         body.extend_from_slice(&0x80C6_u16.to_be_bytes()); // SET_GLOBAL_VAR
-        body.extend_from_slice(
-            &(if invalid_tail { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes(),
-        );
+        body.extend_from_slice(&(if invalid_tail { 0x80FF_u16 } else { 0x8021_u16 }).to_be_bytes());
         let mut bytes = vec![0_u8; 42];
         bytes[20..20 + body.len()].copy_from_slice(&body);
         bytes.extend_from_slice(&2_i32.to_be_bytes());
@@ -2066,28 +2065,46 @@ mod tests {
             subtype_fields: if scenery { vec![0] } else { vec![] },
         };
         env.object_queries = world.object_query_snapshot().unwrap();
-        env.script_owners =
-            MapScriptOwners::from_map(&world.snapshot.scripts, &world.snapshot.objects, &env.object_queries)
-                .unwrap();
+        env.script_owners = MapScriptOwners::from_map(
+            &world.snapshot.scripts,
+            &world.snapshot.objects,
+            &env.object_queries,
+        )
+        .unwrap();
         let mut runtime = ScriptRuntime::new();
-        runtime.register(7, object_lock_vm(native, invalid_tail)).unwrap();
+        runtime
+            .register(7, object_lock_vm(native, invalid_tail))
+            .unwrap();
         env.scripts.runtime = runtime;
         (world, env)
     }
 
     #[test]
     fn critical_use_lock_and_unlock_update_saved_item_and_scenery_state() {
-        let source = ObjectKey { elevation: 0, ordinal: 0 };
-        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
             last_visit_ticks: Some(0),
         };
         for scenery in [false, true] {
             let (mut world, mut env) = lock_fixture(scenery, 0x812E, false);
-            world.dispatch_object_action_transactional_bounded(
-                &mut env, (source, target), 6, clock, 25, 100,
-            ).unwrap();
+            world
+                .dispatch_object_action_transactional_bounded(
+                    &mut env,
+                    (source, target),
+                    6,
+                    clock,
+                    25,
+                    100,
+                )
+                .unwrap();
             let flags = match &world.snapshot().objects.elevations[0][1].record.update {
                 ObjectUpdate::Generic { subtype_fields, .. } if scenery => subtype_fields[0],
                 ObjectUpdate::Generic { flags, .. } => *flags,
@@ -2099,14 +2116,23 @@ mod tests {
 
         let (mut world, mut env) = lock_fixture(false, 0x812F, false);
         if let ObjectUpdate::Generic { flags, .. } =
-            &mut world.snapshot.objects.elevations[0][1].record.update {
+            &mut world.snapshot.objects.elevations[0][1].record.update
+        {
             *flags = 0x0200_0000;
         }
-        world.dispatch_object_action_transactional_bounded(
-            &mut env, (source, target), 6, clock, 25, 100,
-        ).unwrap();
+        world
+            .dispatch_object_action_transactional_bounded(
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
+            )
+            .unwrap();
         if let ObjectUpdate::Generic { flags, .. } =
-            &world.snapshot().objects.elevations[0][1].record.update {
+            &world.snapshot().objects.elevations[0][1].record.update
+        {
             assert_eq!(*flags, 0);
         }
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
@@ -2115,17 +2141,31 @@ mod tests {
     #[test]
     fn later_unsupported_native_rolls_back_original_object_lock_and_quest_state() {
         let (mut world, mut env) = lock_fixture(false, 0x812E, true);
-        let source = ObjectKey { elevation: 0, ordinal: 0 };
-        let target = ObjectKey { elevation: 0, ordinal: 1 };
+        let source = ObjectKey {
+            elevation: 0,
+            ordinal: 0,
+        };
+        let target = ObjectKey {
+            elevation: 0,
+            ordinal: 1,
+        };
         let clock = ScriptClockContext {
             clock: ScriptGameClock { ticks: 0 },
             last_visit_ticks: Some(0),
         };
-        assert!(world.dispatch_object_action_transactional_bounded(
-            &mut env, (source, target), 6, clock, 25, 100,
-        ).is_err());
+        assert!(world
+            .dispatch_object_action_transactional_bounded(
+                &mut env,
+                (source, target),
+                6,
+                clock,
+                25,
+                100,
+            )
+            .is_err());
         if let ObjectUpdate::Generic { flags, .. } =
-            &world.snapshot().objects.elevations[0][1].record.update {
+            &world.snapshot().objects.elevations[0][1].record.update
+        {
             assert_eq!(*flags, 0);
         }
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
@@ -2138,17 +2178,25 @@ mod tests {
         let (mut world, mut env) = lock_fixture(false, 0x812E, false);
         let bindings = env.object_queries.clone();
         let mut null = vec![ScriptValue::Pointer(0)];
-        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut null).unwrap());
+        assert!(world
+            .apply_lock_and_open_native(&bindings, 0x8130, &mut null)
+            .unwrap());
         assert_eq!(null, [ScriptValue::Int(0)]);
         let mut forged = vec![ScriptValue::Pointer(999)];
-        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut forged).is_err());
+        assert!(world
+            .apply_lock_and_open_native(&bindings, 0x8130, &mut forged)
+            .is_err());
         assert_eq!(forged, [ScriptValue::Pointer(999)]);
         let mut wrong_type = vec![ScriptValue::Int(2)];
-        assert!(world.apply_lock_and_open_native(&bindings, 0x812E, &mut wrong_type).is_err());
+        assert!(world
+            .apply_lock_and_open_native(&bindings, 0x812E, &mut wrong_type)
+            .is_err());
         assert_eq!(wrong_type, [ScriptValue::Int(2)]);
         world.snapshot.objects.elevations[0][1].record.header.frame = 1;
         let mut target = vec![ScriptValue::Pointer(2)];
-        assert!(world.apply_lock_and_open_native(&bindings, 0x8130, &mut target).unwrap());
+        assert!(world
+            .apply_lock_and_open_native(&bindings, 0x8130, &mut target)
+            .unwrap());
         assert_eq!(target, [ScriptValue::Int(1)]);
         assert!(env.invocations.is_empty());
         assert_eq!(env.game_globals.as_ref().unwrap().values(), [0]);
