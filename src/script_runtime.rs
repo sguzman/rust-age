@@ -91,6 +91,9 @@ pub struct PreparedCoreTick {
     pub prepared_calls: Vec<DueProcedure>,
 }
 
+type WorldNativeTickCallback<'a> =
+    &'a mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>;
+
 /// Caller-owned native world transaction for a persistent CE tick.
 /// A failed script tick does not roll back effects of this callback by itself:
 /// its owner must stage world changes on a separate candidate.
@@ -98,7 +101,7 @@ pub struct WorldNativeTickContext<'a> {
     pub map: &'a mut MapScriptLocals,
     pub game: &'a mut GameGlobalState,
     pub events: &'a BTreeMap<u64, ReadOnlyConditionEvent<'a>>,
-    pub world_native: &'a mut dyn FnMut(u64, u16, &mut Vec<ScriptValue>) -> io::Result<bool>,
+    pub world_native: WorldNativeTickCallback<'a>,
 }
 
 /// Snapshot of one script's event/owner context, for read-only CE
