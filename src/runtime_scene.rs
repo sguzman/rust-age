@@ -313,7 +313,8 @@ impl RuntimeScene {
                     let executed = if critical {
                         let bindings = state.object_queries.clone();
                         let mut native = |opcode: u16, stack: &mut Vec<ScriptValue>| {
-                            candidate_world.apply_set_obj_visibility_native(&bindings, opcode, stack)
+                            candidate_world
+                                .apply_set_obj_visibility_native(&bindings, opcode, stack)
                         };
                         Some(
                             state.execute_critical_map_action_with_world_natives_transactional_bounded(
@@ -1867,9 +1868,19 @@ mod tests {
             .unwrap();
         assert_eq!(result.spatial.len(), 1);
         assert_eq!(result.spatial[0].1, Some(5));
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 0x11);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0]
+                .record
+                .header
+                .flags,
+            0x11
+        );
         assert_eq!(world.snapshot().collision.tile_of(source), Some(20098));
-        assert!(world.snapshot().collision.first_blocker(&view, 20098, 0, None).is_none());
+        assert!(world
+            .snapshot()
+            .collision
+            .first_blocker(&view, 20098, 0, None)
+            .is_none());
     }
 
     #[test]
@@ -1906,7 +1917,13 @@ mod tests {
                 },
             )
             .is_err());
-        assert_eq!(world.snapshot().objects.elevations[0][0].record.header.flags, 0);
+        assert_eq!(
+            world.snapshot().objects.elevations[0][0]
+                .record
+                .header
+                .flags,
+            0
+        );
         assert_eq!(world.snapshot().collision.tile_of(source), Some(20099));
         assert_eq!(route.current_tile(), 20099);
         assert!(env.invocations.is_empty());
