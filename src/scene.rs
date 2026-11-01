@@ -34,7 +34,7 @@ use crate::script_object_binding::MapObjectReadBindings;
 use crate::script_owner_binding::{MapScriptOwners, ScriptOwnerResolution};
 use crate::script_runtime::{
     PlannedLocalActionFrame, PreparedCoreTick, PreviewedBoundLocalActionVmFrame,
-    ReadOnlyConditionEvent, TimerNativeTickContext,
+    ReadOnlyConditionEvent, TimerNativeTickContext, WorldNativeTickContext,
 };
 use crate::script_time_advance::{
     apply_game_time_advance_with_inert_timers_opcode, TimeAdvancePlan, GAME_TIME_ADVANCE_OPCODE,
@@ -366,10 +366,12 @@ impl PreparedScriptEnvironment {
                     now_millis,
                     cpu_burst,
                     max_steps_per_condition,
-                    &mut self.map_locals,
-                    game,
-                    &events,
-                    world_native,
+                    WorldNativeTickContext {
+                        map: &mut self.map_locals,
+                        game,
+                        events: &events,
+                        world_native,
+                    },
                 )
         } else {
             self.scripts
